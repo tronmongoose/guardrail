@@ -1,0 +1,227 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- User (linked to Clerk) ---
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String   @unique
+  name      String?
+  role      Role     @default(LEARNER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  programs      Program[]
+  entitlements  Entitlement[]
+  progress      LearnerProgress[]
+}
+
+enum Role {
+  CREATOR
+  LEARNER
+  ADMIN
+}
+
+// --- Program ---
+
+model Program {
+  id            String      @id @default(cuid())
+  title         String
+  slug          String      @unique
+  description   String?
+  durationWeeks Int
+  pacingMode    PacingMode  @default(DRIP_BY_WEEK)
+  priceInCents  Int         @default(0)
+  currency      String      @default("usd")
+  published     Boolean     @default(false)
+  stripeProductId String?
+  stripePriceId   String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  creatorId     String
+  creator       User        @relation(fields: [creatorId], references: [id])
+
+  weeks         Week[]
+  videos        YouTubeVideo[]
+  drafts        ProgramDraft[]
+  entitlements  Entitlement[]
+  embeddings    Embedding[]
+  clusters      ClusterAssignment[]
+  cohorts       Cohort[]
+}
+
+enum PacingMode {
+  DRIP_BY_WEEK
+  // future: UNLOCK_ON_COMPLETION, COHORT_START
+}
+
+// --- Week / Session / Action ---
+
+model Week {
+  id         String   @id @default(cuid())
+  title      String
+  summary    String?
+  weekNumber Int
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  sessions   Session[]
+
+  @@unique([programId, weekNumber])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  title      String
+  summary    String?
+  orderIndex Int
+  weekId     String
+  week       Week     @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  actions    Action[]
+}
+
+model Action {
+  id               String     @id @default(cuid())
+  title            String
+  type             ActionType
+  instructions     String?
+  reflectionPrompt String?
+  orderIndex       Int
+  sessionId        String
+  session          Session    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  youtubeVideoId   String?
+  youtubeVideo     YouTubeVideo? @relation(fields: [youtubeVideoId], references: [id])
+
+  progress         LearnerProgress[]
+}
+
+enum ActionType {
+  WATCH
+  READ
+  DO
+  REFLECT
+}
+
+// --- YouTube Video ---
+
+model YouTubeVideo {
+  id            String   @id @default(cuid())
+  videoId       String   // YouTube video ID
+  url           String
+  title         String?
+  authorName    String?
+  thumbnailUrl  String?
+  description   String?
+  programId     String
+  program       Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  actions       Action[]
+  embeddings    Embedding[]
+
+  @@unique([programId, videoId])
+}
+
+// --- Program Draft (AI-generated, pending approval) ---
+
+model ProgramDraft {
+  id         String   @id @default(cuid())
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  draftJson  Json     // Full ProgramDraft schema as JSON
+  status     DraftStatus @default(PENDING)
+  createdAt  DateTime @default(now())
+}
+
+enum DraftStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+// --- Entitlement (purchase/enrollment) ---
+
+model Entitlement {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id])
+  programId           String
+  program             Program  @relation(fields: [programId], references: [id])
+  stripeSessionId     String?  @unique
+  stripePaymentIntent String?
+  status              EntitlementStatus @default(ACTIVE)
+  createdAt           DateTime @default(now())
+
+  @@unique([userId, programId])
+}
+
+enum EntitlementStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+// --- Learner Progress ---
+
+model LearnerProgress {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id])
+  actionId       String
+  action         Action    @relation(fields: [actionId], references: [id])
+  completed      Boolean   @default(false)
+  completedAt    DateTime?
+  reflectionText String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([userId, actionId])
+}
+
+// --- AI: Embeddings ---
+
+model Embedding {
+  id         String   @id @default(cuid())
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  videoId    String
+  video      YouTubeVideo @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  model      String   // e.g. "sentence-transformers/all-MiniLM-L6-v2"
+  vector     Json     // float[] stored as JSONB (use pgvector extension for production scale)
+  createdAt  DateTime @default(now())
+
+  @@unique([programId, videoId, model])
+}
+
+// --- AI: Cluster Assignments ---
+
+model ClusterAssignment {
+  id         String   @id @default(cuid())
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  videoId    String
+  clusterId  Int
+  createdAt  DateTime @default(now())
+
+  @@unique([programId, videoId])
+}
+
+// --- Future: Cohort (stub, no UI wired) ---
+
+model Cohort {
+  id         String   @id @default(cuid())
+  programId  String
+  program    Program  @relation(fields: [programId], references: [id])
+  name       String
+  startDate  DateTime
+  endDate    DateTime?
+  createdAt  DateTime @default(now())
+}

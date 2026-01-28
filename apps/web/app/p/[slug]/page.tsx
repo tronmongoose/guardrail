@@ -1,0 +1,64 @@
+import { prisma } from "@/lib/prisma";
+import { notFound } from "next/navigation";
+
+export default async function SalesPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const program = await prisma.program.findUnique({
+    where: { slug },
+    include: { creator: true, weeks: { include: { sessions: true }, orderBy: { weekNumber: "asc" } } },
+  });
+
+  if (!program || !program.published) notFound();
+
+  const priceDisplay =
+    program.priceInCents === 0
+      ? "Free"
+      : `$${(program.priceInCents / 100).toFixed(2)}`;
+
+  return (
+    <div className="min-h-screen bg-white">
+      <main className="max-w-xl mx-auto px-6 py-12">
+        <div className="space-y-6">
+          <div>
+            <p className="text-sm text-brand-600 font-medium mb-1">
+              {program.durationWeeks}-week program
+            </p>
+            <h1 className="text-3xl font-bold tracking-tight">{program.title}</h1>
+            {program.creator.name && (
+              <p className="text-gray-500 mt-1">by {program.creator.name}</p>
+            )}
+          </div>
+
+          {program.description && (
+            <p className="text-gray-600 leading-relaxed">{program.description}</p>
+          )}
+
+          <div className="bg-gray-50 rounded-xl p-4 space-y-2">
+            <p className="text-sm font-medium text-gray-700">What you'll get:</p>
+            {program.weeks.map((w) => (
+              <div key={w.id} className="flex items-start gap-2 text-sm text-gray-500">
+                <span className="text-brand-600 mt-0.5">•</span>
+                <span>
+                  Week {w.weekNumber}: {w.title} ({w.sessions.length} session
+                  {w.sessions.length !== 1 ? "s" : ""})
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-xl p-6 text-center space-y-4">
+            <p className="text-3xl font-bold">{priceDisplay}</p>
+            <form action={`/api/checkout/${program.id}`} method="POST">
+              <button
+                type="submit"
+                className="w-full py-3 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 transition"
+              >
+                {program.priceInCents === 0 ? "Enroll free" : `Buy for ${priceDisplay}`}
+              </button>
+            </form>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

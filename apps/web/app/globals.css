@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #0a0a0f;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Neon glow utilities */
+.neon-text-cyan {
+  text-shadow: 0 0 10px #00fff0, 0 0 40px #00fff066, 0 0 80px #00fff033;
+}
+
+.neon-text-pink {
+  text-shadow: 0 0 10px #ff2dff, 0 0 40px #ff2dff66, 0 0 80px #ff2dff33;
+}
+
+.neon-text-yellow {
+  text-shadow: 0 0 10px #ffe600, 0 0 40px #ffe60066, 0 0 80px #ffe60033;
+}
+
+.neon-glow-box {
+  box-shadow: 0 0 15px #00fff044, 0 0 60px #00fff022, inset 0 0 30px #00fff008;
+}
+
+.neon-glow-pink {
+  box-shadow: 0 0 15px #ff2dff44, 0 0 60px #ff2dff22, inset 0 0 30px #ff2dff08;
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #00fff0, #ff2dff, #ffe600);
+  background-size: 200% 200%;
+  animation: gradient-x 8s ease infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-bg-radial {
+  background: radial-gradient(ellipse at 30% 20%, #ff2dff15 0%, transparent 50%),
+              radial-gradient(ellipse at 70% 80%, #00fff015 0%, transparent 50%),
+              radial-gradient(ellipse at 50% 50%, #ffe60008 0%, transparent 70%);
+}
+
+.btn-neon {
+  @apply relative overflow-hidden font-bold tracking-wide uppercase;
+  background: linear-gradient(135deg, #00fff0, #4d4dff);
+  transition: all 0.3s ease;
+}
+
+.btn-neon:hover {
+  box-shadow: 0 0 20px #00fff066, 0 0 60px #00fff033;
+  transform: translateY(-2px);
+}
+
+.btn-neon-pink {
+  @apply relative overflow-hidden font-bold tracking-wide;
+  background: linear-gradient(135deg, #ff2dff, #ff6600);
+  transition: all 0.3s ease;
+}
+
+.btn-neon-pink:hover {
+  box-shadow: 0 0 20px #ff2dff66, 0 0 60px #ff2dff33;
+  transform: translateY(-2px);
+}
+
+/* Grid pattern bg */
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(0, 255, 240, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 240, 0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+@keyframes gradient-x {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
