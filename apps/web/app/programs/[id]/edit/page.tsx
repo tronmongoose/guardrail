@@ -108,103 +108,121 @@ export default function ProgramEditPage() {
     await load();
   }
 
-  if (!program) return <div className="p-8 text-center text-gray-400">Loading...</div>;
+  if (!program) {
+    return (
+      <div className="min-h-screen gradient-bg-radial grid-bg flex items-center justify-center">
+        <div className="text-gray-400">Loading...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100">
-        <button onClick={() => router.push("/dashboard")} className="text-lg font-semibold tracking-tight">
+    <div className="min-h-screen gradient-bg-radial grid-bg">
+      <nav className="flex items-center justify-between px-6 py-4 border-b border-surface-border/50 backdrop-blur-sm">
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="text-xl font-bold tracking-tight text-neon-cyan neon-text-cyan hover:opacity-80 transition"
+        >
           ← GuideRail
         </button>
-        <span className={`text-xs px-2 py-1 rounded-full ${program.published ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+        <span className={`text-xs px-3 py-1.5 rounded-full font-medium ${
+          program.published
+            ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
+            : "bg-surface-card text-gray-400 border border-surface-border"
+        }`}>
           {program.published ? "Published" : "Draft"}
         </span>
       </nav>
 
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-8">
+      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
         {/* Basics */}
-        <section className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="font-semibold mb-4">Program Details</h2>
+        <section className="bg-surface-card border border-surface-border rounded-xl p-6">
+          <h2 className="font-semibold text-white mb-4">Program Details</h2>
           <form onSubmit={saveBasics} className="space-y-4">
             <div>
-              <label className="text-sm text-gray-500">Title</label>
+              <label className="text-sm text-gray-400">Title</label>
               <input
                 name="title"
                 defaultValue={program.title}
-                className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
               />
             </div>
             <div>
-              <label className="text-sm text-gray-500">Description</label>
+              <label className="text-sm text-gray-400">Description</label>
               <textarea
                 name="description"
                 defaultValue={program.description ?? ""}
                 rows={3}
-                className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
               />
             </div>
             <div className="flex gap-4">
               <div className="flex-1">
-                <label className="text-sm text-gray-500">Weeks</label>
+                <label className="text-sm text-gray-400">Weeks</label>
                 <input
                   name="durationWeeks"
                   type="number"
                   min={1}
                   max={52}
                   defaultValue={program.durationWeeks}
-                  className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
                 />
               </div>
               <div className="flex-1">
-                <label className="text-sm text-gray-500">Price (USD)</label>
+                <label className="text-sm text-gray-400">Price (USD)</label>
                 <input
                   name="price"
                   type="number"
                   step="0.01"
                   min={0}
                   defaultValue={(program.priceInCents / 100).toFixed(2)}
-                  className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
                 />
               </div>
             </div>
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 bg-gray-900 text-white text-sm rounded-lg font-medium hover:bg-gray-800 transition disabled:opacity-50"
+              className="px-5 py-2.5 bg-white text-surface-dark text-sm rounded-lg font-semibold hover:bg-gray-100 transition disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Save"}
+              {saving ? "Saving..." : "Save Changes"}
             </button>
           </form>
         </section>
 
         {/* Videos */}
-        <section className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="font-semibold mb-4">YouTube Videos</h2>
+        <section className="bg-surface-card border border-surface-border rounded-xl p-6">
+          <h2 className="font-semibold text-white mb-4">YouTube Videos</h2>
           <div className="flex gap-2 mb-4">
             <input
               value={youtubeUrl}
               onChange={(e) => setYoutubeUrl(e.target.value)}
               placeholder="Paste YouTube URL..."
-              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              className="flex-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm placeholder:text-gray-500 focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
             />
             <button
               onClick={addVideo}
-              className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg font-medium hover:bg-brand-700 transition"
+              className="btn-neon px-5 py-2.5 rounded-lg text-surface-dark text-sm font-semibold"
             >
               Add
             </button>
           </div>
-          {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+          {error && (
+            <p className="text-sm text-neon-pink mb-3 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-neon-pink" />
+              {error}
+            </p>
+          )}
           {program.videos.length === 0 ? (
-            <p className="text-sm text-gray-400">No videos added yet</p>
+            <p className="text-sm text-gray-500">No videos added yet</p>
           ) : (
             <div className="space-y-2">
               {program.videos.map((v) => (
-                <div key={v.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                <div key={v.id} className="flex items-center gap-3 p-3 bg-surface-dark border border-surface-border rounded-lg">
                   {v.thumbnailUrl && (
-                    <img src={v.thumbnailUrl} alt="" className="w-16 h-10 rounded object-cover" />
+                    <img src={v.thumbnailUrl} alt="" className="w-20 h-12 rounded object-cover" />
                   )}
-                  <span className="text-sm flex-1">{v.title || v.videoId}</span>
+                  <span className="text-sm text-gray-300 flex-1">{v.title || v.videoId}</span>
                 </div>
               ))}
             </div>
@@ -212,15 +230,15 @@ export default function ProgramEditPage() {
         </section>
 
         {/* Generate */}
-        <section className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="font-semibold mb-4">AI Structure</h2>
+        <section className="bg-surface-card border border-surface-border rounded-xl p-6">
+          <h2 className="font-semibold text-white mb-2">AI Structure</h2>
           <p className="text-sm text-gray-500 mb-4">
             Generate a week-by-week structure from your videos using AI.
           </p>
           <button
             onClick={generateStructure}
             disabled={generating || program.videos.length === 0}
-            className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg font-medium hover:bg-brand-700 transition disabled:opacity-50"
+            className="btn-neon-pink px-5 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50"
           >
             {generating ? "Generating..." : "Generate Program Structure"}
           </button>
@@ -228,22 +246,22 @@ export default function ProgramEditPage() {
 
         {/* Structure preview */}
         {program.weeks.length > 0 && (
-          <section className="bg-white rounded-xl border border-gray-100 p-6">
-            <h2 className="font-semibold mb-4">Program Structure</h2>
+          <section className="bg-surface-card border border-surface-border rounded-xl p-6">
+            <h2 className="font-semibold text-white mb-4">Program Structure</h2>
             <div className="space-y-4">
               {program.weeks.map((w) => (
-                <div key={w.id} className="border-l-2 border-brand-500 pl-4">
-                  <h3 className="font-medium">{w.title}</h3>
+                <div key={w.id} className="border-l-2 border-neon-cyan pl-4">
+                  <h3 className="font-medium text-white">{w.title}</h3>
                   {w.sessions.map((s) => (
                     <div key={s.id} className="ml-2 mt-2">
-                      <p className="text-sm text-gray-600">{s.title}</p>
+                      <p className="text-sm text-gray-400">{s.title}</p>
                       <ul className="ml-4 mt-1 space-y-1">
                         {s.actions.map((a) => (
-                          <li key={a.id} className="text-xs text-gray-400 flex items-center gap-2">
+                          <li key={a.id} className="text-xs text-gray-500 flex items-center gap-2">
                             <span className={`inline-block w-1.5 h-1.5 rounded-full ${
-                              a.type === "WATCH" ? "bg-blue-400" :
-                              a.type === "REFLECT" ? "bg-purple-400" :
-                              a.type === "DO" ? "bg-green-400" : "bg-gray-400"
+                              a.type === "WATCH" ? "bg-neon-cyan" :
+                              a.type === "REFLECT" ? "bg-neon-pink" :
+                              a.type === "DO" ? "bg-neon-yellow" : "bg-gray-500"
                             }`} />
                             {a.title}
                           </li>
@@ -261,7 +279,7 @@ export default function ProgramEditPage() {
         {!program.published && program.weeks.length > 0 && (
           <button
             onClick={publishProgram}
-            className="w-full py-3 bg-green-600 text-white rounded-xl font-medium hover:bg-green-700 transition"
+            className="w-full py-4 bg-gradient-to-r from-neon-cyan to-neon-pink text-surface-dark rounded-xl font-bold hover:opacity-90 transition"
           >
             Publish Program
           </button>

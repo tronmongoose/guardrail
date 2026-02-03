@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { UserButton } from "@clerk/nextjs";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
@@ -13,21 +14,24 @@ export default async function DashboardPage() {
   });
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-100">
-        <Link href="/" className="text-lg font-semibold tracking-tight">
+    <div className="min-h-screen gradient-bg-radial grid-bg">
+      <nav className="flex items-center justify-between px-6 py-4 border-b border-surface-border/50 backdrop-blur-sm">
+        <Link href="/" className="text-xl font-bold tracking-tight neon-text-cyan text-neon-cyan">
           GuideRail
         </Link>
-        <span className="text-sm text-gray-500">{user.name ?? user.email}</span>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-gray-400">{user.name ?? user.email}</span>
+          <UserButton />
+        </div>
       </nav>
 
       <main className="max-w-2xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Your Programs</h1>
+        <div className="flex items-center justify-between mb-8">
+          <h1 className="text-2xl font-bold text-white">Your Programs</h1>
           <form action="/api/programs/create" method="POST">
             <button
               type="submit"
-              className="px-4 py-2 bg-brand-600 text-white text-sm rounded-lg font-medium hover:bg-brand-700 transition"
+              className="btn-neon px-5 py-2.5 rounded-xl text-surface-dark text-sm font-semibold"
             >
               + New Program
             </button>
@@ -35,9 +39,12 @@ export default async function DashboardPage() {
         </div>
 
         {programs.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
-            <p className="text-lg">No programs yet</p>
-            <p className="text-sm mt-1">Create your first guided program</p>
+          <div className="text-center py-20">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-card border border-surface-border flex items-center justify-center">
+              <span className="text-2xl">📚</span>
+            </div>
+            <p className="text-lg text-gray-300">No programs yet</p>
+            <p className="text-sm text-gray-500 mt-1">Create your first guided program</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -45,16 +52,19 @@ export default async function DashboardPage() {
               <Link
                 key={p.id}
                 href={`/programs/${p.id}/edit`}
-                className="block bg-white rounded-xl border border-gray-100 p-4 hover:shadow-sm transition"
+                className="block bg-surface-card border border-surface-border rounded-xl p-5 hover:border-neon-cyan/40 transition-all hover:-translate-y-0.5"
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="font-semibold">{p.title}</h2>
-                    <p className="text-sm text-gray-400">
-                      {p.durationWeeks} weeks · {p.published ? "Published" : "Draft"}
+                    <h2 className="font-semibold text-white">{p.title}</h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {p.durationWeeks} weeks ·
+                      <span className={p.published ? "text-neon-cyan ml-1" : "text-gray-400 ml-1"}>
+                        {p.published ? "Published" : "Draft"}
+                      </span>
                     </p>
                   </div>
-                  <span className="text-xs text-gray-300">→</span>
+                  <span className="text-neon-cyan">→</span>
                 </div>
               </Link>
             ))}
