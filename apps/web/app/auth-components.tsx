@@ -10,14 +10,20 @@ export function AuthNav() {
   return (
     <div className="flex items-center gap-4">
       <SignedOut>
+        <Link
+          href="/dashboard"
+          className="text-sm text-gray-300 hover:text-neon-cyan transition-all font-medium"
+        >
+          Dashboard
+        </Link>
         <SignInButton mode="modal">
-          <button className="text-sm text-gray-400 hover:text-neon-cyan transition-all">
+          <button className="px-4 py-2 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan text-sm font-medium hover:bg-neon-cyan/20 transition-all">
             Sign in
           </button>
         </SignInButton>
       </SignedOut>
       <SignedIn>
-        <Link href="/dashboard" className="text-sm text-neon-cyan font-medium">
+        <Link href="/dashboard" className="text-sm text-neon-cyan font-medium hover:neon-text-cyan transition-all">
           Dashboard
         </Link>
         <UserButton />
@@ -31,7 +37,7 @@ export function AuthCTA() {
     <div className="flex flex-col sm:flex-row gap-4 justify-center">
       <SignedOut>
         <SignInButton mode="modal">
-          <button className="btn-neon px-8 py-4 rounded-xl text-surface-dark">
+          <button className="btn-neon px-8 py-4 rounded-xl text-surface-dark font-bold">
             Start building
           </button>
         </SignInButton>
@@ -39,7 +45,7 @@ export function AuthCTA() {
       <SignedIn>
         <Link
           href="/dashboard"
-          className="btn-neon px-8 py-4 rounded-xl text-surface-dark text-center"
+          className="btn-neon px-8 py-4 rounded-xl text-surface-dark text-center font-bold"
         >
           Go to dashboard
         </Link>
