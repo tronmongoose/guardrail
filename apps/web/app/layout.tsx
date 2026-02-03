@@ -1,5 +1,13 @@
-import { ClerkProvider } from "@clerk/nextjs";
+import {
+  ClerkProvider,
+  SignInButton,
+  SignUpButton,
+  SignedIn,
+  SignedOut,
+  UserButton,
+} from "@clerk/nextjs";
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,24 +15,16 @@ export const metadata: Metadata = {
   description: "Premium instructor-led programs built from your content.",
 };
 
-const hasClerk = !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const body = (
-    <html lang="en">
-      <body className="min-h-screen flex flex-col">
-        {children}
-      </body>
-    </html>
+  return (
+    <ClerkProvider>
+      <html lang="en">
+        <body className="min-h-screen flex flex-col">{children}</body>
+      </html>
+    </ClerkProvider>
   );
-
-  if (hasClerk) {
-    return <ClerkProvider>{body}</ClerkProvider>;
-  }
-
-  return body;
 }
