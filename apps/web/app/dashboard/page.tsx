@@ -19,8 +19,10 @@ export default async function DashboardPage() {
         <Link href="/" className="text-xl font-bold tracking-tight neon-text-cyan text-neon-cyan">
           GuideRail
         </Link>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-400">{user.name ?? user.email}</span>
+        <div className="flex items-center gap-3 sm:gap-4">
+          <span className="hidden sm:block text-sm text-gray-400 truncate max-w-[150px]">
+            {user.name ?? user.email}
+          </span>
           <UserButton />
         </div>
       </nav>

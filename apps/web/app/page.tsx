@@ -43,11 +43,11 @@ export default function LandingPage() {
         </div>
 
         {/* How it works */}
-        <section id="how-it-works" className="mt-32 w-full max-w-4xl">
-          <h2 className="text-sm font-bold uppercase tracking-[0.3em] text-neon-yellow neon-text-yellow mb-12">
+        <section id="how-it-works" className="mt-20 sm:mt-32 w-full max-w-4xl">
+          <h2 className="text-sm font-bold uppercase tracking-[0.2em] sm:tracking-[0.3em] text-neon-yellow neon-text-yellow mb-8 sm:mb-12">
             How it works
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
             {/* Step 01 */}
             <div className="bg-surface-card border border-surface-border rounded-2xl p-6 text-left hover:border-neon-cyan/40 transition-all hover:-translate-y-1 neon-glow-box">
               <span className="text-neon-cyan text-xs font-bold uppercase tracking-widest">
@@ -88,25 +88,25 @@ export default function LandingPage() {
         </section>
 
         {/* Stats / Social Proof placeholder */}
-        <section className="mt-28 w-full max-w-3xl">
-          <div className="grid grid-cols-3 gap-6">
+        <section className="mt-20 sm:mt-28 w-full max-w-3xl">
+          <div className="grid grid-cols-3 gap-3 sm:gap-6">
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-black text-neon-cyan">6-12</p>
-              <p className="text-xs text-gray-500 uppercase tracking-widest mt-2 font-medium">Week programs</p>
+              <p className="text-3xl sm:text-5xl font-black text-neon-cyan">6-12</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider sm:tracking-widest mt-1 sm:mt-2 font-medium">Week programs</p>
             </div>
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-black text-neon-pink">4</p>
-              <p className="text-xs text-gray-500 uppercase tracking-widest mt-2 font-medium">Action types</p>
+              <p className="text-3xl sm:text-5xl font-black text-neon-pink">4</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider sm:tracking-widest mt-1 sm:mt-2 font-medium">Action types</p>
             </div>
             <div className="text-center">
-              <p className="text-4xl sm:text-5xl font-black text-neon-yellow">$0</p>
-              <p className="text-xs text-gray-500 uppercase tracking-widest mt-2 font-medium">To start</p>
+              <p className="text-3xl sm:text-5xl font-black text-neon-yellow">$0</p>
+              <p className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider sm:tracking-widest mt-1 sm:mt-2 font-medium">To start</p>
             </div>
           </div>
         </section>
 
         {/* Final CTA */}
-        <section className="mt-28 w-full max-w-xl">
+        <section className="mt-20 sm:mt-28 w-full max-w-xl">
           <div className="bg-surface-card border border-surface-border rounded-2xl p-8 sm:p-12 text-center neon-glow-box">
             <h2 className="text-2xl sm:text-3xl font-black mb-3">
               Ready to <span className="text-neon-cyan">launch</span>?

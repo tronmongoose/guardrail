@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getOrCreateUser, hasEntitlement } from "@/lib/auth";
+import { getOrCreateUser } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { LearnerTimeline } from "./timeline";
 
@@ -8,8 +8,14 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
   const user = await getOrCreateUser();
   if (!user) redirect("/");
 
-  const entitled = await hasEntitlement(user.id, programId);
-  if (!entitled) redirect("/");
+  // Fetch entitlement with createdAt (enrollment date)
+  const entitlement = await prisma.entitlement.findUnique({
+    where: { userId_programId: { userId: user.id, programId } },
+  });
+
+  if (!entitlement || entitlement.status !== "ACTIVE") {
+    redirect("/");
+  }
 
   const program = await prisma.program.findUnique({
     where: { id: programId },
@@ -36,5 +42,11 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
 
   if (!program) notFound();
 
-  return <LearnerTimeline program={program} userId={user.id} />;
+  return (
+    <LearnerTimeline
+      program={program}
+      userId={user.id}
+      enrolledAt={entitlement.createdAt.toISOString()}
+    />
+  );
 }

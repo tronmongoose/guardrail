@@ -1,14 +1,7 @@
-import {
-  ClerkProvider,
-  SignInButton,
-  SignUpButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@clerk/nextjs";
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
-import Link from "next/link";
 import "./globals.css";
+import { ToastProvider } from "@/components/ui/toast";
 
 export const metadata: Metadata = {
   title: "GuideRail — Guided Learning Programs",
@@ -23,7 +16,9 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
-        <body className="min-h-screen flex flex-col">{children}</body>
+        <body className="min-h-screen flex flex-col">
+          <ToastProvider>{children}</ToastProvider>
+        </body>
       </html>
     </ClerkProvider>
   );
