@@ -17,8 +17,10 @@ interface StubInput {
   }[];
 }
 
+type ActionType = "watch" | "read" | "do" | "reflect";
+
 export function generateWithStub(input: StubInput): ProgramDraft {
-  const weeks = input.clusters.map((cluster, i) => ({
+  const weeks: ProgramDraft["weeks"] = input.clusters.map((cluster, i) => ({
     title: `Week ${i + 1}: ${cluster.videoTitles[0] ?? `Topic ${i + 1}`}`,
     summary: cluster.summary ?? `Explore topics from cluster ${cluster.clusterId}`,
     weekNumber: i + 1,

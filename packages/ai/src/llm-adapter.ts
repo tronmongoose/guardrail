@@ -147,7 +147,8 @@ async function callAnthropic(input: GenerateInput): Promise<string> {
   });
 
   if (!res.ok) throw new Error(`Anthropic API error: ${res.status}`);
-  const data = await res.json();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = await res.json();
   return data.content[0].text;
 }
 
@@ -169,7 +170,8 @@ async function callOpenAI(input: GenerateInput): Promise<string> {
   });
 
   if (!res.ok) throw new Error(`OpenAI API error: ${res.status}`);
-  const data = await res.json();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = await res.json();
   return data.choices[0].message.content;
 }
 
@@ -196,7 +198,8 @@ async function repairJSON(
         messages: [{ role: "user", content: repairPrompt }],
       }),
     });
-    const data = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await res.json();
     return data.content[0].text;
   }
 
@@ -214,6 +217,7 @@ async function repairJSON(
       max_tokens: 4096,
     }),
   });
-  const data = await res.json();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = await res.json();
   return data.choices[0].message.content;
 }
