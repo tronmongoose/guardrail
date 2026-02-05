@@ -83,7 +83,7 @@ export async function POST(
   const savedDraft = await prisma.programDraft.create({
     data: {
       programId,
-      draftJson: validated.data as unknown as Record<string, unknown>,
+      draftJson: JSON.parse(JSON.stringify(validated.data)),
       status: "PENDING",
     },
   });
