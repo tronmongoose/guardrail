@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { stripe } from "@/lib/stripe";
 
 export async function POST(
   _req: NextRequest,
@@ -27,22 +26,9 @@ export async function POST(
     return NextResponse.redirect(new URL(`/learn/${programId}`, appUrl));
   }
 
-  // Paid: create Stripe Checkout Session
-  if (!program.stripePriceId) {
-    return NextResponse.json({ error: "No price configured" }, { status: 400 });
-  }
-
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    line_items: [{ price: program.stripePriceId, quantity: 1 }],
-    success_url: `${appUrl}/learn/${programId}?checkout=success`,
-    cancel_url: `${appUrl}/p/${program.slug}`,
-    metadata: {
-      userId: user.id,
-      programId: program.id,
-    },
-  });
-
-  return NextResponse.redirect(session.url!);
+  // TODO: Paid checkout via Stripe when configured
+  return NextResponse.json(
+    { error: "Paid checkout not configured yet" },
+    { status: 501 }
+  );
 }

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { stripe } from "@/lib/stripe";
 
 export async function POST(
   _req: NextRequest,
@@ -16,27 +15,10 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  // Create Stripe product + price if priced
-  let stripeProductId = program.stripeProductId;
-  let stripePriceId = program.stripePriceId;
-
-  if (program.priceInCents > 0 && !stripeProductId) {
-    const product = await stripe.products.create({
-      name: program.title,
-      metadata: { programId: program.id },
-    });
-    const price = await stripe.prices.create({
-      product: product.id,
-      unit_amount: program.priceInCents,
-      currency: program.currency,
-    });
-    stripeProductId = product.id;
-    stripePriceId = price.id;
-  }
-
+  // TODO: Create Stripe product + price when Stripe is configured
   const updated = await prisma.program.update({
     where: { id },
-    data: { published: true, stripeProductId, stripePriceId },
+    data: { published: true },
   });
 
   return NextResponse.json(updated);
