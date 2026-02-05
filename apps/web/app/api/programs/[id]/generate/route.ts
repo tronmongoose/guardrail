@@ -79,7 +79,7 @@ export async function POST(
     );
   }
 
-  // Persist draft
+  // Persist draft as plain JSON
   const savedDraft = await prisma.programDraft.create({
     data: {
       programId,
