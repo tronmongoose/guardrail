@@ -16,7 +16,7 @@ export async function POST() {
     },
   });
 
-  return NextResponse.redirect(
-    new URL(`/programs/${program.id}/edit`, process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000")
-  );
+  // Use request URL as base for redirect to avoid env var issues
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  return NextResponse.redirect(`${baseUrl}/programs/${program.id}/edit`);
 }
