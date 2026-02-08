@@ -22,7 +22,8 @@ export async function POST(
   });
   if (existing?.status === "ACTIVE") {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    return NextResponse.redirect(`${appUrl}/learn/${programId}`);
+    // Use 303 to redirect POST to GET
+    return NextResponse.redirect(`${appUrl}/learn/${programId}`, 303);
   }
 
   // Free program: create entitlement directly
@@ -33,7 +34,8 @@ export async function POST(
       update: { status: "ACTIVE" },
     });
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    return NextResponse.redirect(`${appUrl}/learn/${programId}`);
+    // Use 303 to redirect POST to GET
+    return NextResponse.redirect(`${appUrl}/learn/${programId}`, 303);
   }
 
   // Paid program: create Stripe checkout session
@@ -64,5 +66,6 @@ export async function POST(
     customer_email: user.email,
   });
 
-  return NextResponse.redirect(session.url!);
+  // Use 303 to redirect POST to GET (Stripe checkout URL)
+  return NextResponse.redirect(session.url!, 303);
 }

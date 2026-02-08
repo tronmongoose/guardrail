@@ -11,6 +11,18 @@ export async function POST(
   const user = await getOrCreateUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
+  // Verify ownership
+  const program = await prisma.program.findUnique({
+    where: { id: programId },
+    select: { creatorId: true }
+  });
+  if (!program) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (program.creatorId !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { url } = await req.json();
   const videoId = parseYouTubeVideoId(url);
   if (!videoId) {

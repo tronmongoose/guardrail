@@ -49,10 +49,22 @@ export default function ProgramEditPage() {
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (retryCount = 0) => {
+    const maxRetries = 3;
+    const retryDelay = 500; // ms
+
     try {
-      const res = await fetch(`/api/programs/${id}`);
+      const res = await fetch(`/api/programs/${id}`, {
+        cache: "no-store",
+        headers: { "Cache-Control": "no-cache" }
+      });
       if (!res.ok) {
+        // If 404 and we have retries left, wait and retry
+        // (handles race condition when program was just created)
+        if (res.status === 404 && retryCount < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay * (retryCount + 1)));
+          return load(retryCount + 1);
+        }
         throw new Error("Failed to load program");
       }
       setProgram(await res.json());

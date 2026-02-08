@@ -8,6 +8,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  const user = await getOrCreateUser();
+  if (!user) {
+    return NextResponse.json(
+      { error: "Unauthorized" },
+      { status: 401, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
   const program = await prisma.program.findUnique({
     where: { id },
     include: {
@@ -24,8 +32,27 @@ export async function GET(
       },
     },
   });
-  if (!program) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  return NextResponse.json(program);
+  if (!program) {
+    return NextResponse.json(
+      { error: "Not found" },
+      {
+        status: 404,
+        headers: { "Cache-Control": "no-store" }
+      }
+    );
+  }
+
+  // Verify ownership
+  if (program.creatorId !== user.id) {
+    return NextResponse.json(
+      { error: "Forbidden" },
+      { status: 403, headers: { "Cache-Control": "no-store" } }
+    );
+  }
+
+  return NextResponse.json(program, {
+    headers: { "Cache-Control": "no-store, max-age=0" }
+  });
 }
 
 export async function PATCH(
@@ -35,6 +62,18 @@ export async function PATCH(
   const { id } = await params;
   const user = await getOrCreateUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Verify ownership before allowing update
+  const existing = await prisma.program.findUnique({
+    where: { id },
+    select: { creatorId: true }
+  });
+  if (!existing) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+  if (existing.creatorId !== user.id) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   const body = await req.json();
   const data: Record<string, unknown> = {};

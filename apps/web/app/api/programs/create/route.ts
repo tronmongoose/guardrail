@@ -18,5 +18,7 @@ export async function POST() {
 
   // Use request URL as base for redirect to avoid env var issues
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  return NextResponse.redirect(`${baseUrl}/programs/${program.id}/edit`);
+  // Use 303 See Other to ensure browser makes a GET request to the edit page
+  // (default 308 preserves POST method which causes issues)
+  return NextResponse.redirect(`${baseUrl}/programs/${program.id}/edit`, 303);
 }
