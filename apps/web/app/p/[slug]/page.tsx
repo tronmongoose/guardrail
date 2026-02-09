@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
+import { EnrollButton } from "./enroll-button";
 
 export default async function SalesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -34,7 +35,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
           )}
 
           <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-            <p className="text-sm font-medium text-gray-700">What you'll get:</p>
+            <p className="text-sm font-medium text-gray-700">What you&apos;ll get:</p>
             {program.weeks.map((w) => (
               <div key={w.id} className="flex items-start gap-2 text-sm text-gray-500">
                 <span className="text-brand-600 mt-0.5">•</span>
@@ -48,14 +49,11 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
 
           <div className="bg-white border border-gray-200 rounded-xl p-6 text-center space-y-4">
             <p className="text-3xl font-bold">{priceDisplay}</p>
-            <form action={`/api/checkout/${program.id}`} method="POST">
-              <button
-                type="submit"
-                className="w-full py-3 bg-brand-600 text-white rounded-xl font-medium hover:bg-brand-700 transition"
-              >
-                {program.priceInCents === 0 ? "Enroll free" : `Buy for ${priceDisplay}`}
-              </button>
-            </form>
+            <EnrollButton
+              programId={program.id}
+              isFree={program.priceInCents === 0}
+              priceDisplay={priceDisplay}
+            />
           </div>
         </div>
       </main>
