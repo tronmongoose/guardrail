@@ -133,7 +133,8 @@ export default function ProgramEditPage() {
       const s2 = await fetch(`/api/programs/${id}/generate`, { method: "POST" });
       if (!s2.ok) {
         const data = await s2.json().catch(() => ({}));
-        throw new Error(data.error || "Draft generation failed");
+        const errorMsg = data.detail ? `${data.error}: ${data.detail}` : data.error || "Draft generation failed";
+        throw new Error(errorMsg);
       }
 
       await load();
