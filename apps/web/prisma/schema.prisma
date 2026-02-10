@@ -18,6 +18,12 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Creator onboarding fields
+  bio                String?  @db.Text
+  niche              String?
+  outcomeTarget      String?  @db.Text
+  onboardingComplete Boolean  @default(false)
+
   programs      Program[]
   entitlements  Entitlement[]
   progress      LearnerProgress[]
@@ -32,19 +38,20 @@ enum Role {
 // --- Program ---
 
 model Program {
-  id            String      @id @default(cuid())
-  title         String
-  slug          String      @unique
-  description   String?
-  durationWeeks Int
-  pacingMode    PacingMode  @default(DRIP_BY_WEEK)
-  priceInCents  Int         @default(0)
-  currency      String      @default("usd")
-  published     Boolean     @default(false)
-  stripeProductId String?
-  stripePriceId   String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
+  id               String      @id @default(cuid())
+  title            String
+  slug             String      @unique
+  description      String?
+  outcomeStatement String?     @db.Text
+  durationWeeks    Int
+  pacingMode       PacingMode  @default(DRIP_BY_WEEK)
+  priceInCents     Int         @default(0)
+  currency         String      @default("usd")
+  published        Boolean     @default(false)
+  stripeProductId  String?
+  stripePriceId    String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   creatorId     String
   creator       User        @relation(fields: [creatorId], references: [id])

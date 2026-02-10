@@ -27,12 +27,24 @@ export default function DashboardPage() {
       return;
     }
 
-    fetch("/api/programs")
+    // Check if onboarding is complete
+    fetch("/api/user/onboarding")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.onboardingComplete) {
+          router.push("/onboarding");
+          return null;
+        }
+        return fetch("/api/programs");
+      })
       .then((res) => {
+        if (!res) return;
         if (!res.ok) throw new Error("Failed to load programs");
         return res.json();
       })
-      .then(setPrograms)
+      .then((data) => {
+        if (data) setPrograms(data);
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [isLoaded, clerkUser, router]);

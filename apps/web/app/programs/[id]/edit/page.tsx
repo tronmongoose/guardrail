@@ -2,36 +2,26 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { Spinner, InlineSpinner } from "@/components/ui/spinner";
+import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
-
-interface YouTubeVideo {
-  id: string;
-  videoId: string;
-  title: string | null;
-  thumbnailUrl: string | null;
-}
+import {
+  StructureBuilder,
+  type WeekData,
+  type YouTubeVideoData,
+} from "@/components/builder";
 
 interface Program {
   id: string;
   title: string;
   description: string | null;
+  outcomeStatement: string | null;
   durationWeeks: number;
   slug: string;
   published: boolean;
   priceInCents: number;
-  videos: YouTubeVideo[];
+  videos: YouTubeVideoData[];
   drafts: { id: string; status: string; createdAt: string }[];
-  weeks: {
-    id: string;
-    title: string;
-    weekNumber: number;
-    sessions: {
-      id: string;
-      title: string;
-      actions: { id: string; title: string; type: string }[];
-    }[];
-  }[];
+  weeks: WeekData[];
 }
 
 export default function ProgramEditPage() {
@@ -91,6 +81,7 @@ export default function ProgramEditPage() {
         body: JSON.stringify({
           title: form.get("title"),
           description: form.get("description"),
+          outcomeStatement: form.get("outcomeStatement"),
           durationWeeks: Number(form.get("durationWeeks")),
           priceInCents: Math.round(Number(form.get("price")) * 100),
         }),
@@ -245,6 +236,17 @@ export default function ProgramEditPage() {
                 className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
               />
             </div>
+            <div>
+              <label className="text-sm text-gray-400">Outcome Statement</label>
+              <textarea
+                name="outcomeStatement"
+                defaultValue={program.outcomeStatement ?? ""}
+                rows={2}
+                placeholder="By the end of this program, learners will..."
+                className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm placeholder:text-gray-500 focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
+              />
+              <p className="text-xs text-gray-500 mt-1">What transformation will learners achieve?</p>
+            </div>
             <div className="flex gap-4">
               <div className="flex-1">
                 <label className="text-sm text-gray-400">Weeks</label>
@@ -349,84 +351,51 @@ export default function ProgramEditPage() {
           )}
         </section>
 
-        {/* Generate */}
+        {/* Structure Builder */}
         <section className="bg-surface-card border border-surface-border rounded-xl p-6">
-          <h2 className="font-semibold text-white mb-2">AI Structure</h2>
-          <p className="text-sm text-gray-500 mb-4">
-            Generate a week-by-week structure from your videos using AI.
-          </p>
-
-          {generating ? (
-            <div className="flex items-center gap-3 py-2">
-              <Spinner size="md" color="pink" />
-              <div>
-                <p className="text-sm text-white">Generating structure...</p>
-                <p className="text-xs text-gray-500">This may take a moment</p>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={generateStructure}
-              disabled={program.videos.length === 0}
-              className="btn-neon-pink px-5 py-2.5 rounded-lg text-white text-sm font-semibold disabled:opacity-50"
-            >
-              {program.weeks.length > 0 ? "Regenerate Structure" : "Generate Program Structure"}
-            </button>
-          )}
-
-          {program.videos.length === 0 && (
-            <p className="text-xs text-gray-500 mt-2">Add at least one video to generate structure</p>
-          )}
+          <h2 className="font-semibold text-white mb-4">Program Structure</h2>
+          <StructureBuilder
+            programId={program.id}
+            weeks={program.weeks}
+            videos={program.videos}
+            onUpdate={load}
+          />
         </section>
 
-        {/* Structure preview */}
-        {program.weeks.length > 0 && (
+        {/* AI Generation (optional) */}
+        {program.videos.length > 0 && (
           <section className="bg-surface-card border border-surface-border rounded-xl p-6">
-            <h2 className="font-semibold text-white mb-4">Program Structure</h2>
-            <div className="space-y-4">
-              {program.weeks.map((w) => (
-                <div key={w.id} className="border-l-2 border-neon-cyan pl-4">
-                  <h3 className="font-medium text-white">{w.title}</h3>
-                  {w.sessions.map((s) => (
-                    <div key={s.id} className="ml-2 mt-2">
-                      <p className="text-sm text-gray-400">{s.title}</p>
-                      <ul className="ml-4 mt-1 space-y-1">
-                        {s.actions.map((a) => (
-                          <li key={a.id} className="text-xs text-gray-500 flex items-center gap-2">
-                            <span
-                              className={`inline-block w-1.5 h-1.5 rounded-full ${
-                                a.type === "WATCH"
-                                  ? "bg-neon-cyan"
-                                  : a.type === "REFLECT"
-                                  ? "bg-neon-pink"
-                                  : a.type === "DO"
-                                  ? "bg-neon-yellow"
-                                  : "bg-gray-500"
-                              }`}
-                            />
-                            {a.title}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+            <h2 className="font-semibold text-white mb-2">AI Structure Generation</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              {program.weeks.length > 0
+                ? "Replace your current structure with an AI-generated one based on your videos."
+                : "Let AI create an initial structure from your videos."}
+            </p>
 
-        {/* Empty structure state */}
-        {program.weeks.length === 0 && program.videos.length > 0 && (
-          <div className="bg-surface-card border border-dashed border-surface-border rounded-xl p-8 text-center">
-            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-neon-pink/10 border border-neon-pink/30 flex items-center justify-center">
-              <svg className="w-6 h-6 text-neon-pink" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-            </div>
-            <p className="text-sm text-gray-400">No structure yet</p>
-            <p className="text-xs text-gray-500 mt-1">Click "Generate Program Structure" above to create your curriculum</p>
-          </div>
+            {generating ? (
+              <div className="flex items-center gap-3 py-2">
+                <Spinner size="md" color="pink" />
+                <div>
+                  <p className="text-sm text-white">Generating structure...</p>
+                  <p className="text-xs text-gray-500">This may take a moment</p>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  if (program.weeks.length > 0) {
+                    if (!confirm("This will replace your current structure. Continue?")) {
+                      return;
+                    }
+                  }
+                  generateStructure();
+                }}
+                className="btn-neon-pink px-5 py-2.5 rounded-lg text-white text-sm font-semibold"
+              >
+                {program.weeks.length > 0 ? "Regenerate with AI" : "Generate with AI"}
+              </button>
+            )}
+          </section>
         )}
 
         {/* Publish */}

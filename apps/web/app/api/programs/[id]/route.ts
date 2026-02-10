@@ -82,6 +82,7 @@ export async function PATCH(
     data.slug = slugify(body.title) + "-" + id.slice(0, 6);
   }
   if (body.description !== undefined) data.description = body.description;
+  if (body.outcomeStatement !== undefined) data.outcomeStatement = body.outcomeStatement;
   if (body.durationWeeks) data.durationWeeks = body.durationWeeks;
   if (body.priceInCents !== undefined) data.priceInCents = body.priceInCents;
 
