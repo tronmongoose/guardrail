@@ -59,6 +59,7 @@ export async function POST(
       programId,
       programTitle: program.title,
       programDescription: program.description ?? undefined,
+      outcomeStatement: program.outcomeStatement ?? undefined,
       durationWeeks: program.durationWeeks,
       clusters,
     });
