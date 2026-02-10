@@ -34,3 +34,76 @@ export async function fetchYouTubeOEmbed(videoId: string) {
     thumbnailUrl: data.thumbnail_url as string,
   };
 }
+
+/**
+ * Fetch YouTube video transcript/captions.
+ * Uses the timedtext API endpoint (no API key required).
+ * Returns null if no captions available.
+ */
+export async function fetchYouTubeTranscript(videoId: string): Promise<string | null> {
+  try {
+    // First, get the video page to extract caption track info
+    const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; GuideRail/1.0)",
+      },
+    });
+    if (!pageRes.ok) return null;
+
+    const html = await pageRes.text();
+
+    // Extract captions URL from the page
+    const captionMatch = html.match(/"captionTracks":\s*\[(.*?)\]/);
+    if (!captionMatch) return null;
+
+    // Parse the caption tracks JSON
+    const tracksJson = `[${captionMatch[1]}]`;
+    let tracks: Array<{ baseUrl: string; languageCode: string }>;
+    try {
+      tracks = JSON.parse(tracksJson);
+    } catch {
+      return null;
+    }
+
+    if (!tracks || tracks.length === 0) return null;
+
+    // Prefer English, fall back to first available
+    const englishTrack = tracks.find((t) => t.languageCode?.startsWith("en"));
+    const track = englishTrack || tracks[0];
+
+    if (!track?.baseUrl) return null;
+
+    // Fetch the transcript XML
+    const transcriptRes = await fetch(track.baseUrl);
+    if (!transcriptRes.ok) return null;
+
+    const xml = await transcriptRes.text();
+
+    // Parse XML and extract text
+    const textMatches = xml.matchAll(/<text[^>]*>(.*?)<\/text>/g);
+    const lines: string[] = [];
+    for (const match of textMatches) {
+      // Decode HTML entities
+      const text = match[1]
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/\n/g, " ")
+        .trim();
+      if (text) lines.push(text);
+    }
+
+    if (lines.length === 0) return null;
+
+    // Join and truncate to reasonable length (keep first ~4000 chars for LLM context)
+    const fullTranscript = lines.join(" ");
+    return fullTranscript.length > 4000
+      ? fullTranscript.slice(0, 4000) + "..."
+      : fullTranscript;
+  } catch (err) {
+    console.error("Failed to fetch transcript:", err);
+    return null;
+  }
+}

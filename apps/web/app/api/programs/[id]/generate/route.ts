@@ -33,15 +33,17 @@ export async function POST(
 
   // Build cluster groups from stored assignments
   const videoMap = new Map(program.videos.map((v) => [v.id, v]));
-  const clusterMap = new Map<number, { videoIds: string[]; videoTitles: string[] }>();
+  const clusterMap = new Map<number, { videoIds: string[]; videoTitles: string[]; videoTranscripts: string[] }>();
 
   for (const ca of program.clusters) {
     if (!clusterMap.has(ca.clusterId)) {
-      clusterMap.set(ca.clusterId, { videoIds: [], videoTitles: [] });
+      clusterMap.set(ca.clusterId, { videoIds: [], videoTitles: [], videoTranscripts: [] });
     }
     const group = clusterMap.get(ca.clusterId)!;
+    const video = videoMap.get(ca.videoId);
     group.videoIds.push(ca.videoId);
-    group.videoTitles.push(videoMap.get(ca.videoId)?.title ?? "Untitled");
+    group.videoTitles.push(video?.title ?? "Untitled");
+    group.videoTranscripts.push(video?.transcript ?? "");
   }
 
   const clusters = Array.from(clusterMap.entries())

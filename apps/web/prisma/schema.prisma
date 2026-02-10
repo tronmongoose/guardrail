@@ -127,6 +127,7 @@ model YouTubeVideo {
   authorName    String?
   thumbnailUrl  String?
   description   String?
+  transcript    String?  @db.Text  // Auto-fetched captions/transcript
   programId     String
   program       Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
   createdAt     DateTime @default(now())

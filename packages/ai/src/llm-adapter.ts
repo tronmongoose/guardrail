@@ -21,6 +21,7 @@ interface GenerateInput {
     clusterId: number;
     videoIds: string[];
     videoTitles: string[];
+    videoTranscripts?: string[];
     summary?: string;
   }[];
 }
@@ -80,18 +81,29 @@ function extractJSON(text: string): string {
 }
 
 function buildPrompt(input: GenerateInput): string {
+  // Build cluster descriptions with transcripts if available
+  const clusterDescriptions = input.clusters.map((c) => {
+    const videoList = c.videoTitles
+      .map((title, i) => {
+        const transcript = c.videoTranscripts?.[i];
+        if (transcript) {
+          // Truncate transcript to ~500 chars per video
+          const shortTranscript = transcript.length > 500 ? transcript.slice(0, 500) + "..." : transcript;
+          return `  - "${title}" (ID: ${c.videoIds[i]})\n    Content: ${shortTranscript}`;
+        }
+        return `  - "${title}" (ID: ${c.videoIds[i]})`;
+      })
+      .join("\n");
+    return `Cluster ${c.clusterId}:\n${videoList}`;
+  });
+
   return `You are a curriculum designer. Given these video clusters for a ${input.durationWeeks}-week program titled "${input.programTitle}", generate a structured program.
 
 ${input.programDescription ? `Program description: ${input.programDescription}` : ""}
 ${input.outcomeStatement ? `Intended outcome: ${input.outcomeStatement}` : ""}
 
-Video clusters:
-${input.clusters
-  .map(
-    (c) =>
-      `Cluster ${c.clusterId}: Videos: ${c.videoTitles.join(", ")}${c.summary ? ` | Summary: ${c.summary}` : ""}`
-  )
-  .join("\n")}
+Video clusters with content:
+${clusterDescriptions.join("\n\n")}
 
 Output ONLY valid JSON matching this structure:
 {

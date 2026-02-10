@@ -26,9 +26,12 @@ export async function POST(
   }
 
   // Step 1: Get embeddings via HF
+  // Use transcript if available, otherwise fall back to title + description
   const embeddingInputs = program.videos.map((v) => ({
     videoId: v.id,
-    text: `${v.title ?? ""} ${v.description ?? ""}`.trim() || v.videoId,
+    text: v.transcript
+      ? `${v.title ?? ""}: ${v.transcript}`.slice(0, 2000) // Truncate for embedding
+      : `${v.title ?? ""} ${v.description ?? ""}`.trim() || v.videoId,
   }));
 
   let embeddingResults;

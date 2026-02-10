@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { parseYouTubeVideoId, fetchYouTubeOEmbed } from "@guide-rail/shared";
+import { parseYouTubeVideoId, fetchYouTubeOEmbed, fetchYouTubeTranscript } from "@guide-rail/shared";
 
 export async function POST(
   req: NextRequest,
@@ -43,6 +43,14 @@ export async function POST(
     meta = { title: videoId, authorName: "", thumbnailUrl: "" };
   }
 
+  // Fetch transcript (best effort, don't fail if unavailable)
+  let transcript: string | null = null;
+  try {
+    transcript = await fetchYouTubeTranscript(videoId);
+  } catch {
+    console.log(`No transcript available for video ${videoId}`);
+  }
+
   const video = await prisma.youTubeVideo.create({
     data: {
       videoId,
@@ -50,6 +58,7 @@ export async function POST(
       title: meta.title,
       authorName: meta.authorName,
       thumbnailUrl: meta.thumbnailUrl,
+      transcript,
       programId,
     },
   });
