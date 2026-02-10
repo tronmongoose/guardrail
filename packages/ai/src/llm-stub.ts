@@ -1,5 +1,6 @@
 /**
  * Stub LLM — generates deterministic ProgramDraft JSON for local dev without API keys.
+ * Distributes videos evenly across all weeks.
  */
 
 import type { ProgramDraft } from "@guide-rail/shared";
@@ -8,72 +9,86 @@ interface StubInput {
   programId: string;
   programTitle: string;
   programDescription?: string;
+  outcomeStatement?: string;
   durationWeeks: number;
   clusters: {
     clusterId: number;
     videoIds: string[];
     videoTitles: string[];
+    videoTranscripts?: string[];
     summary?: string;
   }[];
 }
 
-type ActionType = "watch" | "read" | "do" | "reflect";
-
 export function generateWithStub(input: StubInput): ProgramDraft {
-  const weeks: ProgramDraft["weeks"] = input.clusters.map((cluster, i) => ({
-    title: `Week ${i + 1}: ${cluster.videoTitles[0] ?? `Topic ${i + 1}`}`,
-    summary: cluster.summary ?? `Explore topics from cluster ${cluster.clusterId}`,
-    weekNumber: i + 1,
-    sessions: [
-      {
-        title: `Session: ${cluster.videoTitles.join(" & ") || "Study"}`,
-        summary: `Watch and engage with week ${i + 1} content`,
-        orderIndex: 0,
-        actions: [
-          ...cluster.videoIds.map((vid, j) => ({
-            title: `Watch: ${cluster.videoTitles[j] ?? `Video ${j + 1}`}`,
-            type: "watch" as const,
-            instructions: `Watch the video and take notes on key concepts.`,
-            youtubeVideoId: vid,
-            orderIndex: j,
-          })),
-          {
-            title: `Reflect on Week ${i + 1}`,
-            type: "reflect" as const,
-            instructions: "Take a moment to reflect on what you learned this week.",
-            reflectionPrompt: `What was your biggest takeaway from week ${i + 1}? How will you apply it?`,
-            orderIndex: cluster.videoIds.length,
-          },
-        ],
-      },
-    ],
-  }));
+  // Flatten all videos from all clusters
+  const allVideos: { id: string; title: string }[] = [];
+  for (const c of input.clusters) {
+    for (let i = 0; i < c.videoIds.length; i++) {
+      allVideos.push({
+        id: c.videoIds[i],
+        title: c.videoTitles[i] ?? `Video ${allVideos.length + 1}`,
+      });
+    }
+  }
 
-  // Pad to durationWeeks if fewer clusters
-  while (weeks.length < input.durationWeeks) {
-    const n = weeks.length + 1;
+  // Distribute videos across weeks
+  const videosPerWeek = Math.max(1, Math.ceil(allVideos.length / input.durationWeeks));
+  const weeks: ProgramDraft["weeks"] = [];
+
+  for (let weekNum = 1; weekNum <= input.durationWeeks; weekNum++) {
+    const startIdx = (weekNum - 1) * videosPerWeek;
+    const weekVideos = allVideos.slice(startIdx, startIdx + videosPerWeek);
+
+    const actions: ProgramDraft["weeks"][0]["sessions"][0]["actions"] = [];
+    let orderIndex = 0;
+
+    // Add watch actions for each video
+    for (const video of weekVideos) {
+      actions.push({
+        title: `Watch: ${video.title}`,
+        type: "watch" as const,
+        instructions: `Watch the video carefully and take notes on the key concepts discussed.`,
+        youtubeVideoId: video.id,
+        orderIndex: orderIndex++,
+      });
+    }
+
+    // Add a DO action
+    actions.push({
+      title: `Practice: Week ${weekNum} Exercise`,
+      type: "do" as const,
+      instructions: `Apply what you learned this week:\n1. Review your notes from the videos\n2. Identify one key concept to practice\n3. Complete a hands-on exercise applying that concept\n4. Document what you learned`,
+      orderIndex: orderIndex++,
+    });
+
+    // Add a REFLECT action
+    actions.push({
+      title: `Reflect: Week ${weekNum} Insights`,
+      type: "reflect" as const,
+      instructions: "Take time to reflect on your learning journey this week.",
+      reflectionPrompt: input.outcomeStatement
+        ? `How does what you learned this week connect to your goal of: "${input.outcomeStatement}"? What will you do differently?`
+        : `What was your biggest insight from week ${weekNum}? How will you apply it in practice?`,
+      orderIndex: orderIndex++,
+    });
+
+    const weekTitle = weekVideos.length > 0
+      ? weekVideos[0].title.split(":")[0] || `Topic ${weekNum}`
+      : `Review & Integration`;
+
     weeks.push({
-      title: `Week ${n}: Review & Practice`,
-      summary: "Review and apply what you've learned",
-      weekNumber: n,
+      title: `Week ${weekNum}: ${weekTitle}`,
+      summary: weekVideos.length > 0
+        ? `Explore ${weekVideos.length} video(s) and practice key concepts`
+        : `Review previous weeks and consolidate your learning`,
+      weekNumber: weekNum,
       sessions: [
         {
-          title: "Review Session",
+          title: weekVideos.length > 0 ? `Learning Session` : `Review Session`,
+          summary: `Week ${weekNum} core activities`,
           orderIndex: 0,
-          actions: [
-            {
-              title: "Practice Exercise",
-              type: "do" as const,
-              instructions: "Apply concepts from previous weeks.",
-              orderIndex: 0,
-            },
-            {
-              title: "Weekly Reflection",
-              type: "reflect" as const,
-              reflectionPrompt: "What progress have you made? What challenges remain?",
-              orderIndex: 1,
-            },
-          ],
+          actions,
         },
       ],
     });
@@ -82,9 +97,9 @@ export function generateWithStub(input: StubInput): ProgramDraft {
   return {
     programId: input.programId,
     title: input.programTitle,
-    description: input.programDescription,
+    description: input.programDescription ?? `A ${input.durationWeeks}-week program to help you achieve your learning goals.`,
     pacingMode: "drip_by_week",
     durationWeeks: input.durationWeeks,
-    weeks: weeks.slice(0, input.durationWeeks),
+    weeks,
   };
 }

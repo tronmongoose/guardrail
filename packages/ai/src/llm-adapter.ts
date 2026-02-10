@@ -32,6 +32,18 @@ export async function generateProgramDraft(
   input: GenerateInput
 ): Promise<ProgramDraft> {
   const provider = (process.env.LLM_PROVIDER || "stub") as LLMProvider;
+
+  // Log input summary (privacy-conscious - no full transcripts)
+  const inputSummary = {
+    programId: input.programId,
+    programTitle: input.programTitle,
+    durationWeeks: input.durationWeeks,
+    totalVideos: input.clusters.reduce((sum, c) => sum + c.videoIds.length, 0),
+    clusterCount: input.clusters.length,
+    hasOutcomeStatement: !!input.outcomeStatement,
+    hasTranscripts: input.clusters.some(c => c.videoTranscripts?.some(t => t && t.length > 0)),
+  };
+  console.log(`[LLM] Generation request:`, JSON.stringify(inputSummary));
   console.log(`[LLM] Using provider: ${provider}`);
 
   let raw: string;
@@ -49,19 +61,33 @@ export async function generateProgramDraft(
     throw new Error(`Unknown LLM_PROVIDER: ${provider}`);
   }
 
+  console.log(`[LLM] Raw response length: ${raw.length} chars`);
+
   // Parse + validate + repair loop
   for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
     try {
       const json = extractJSON(raw);
       const parsed = JSON.parse(json);
-      return ProgramDraftSchema.parse(parsed);
+      const validated = ProgramDraftSchema.parse(parsed);
+
+      // Log output summary
+      console.log(`[LLM] Generated draft: ${validated.weeks.length} weeks, ${
+        validated.weeks.reduce((sum, w) => sum + w.sessions.length, 0)
+      } sessions, ${
+        validated.weeks.reduce((sum, w) =>
+          sum + w.sessions.reduce((s, sess) => s + sess.actions.length, 0), 0)
+      } actions`);
+
+      return validated;
     } catch (err) {
+      console.error(`[LLM] Parse attempt ${attempt + 1} failed:`, err);
       if (attempt === MAX_REPAIR_ATTEMPTS) {
         throw new Error(
           `LLM output failed validation after ${MAX_REPAIR_ATTEMPTS} repair attempts: ${err}`
         );
       }
       // Attempt repair by re-calling with error context
+      console.log(`[LLM] Attempting repair...`);
       raw = await repairJSON(raw, String(err), provider, input);
     }
   }
@@ -81,55 +107,95 @@ function extractJSON(text: string): string {
 }
 
 function buildPrompt(input: GenerateInput): string {
-  // Build cluster descriptions with transcripts if available
-  const clusterDescriptions = input.clusters.map((c) => {
-    const videoList = c.videoTitles
-      .map((title, i) => {
-        const transcript = c.videoTranscripts?.[i];
-        if (transcript) {
-          // Truncate transcript to ~500 chars per video
-          const shortTranscript = transcript.length > 500 ? transcript.slice(0, 500) + "..." : transcript;
-          return `  - "${title}" (ID: ${c.videoIds[i]})\n    Content: ${shortTranscript}`;
-        }
-        return `  - "${title}" (ID: ${c.videoIds[i]})`;
-      })
-      .join("\n");
-    return `Cluster ${c.clusterId}:\n${videoList}`;
-  });
+  // Flatten all videos with their transcripts for the prompt
+  const allVideos: { id: string; title: string; transcript?: string; clusterId: number }[] = [];
+  for (const c of input.clusters) {
+    for (let i = 0; i < c.videoIds.length; i++) {
+      allVideos.push({
+        id: c.videoIds[i],
+        title: c.videoTitles[i],
+        transcript: c.videoTranscripts?.[i],
+        clusterId: c.clusterId,
+      });
+    }
+  }
 
-  return `You are a curriculum designer. Given these video clusters for a ${input.durationWeeks}-week program titled "${input.programTitle}", generate a structured program.
+  // Build video descriptions with transcripts
+  const videoDescriptions = allVideos.map((v, i) => {
+    const transcriptSnippet = v.transcript
+      ? `\n   Content preview: ${v.transcript.slice(0, 600)}${v.transcript.length > 600 ? "..." : ""}`
+      : "";
+    return `${i + 1}. "${v.title}" (ID: ${v.id}, Cluster: ${v.clusterId})${transcriptSnippet}`;
+  }).join("\n\n");
 
-${input.programDescription ? `Program description: ${input.programDescription}` : ""}
-${input.outcomeStatement ? `Intended outcome: ${input.outcomeStatement}` : ""}
+  const totalVideos = allVideos.length;
+  const videosPerWeek = Math.max(1, Math.ceil(totalVideos / input.durationWeeks));
 
-Video clusters with content:
-${clusterDescriptions.join("\n\n")}
+  return `You are an expert curriculum designer creating a transformational learning program.
 
-Output ONLY valid JSON matching this structure:
+PROGRAM DETAILS:
+- Title: "${input.programTitle}"
+- Duration: EXACTLY ${input.durationWeeks} weeks (you MUST create ${input.durationWeeks} weeks)
+- Total videos available: ${totalVideos}
+${input.programDescription ? `- Description: ${input.programDescription}` : ""}
+${input.outcomeStatement ? `- Intended learner outcome: ${input.outcomeStatement}` : ""}
+
+AVAILABLE VIDEO CONTENT:
+${videoDescriptions}
+
+YOUR TASK:
+Create a ${input.durationWeeks}-week structured learning program that transforms learners toward the intended outcome.
+
+CRITICAL REQUIREMENTS:
+1. Generate EXACTLY ${input.durationWeeks} weeks (weekNumber 1 through ${input.durationWeeks})
+2. Distribute videos logically across all ${input.durationWeeks} weeks (approximately ${videosPerWeek} video(s) per week)
+3. Each week needs a clear theme that builds toward the outcome
+4. Videos from the same cluster share related topics - use this to group them logically
+
+STRUCTURE EACH WEEK WITH:
+- 1-2 sessions per week
+- Each session should have:
+  * WATCH action(s) - reference videos by their exact ID
+  * DO action - practical exercise applying what was learned
+  * REFLECT action (at least one per week) - thought-provoking prompt connecting to the outcome
+
+OUTPUT FORMAT (JSON only, no markdown):
 {
   "programId": "${input.programId}",
-  "title": "...",
-  "description": "...",
+  "title": "${input.programTitle}",
+  "description": "A compelling 1-2 sentence description of the program transformation",
   "pacingMode": "drip_by_week",
   "durationWeeks": ${input.durationWeeks},
   "weeks": [
     {
-      "title": "...",
-      "summary": "...",
+      "title": "Week 1: [Theme]",
+      "summary": "What learners will achieve this week",
       "weekNumber": 1,
       "sessions": [
         {
-          "title": "...",
-          "summary": "...",
+          "title": "Session title",
+          "summary": "Session focus",
           "orderIndex": 0,
           "actions": [
             {
-              "title": "...",
-              "type": "watch|read|do|reflect",
-              "instructions": "...",
-              "reflectionPrompt": "...(only for reflect type)",
-              "youtubeVideoId": "...(if watch type)",
+              "title": "Watch: [Video title]",
+              "type": "watch",
+              "instructions": "Specific guidance on what to focus on while watching",
+              "youtubeVideoId": "[exact video ID from above]",
               "orderIndex": 0
+            },
+            {
+              "title": "Practice: [Exercise name]",
+              "type": "do",
+              "instructions": "Clear, actionable exercise (3-5 steps)",
+              "orderIndex": 1
+            },
+            {
+              "title": "Reflect: [Topic]",
+              "type": "reflect",
+              "instructions": "Context for the reflection",
+              "reflectionPrompt": "Thought-provoking question connecting to the outcome",
+              "orderIndex": 2
             }
           ]
         }
@@ -138,16 +204,13 @@ Output ONLY valid JSON matching this structure:
   ]
 }
 
-Rules:
-- Each cluster maps to one week (or split if more weeks than clusters)
-- Each week must have at least one session with at least one action
-- "watch" actions must reference a youtubeVideoId from the cluster (use the exact video ID provided)
-- Write clear, actionable instructions for each action that guide learners on what to focus on
-- Add a "do" action after watch actions with practical exercises to apply concepts
-- Add a "reflect" action at the end of each week with thought-provoking prompts
-- Reflection prompts should connect to the intended outcome if provided
-- Keep titles concise and professional
-- Structure content to progressively build toward the intended outcome`;
+QUALITY GUIDELINES:
+- Week titles should be engaging and outcome-oriented (e.g., "Week 1: Building Your Foundation")
+- Instructions should be specific and actionable, not generic
+- DO actions should have concrete exercises learners can complete
+- REFLECT prompts should encourage deep thinking and personal application
+- Build complexity progressively - earlier weeks introduce concepts, later weeks integrate them
+- Final week should synthesize learning and prepare for real-world application`;
 }
 
 async function callAnthropic(input: GenerateInput): Promise<string> {
