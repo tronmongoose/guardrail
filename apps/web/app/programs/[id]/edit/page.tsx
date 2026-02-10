@@ -126,7 +126,8 @@ export default function ProgramEditPage() {
       const s1 = await fetch(`/api/programs/${id}/auto-structure`, { method: "POST" });
       if (!s1.ok) {
         const data = await s1.json().catch(() => ({}));
-        throw new Error(data.error || "Auto-structure failed");
+        const errorMsg = data.detail ? `${data.error}: ${data.detail}` : data.error || "Auto-structure failed";
+        throw new Error(errorMsg);
       }
 
       // Step 2: generate full draft via LLM
