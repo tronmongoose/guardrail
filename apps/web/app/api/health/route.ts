@@ -1,13 +1,16 @@
 import { NextResponse } from "next/server";
 
+// Health check endpoint to verify deployment
 export async function GET() {
   return NextResponse.json({
     status: "ok",
     timestamp: new Date().toISOString(),
-    env: {
-      hasClerkPublishableKey: !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
-      hasClerkSecretKey: !!process.env.CLERK_SECRET_KEY,
-      hasDatabaseUrl: !!process.env.DATABASE_URL,
-    }
+    version: "2026-02-11-wizard",
+    features: {
+      wizard: true,
+      pdfExtraction: true,
+      influencerStyle: true,
+      durationPresets: true,
+    },
   });
 }
