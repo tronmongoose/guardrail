@@ -24,9 +24,10 @@ model User {
   outcomeTarget      String?  @db.Text
   onboardingComplete Boolean  @default(false)
 
-  programs      Program[]
-  entitlements  Entitlement[]
-  progress      LearnerProgress[]
+  programs            Program[]
+  entitlements        Entitlement[]
+  progress            LearnerProgress[]
+  followedInfluencers UserInfluencer[]
 }
 
 enum Role {
@@ -56,13 +57,16 @@ model Program {
   creatorId     String
   creator       User        @relation(fields: [creatorId], references: [id])
 
-  weeks         Week[]
-  videos        YouTubeVideo[]
-  drafts        ProgramDraft[]
-  entitlements  Entitlement[]
-  embeddings    Embedding[]
-  clusters      ClusterAssignment[]
-  cohorts       Cohort[]
+  weeks            Week[]
+  videos           YouTubeVideo[]
+  drafts           ProgramDraft[]
+  entitlements     Entitlement[]
+  embeddings       Embedding[]
+  clusters         ClusterAssignment[]
+  cohorts          Cohort[]
+  artifacts        ProgramArtifact[]
+  rating           ProgramRating?
+  styleInfluencers String[]  // Array of influencer IDs that influenced this program
 }
 
 enum PacingMode {
@@ -232,4 +236,61 @@ model Cohort {
   startDate  DateTime
   endDate    DateTime?
   createdAt  DateTime @default(now())
+}
+
+// --- Influencer for Style Matching ---
+
+model Influencer {
+  id              String   @id @default(cuid())
+  name            String
+  platform        String   // "youtube", "instagram", etc.
+  platformHandle  String   // @username or channel ID
+  avatarUrl       String?
+  niche           String?
+  styleProfile    Json?    // AI-generated style characteristics
+  sampleVideoIds  String[] // YouTube video IDs analyzed for style
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  followers       UserInfluencer[]
+
+  @@unique([platform, platformHandle])
+}
+
+// --- User-Influencer Follow Relationship ---
+
+model UserInfluencer {
+  id           String     @id @default(cuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  influencerId String
+  influencer   Influencer @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([userId, influencerId])
+}
+
+// --- Program Artifact (metadata only - no file storage) ---
+
+model ProgramArtifact {
+  id               String   @id @default(cuid())
+  programId        String
+  program          Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  originalFilename String
+  fileType         String   // "pdf", "docx"
+  extractedText    String?  @db.Text
+  metadata         Json?    // { pageCount, wordCount, etc. }
+  createdAt        DateTime @default(now())
+}
+
+// --- Future: Program Rating (stub for now) ---
+
+model ProgramRating {
+  id                String    @id @default(cuid())
+  programId         String    @unique
+  program           Program   @relation(fields: [programId], references: [id], onDelete: Cascade)
+  uniquenessScore   Float?    // 0-100 (future AI evaluation)
+  completenessScore Float?    // 0-100 (future AI evaluation)
+  evaluatedAt       DateTime?
+  createdAt         DateTime  @default(now())
 }

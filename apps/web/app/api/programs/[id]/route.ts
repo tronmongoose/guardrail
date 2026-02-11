@@ -85,6 +85,7 @@ export async function PATCH(
   if (body.outcomeStatement !== undefined) data.outcomeStatement = body.outcomeStatement;
   if (body.durationWeeks) data.durationWeeks = body.durationWeeks;
   if (body.priceInCents !== undefined) data.priceInCents = body.priceInCents;
+  if (body.styleInfluencers !== undefined) data.styleInfluencers = body.styleInfluencers;
 
   const program = await prisma.program.update({ where: { id }, data });
   return NextResponse.json(program);
