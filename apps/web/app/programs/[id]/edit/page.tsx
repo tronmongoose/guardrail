@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -9,6 +9,7 @@ import {
   type WeekData,
   type YouTubeVideoData,
 } from "@/components/builder";
+import { ProgramWizard } from "@/components/wizard/ProgramWizard";
 
 interface Program {
   id: string;
@@ -26,12 +27,14 @@ interface Program {
 
 export default function ProgramEditPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { showToast } = useToast();
 
   const [program, setProgram] = useState<Program | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [showWizard, setShowWizard] = useState(searchParams.get("wizard") === "true");
 
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [addingVideo, setAddingVideo] = useState(false);
@@ -196,6 +199,37 @@ export default function ProgramEditPage() {
     );
   }
 
+  // Wizard mode
+  if (showWizard) {
+    return (
+      <ProgramWizard
+        programId={program.id}
+        initialState={{
+          basics: {
+            title: program.title,
+            description: program.description || "",
+            outcomeStatement: program.outcomeStatement || "",
+          },
+          duration: {
+            weeks: program.durationWeeks,
+          },
+          content: {
+            videos: program.videos,
+            artifacts: [],
+          },
+          influencers: {
+            selectedIds: [],
+          },
+        }}
+        onComplete={() => {
+          setShowWizard(false);
+          load();
+        }}
+        onCancel={() => setShowWizard(false)}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen gradient-bg-radial grid-bg">
       <nav className="flex items-center justify-between px-6 py-4 border-b border-surface-border/50 backdrop-blur-sm">
@@ -205,15 +239,23 @@ export default function ProgramEditPage() {
         >
           ← GuideRail
         </button>
-        <span
-          className={`text-xs px-3 py-1.5 rounded-full font-medium ${
-            program.published
-              ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
-              : "bg-surface-card text-gray-400 border border-surface-border"
-          }`}
-        >
-          {program.published ? "Published" : "Draft"}
-        </span>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowWizard(true)}
+            className="text-xs px-3 py-1.5 rounded-full font-medium bg-neon-pink/10 text-neon-pink border border-neon-pink/30 hover:bg-neon-pink/20 transition"
+          >
+            Use Wizard
+          </button>
+          <span
+            className={`text-xs px-3 py-1.5 rounded-full font-medium ${
+              program.published
+                ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
+                : "bg-surface-card text-gray-400 border border-surface-border"
+            }`}
+          >
+            {program.published ? "Published" : "Draft"}
+          </span>
+        </div>
       </nav>
 
       <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
