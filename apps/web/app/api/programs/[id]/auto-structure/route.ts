@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getEmbeddings, clusterEmbeddings } from "@guide-rail/ai";
+import { aiLogger, createTimer } from "@/lib/logger";
 
 const HF_MODEL = process.env.HF_EMBEDDING_MODEL || "sentence-transformers/all-MiniLM-L6-v2";
 
@@ -10,6 +11,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: programId } = await params;
+  const timer = createTimer();
+
   const user = await getOrCreateUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -34,11 +37,15 @@ export async function POST(
       : `${v.title ?? ""} ${v.description ?? ""}`.trim() || v.videoId,
   }));
 
+  aiLogger.embeddingStart(programId, program.videos.length);
+
   let embeddingResults;
+  const embeddingTimer = createTimer();
   try {
     embeddingResults = await getEmbeddings(embeddingInputs);
+    aiLogger.embeddingSuccess(programId, embeddingTimer.elapsed(), embeddingResults.length);
   } catch (err) {
-    console.error("HF embedding error:", err);
+    aiLogger.embeddingFailure(programId, embeddingTimer.elapsed(), err);
     return NextResponse.json(
       { error: "Embedding generation failed", detail: String(err) },
       { status: 502 }
@@ -75,6 +82,11 @@ export async function POST(
 
   const k = Math.min(program.durationWeeks, program.videos.length);
   const clusters = clusterEmbeddings(clusterInputs, k);
+
+  aiLogger.clusteringComplete(programId, timer.elapsed(), {
+    videoCount: program.videos.length,
+    clusterCount: clusters.length,
+  });
 
   // Step 4: Store cluster assignments
   for (const cluster of clusters) {

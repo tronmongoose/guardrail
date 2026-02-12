@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { parseYouTubeVideoId, fetchYouTubeOEmbed, fetchYouTubeTranscript } from "@guide-rail/shared";
+import { videoLogger, createTimer } from "@/lib/logger";
 
 interface VideoResult {
   id: string;
@@ -22,6 +23,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: programId } = await params;
+  const batchTimer = createTimer();
+
   const user = await getOrCreateUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -59,15 +62,23 @@ export async function POST(
   for (const chunk of chunks) {
     const results = await Promise.allSettled(
       chunk.map(async (url: string) => {
+        const videoTimer = createTimer();
         const trimmedUrl = url.trim();
+
         if (!trimmedUrl) {
           throw new Error("Empty URL");
         }
 
         const videoId = parseYouTubeVideoId(trimmedUrl);
         if (!videoId) {
+          videoLogger.ingestionFailure(programId, null, videoTimer.elapsed(), new Error("Invalid YouTube URL"), {
+            stage: "parse",
+            source: "batch",
+          });
           throw new Error("Invalid YouTube URL");
         }
+
+        videoLogger.ingestionStart(programId, videoId, "batch");
 
         // Check if already exists
         const existing = await prisma.youTubeVideo.findUnique({
@@ -86,18 +97,22 @@ export async function POST(
 
         // Fetch metadata
         let meta: { title: string; authorName: string; thumbnailUrl: string };
+        let hasMetadata = true;
         try {
           meta = await fetchYouTubeOEmbed(videoId);
         } catch {
+          hasMetadata = false;
           meta = { title: videoId, authorName: "", thumbnailUrl: "" };
         }
 
         // Fetch transcript (best effort)
         let transcript: string | null = null;
+        let hasTranscript = false;
         try {
           transcript = await fetchYouTubeTranscript(videoId);
+          hasTranscript = !!transcript;
         } catch {
-          // Transcript unavailable, continue without it
+          videoLogger.transcriptUnavailable(programId, videoId);
         }
 
         const video = await prisma.youTubeVideo.create({
@@ -110,6 +125,12 @@ export async function POST(
             transcript,
             programId,
           },
+        });
+
+        videoLogger.ingestionSuccess(programId, videoId, videoTimer.elapsed(), {
+          hasTranscript,
+          hasMetadata,
+          source: "batch",
         });
 
         return {
@@ -136,6 +157,8 @@ export async function POST(
       }
     });
   }
+
+  videoLogger.batchSummary(programId, batchTimer.elapsed(), success.length, errors.length);
 
   return NextResponse.json({ success, errors });
 }
