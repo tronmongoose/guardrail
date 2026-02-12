@@ -104,11 +104,18 @@ export default function DashboardPage() {
     setError(null);
     try {
       const res = await fetch("/api/stripe/connect", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Failed to start Stripe onboarding");
+        // Build detailed error message
+        let errorMsg = data.error || "Failed to start Stripe onboarding";
+        if (data.code) {
+          errorMsg += ` (${data.code})`;
+        }
+        if (data.hint) {
+          errorMsg += `. ${data.hint}`;
+        }
+        throw new Error(errorMsg);
       }
-      const data = await res.json();
       // Redirect to Stripe onboarding
       window.location.href = data.url;
     } catch (err) {

@@ -73,8 +73,22 @@ export async function POST(_req: NextRequest) {
       { operation: "stripe.connect.onboarding_failed", userId: user.id },
       error
     );
+
+    // Extract Stripe error details for debugging
+    const stripeError = error as { type?: string; code?: string; message?: string };
+    const errorMessage = stripeError.message || "Failed to create onboarding link";
+    const errorCode = stripeError.code || stripeError.type || "unknown";
+
     return NextResponse.json(
-      { error: "Failed to create onboarding link" },
+      {
+        error: errorMessage,
+        code: errorCode,
+        hint: errorCode === "account_invalid"
+          ? "The Stripe account may have been deleted. Try again."
+          : errorCode === "api_key_expired"
+          ? "Stripe API key has expired. Check your environment variables."
+          : undefined
+      },
       { status: 500 }
     );
   }
