@@ -40,7 +40,7 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
     },
   });
 
-  if (!program) notFound();
+  if (!program || !program.published) notFound();
 
   return (
     <LearnerTimeline

@@ -47,6 +47,8 @@ export default function ProgramEditPage() {
   const [publishing, setPublishing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showSkinPicker, setShowSkinPicker] = useState(false);
+  const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
+  const [publishErrors, setPublishErrors] = useState<{ field: string; message: string }[] | null>(null);
 
   const load = useCallback(async (retryCount = 0) => {
     const maxRetries = 3;
@@ -109,10 +111,23 @@ export default function ProgramEditPage() {
 
   async function publishProgram() {
     setPublishing(true);
+    setPublishErrors(null);
     try {
       const res = await fetch(`/api/programs/${id}/publish`, { method: "POST" });
-      if (!res.ok) throw new Error("Publish failed");
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.validationErrors) {
+          setPublishErrors(data.validationErrors);
+          showToast("Please fix the issues before publishing", "error");
+        } else {
+          showToast(data.error || "Failed to publish program", "error");
+        }
+        return;
+      }
+
       await load();
+      setPublishedUrl(data.shareUrl);
       showToast("Program published!", "success");
     } catch {
       showToast("Failed to publish program", "error");
@@ -212,6 +227,89 @@ export default function ProgramEditPage() {
       onClose={() => setShowPreview(false)}
       program={program}
     />
+
+    {/* Publish Success Modal */}
+    {publishedUrl && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="bg-surface-card border border-surface-border rounded-2xl p-8 max-w-md w-full mx-4 text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center">
+            <svg className="w-8 h-8 text-neon-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Program Published!</h2>
+          <p className="text-gray-400 mb-6">Your program is now live and ready to share.</p>
+
+          <div className="bg-surface-dark rounded-lg p-3 mb-6">
+            <p className="text-xs text-gray-500 mb-1">Share URL</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 text-neon-cyan text-sm truncate">
+                {typeof window !== "undefined" ? window.location.origin : ""}{publishedUrl}
+              </code>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}${publishedUrl}`);
+                  showToast("URL copied!", "success");
+                }}
+                className="p-2 bg-surface-card border border-surface-border rounded-lg hover:border-neon-cyan transition"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => setPublishedUrl(null)}
+              className="flex-1 px-4 py-2 bg-surface-dark border border-surface-border rounded-lg text-gray-300 hover:border-neon-cyan transition"
+            >
+              Continue Editing
+            </button>
+            <a
+              href={publishedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 px-4 py-2 bg-gradient-to-r from-neon-cyan to-neon-pink text-surface-dark font-medium rounded-lg hover:opacity-90 transition text-center"
+            >
+              View Live →
+            </a>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Publish Validation Errors Modal */}
+    {publishErrors && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="bg-surface-card border border-surface-border rounded-2xl p-8 max-w-md w-full mx-4">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-neon-pink/10 border border-neon-pink/30 flex items-center justify-center">
+            <svg className="w-8 h-8 text-neon-pink" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2 text-center">Not Ready to Publish</h2>
+          <p className="text-gray-400 mb-4 text-center text-sm">Please fix these issues first:</p>
+
+          <ul className="space-y-2 mb-6">
+            {publishErrors.map((err, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm">
+                <span className="text-neon-pink mt-0.5">•</span>
+                <span className="text-gray-300">{err.message}</span>
+              </li>
+            ))}
+          </ul>
+
+          <button
+            onClick={() => setPublishErrors(null)}
+            className="w-full px-4 py-2 bg-surface-dark border border-surface-border rounded-lg text-gray-300 hover:border-neon-cyan transition"
+          >
+            Got it
+          </button>
+        </div>
+      </div>
+    )}
 
     <div className="min-h-screen gradient-bg-radial grid-bg">
       {/* Header */}
