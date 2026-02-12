@@ -8,12 +8,20 @@ export async function GET() {
 
   const programs = await prisma.program.findMany({
     where: { creatorId: user.id },
-    orderBy: { createdAt: "desc" },
+    orderBy: { updatedAt: "desc" },
     select: {
       id: true,
       title: true,
       durationWeeks: true,
       published: true,
+      slug: true,
+      updatedAt: true,
+      _count: {
+        select: {
+          videos: true,
+          weeks: true,
+        },
+      },
     },
   });
 

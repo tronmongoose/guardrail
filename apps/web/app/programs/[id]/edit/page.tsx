@@ -10,6 +10,9 @@ import {
   type YouTubeVideoData,
 } from "@/components/builder";
 import { ProgramWizard } from "@/components/wizard/ProgramWizard";
+import { SkinPicker } from "@/components/skins/SkinPicker";
+import { PreviewModal } from "@/components/preview/PreviewModal";
+import { getSkin } from "@/lib/skins";
 
 interface Program {
   id: string;
@@ -42,6 +45,8 @@ export default function ProgramEditPage() {
 
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showSkinPicker, setShowSkinPicker] = useState(false);
 
   const load = useCallback(async (retryCount = 0) => {
     const maxRetries = 3;
@@ -116,6 +121,21 @@ export default function ProgramEditPage() {
     }
   }
 
+  async function handleSkinChange(skinId: string) {
+    try {
+      const res = await fetch(`/api/programs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skinId }),
+      });
+      if (!res.ok) throw new Error("Failed to update skin");
+      await load();
+      showToast("Theme updated", "success");
+    } catch {
+      showToast("Failed to update theme", "error");
+    }
+  }
+
   // Loading state
   if (loading) {
     return (
@@ -185,6 +205,14 @@ export default function ProgramEditPage() {
   }
 
   return (
+    <>
+    {/* Preview Modal */}
+    <PreviewModal
+      isOpen={showPreview}
+      onClose={() => setShowPreview(false)}
+      program={program}
+    />
+
     <div className="min-h-screen gradient-bg-radial grid-bg">
       {/* Header */}
       <nav className="flex items-center justify-between px-6 py-3 border-b border-surface-border/50 backdrop-blur-sm">
@@ -238,6 +266,56 @@ export default function ProgramEditPage() {
                   {program.weeks.length > 0 ? "Regenerate" : "Generate with AI"}
                 </>
               )}
+            </button>
+          )}
+
+          {/* Theme picker */}
+          {program.weeks.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowSkinPicker(!showSkinPicker)}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium bg-surface-card text-gray-300 border border-surface-border hover:border-neon-cyan hover:text-neon-cyan transition flex items-center gap-1.5"
+              >
+                <div
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: getSkin(program.skinId).colors.accent }}
+                />
+                Theme
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showSkinPicker && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowSkinPicker(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-[500px] p-4 bg-surface-card border border-surface-border rounded-xl shadow-xl z-20">
+                    <SkinPicker
+                      value={program.skinId}
+                      onChange={(skinId) => {
+                        handleSkinChange(skinId);
+                        setShowSkinPicker(false);
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Preview button */}
+          {program.weeks.length > 0 && (
+            <button
+              onClick={() => setShowPreview(true)}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium bg-surface-card text-gray-300 border border-surface-border hover:border-neon-cyan hover:text-neon-cyan transition flex items-center gap-1.5"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              Preview
             </button>
           )}
 
@@ -346,5 +424,6 @@ export default function ProgramEditPage() {
         )}
       </main>
     </div>
+    </>
   );
 }

@@ -5,11 +5,31 @@ import { useRouter } from "next/navigation";
 import { UserButton, useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 
+function getTimeAgo(date: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 interface Program {
   id: string;
   title: string;
   durationWeeks: number;
   published: boolean;
+  slug: string | null;
+  updatedAt: string;
+  _count: {
+    videos: number;
+    weeks: number;
+  };
 }
 
 export default function DashboardPage() {
@@ -107,35 +127,76 @@ export default function DashboardPage() {
         )}
 
         {programs.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-surface-card border border-surface-border flex items-center justify-center">
-              <span className="text-2xl">📚</span>
+          <div className="text-center py-16">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center">
+              <svg className="w-10 h-10 text-neon-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
             </div>
-            <p className="text-lg text-gray-300">No programs yet</p>
-            <p className="text-sm text-gray-500 mt-1">Create your first guided program</p>
+            <h2 className="text-xl font-semibold text-white mb-2">Create your first program</h2>
+            <p className="text-gray-400 mb-6 max-w-sm mx-auto">
+              Transform your video content into a structured learning experience with AI-powered curriculum design.
+            </p>
+            <button
+              onClick={handleCreateProgram}
+              disabled={creating}
+              className="btn-neon px-8 py-3 rounded-xl text-surface-dark font-semibold disabled:opacity-50"
+            >
+              {creating ? "Creating..." : "Get Started"}
+            </button>
           </div>
         ) : (
           <div className="space-y-3">
-            {programs.map((p) => (
-              <Link
-                key={p.id}
-                href={`/programs/${p.id}/edit`}
-                className="block bg-surface-card border border-surface-border rounded-xl p-5 hover:border-neon-cyan/40 transition-all hover:-translate-y-0.5"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="font-semibold text-white">{p.title}</h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {p.durationWeeks} weeks ·
-                      <span className={p.published ? "text-neon-cyan ml-1" : "text-gray-400 ml-1"}>
-                        {p.published ? "Published" : "Draft"}
-                      </span>
-                    </p>
+            {programs.map((p) => {
+              const timeAgo = getTimeAgo(new Date(p.updatedAt));
+              return (
+                <Link
+                  key={p.id}
+                  href={`/programs/${p.id}/edit`}
+                  className="block bg-surface-card border border-surface-border rounded-xl p-5 hover:border-neon-cyan/40 transition-all hover:-translate-y-0.5 group"
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h2 className="font-semibold text-white truncate">{p.title}</h2>
+                        <span
+                          className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${
+                            p.published
+                              ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
+                              : "bg-gray-500/10 text-gray-400 border border-gray-500/30"
+                          }`}
+                        >
+                          {p.published ? "Published" : "Draft"}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-sm text-gray-500">
+                        <span className="flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          {p.durationWeeks} weeks
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          {p._count.videos} video{p._count.videos !== 1 ? "s" : ""}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                          </svg>
+                          {p._count.weeks} week{p._count.weeks !== 1 ? "s" : ""} built
+                        </span>
+                        <span className="text-gray-600">·</span>
+                        <span>{timeAgo}</span>
+                      </div>
+                    </div>
+                    <span className="text-gray-600 group-hover:text-neon-cyan transition">→</span>
                   </div>
-                  <span className="text-neon-cyan">→</span>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
       </main>
