@@ -1,29 +1,55 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ProgramStatus } from "@prisma/client";
 
-export async function GET() {
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+export async function GET(req: NextRequest) {
+  try {
+    const user = await getOrCreateUser();
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const programs = await prisma.program.findMany({
-    where: { creatorId: user.id },
-    orderBy: { updatedAt: "desc" },
-    select: {
-      id: true,
-      title: true,
-      durationWeeks: true,
-      published: true,
-      slug: true,
-      updatedAt: true,
-      _count: {
-        select: {
-          videos: true,
-          weeks: true,
+    // Optional status filter via query param
+    const { searchParams } = new URL(req.url);
+    const statusParam = searchParams.get("status");
+
+    const where: { creatorId: string; status?: ProgramStatus } = {
+      creatorId: user.id,
+    };
+
+    if (statusParam && Object.values(ProgramStatus).includes(statusParam as ProgramStatus)) {
+      where.status = statusParam as ProgramStatus;
+    }
+
+    const programs = await prisma.program.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        status: true,
+        published: true,
+        durationWeeks: true,
+        priceInCents: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            videos: true,
+            weeks: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  return NextResponse.json(programs);
+    return NextResponse.json(programs);
+  } catch (error) {
+    console.error("Failed to fetch programs:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
 }

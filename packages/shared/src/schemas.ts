@@ -86,3 +86,27 @@ export const ClusterResultSchema = z.object({
   programId: z.string(),
   clusters: z.array(ClusterGroupSchema),
 });
+
+// --- Program Status ---
+
+export const ProgramStatusSchema = z.enum(["DRAFT", "PUBLISHED"]);
+
+// --- Program List Item (for /api/programs response) ---
+
+export const ProgramListItemSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  slug: z.string().nullable(),
+  status: ProgramStatusSchema,
+  published: z.boolean(),
+  durationWeeks: z.number().int(),
+  priceInCents: z.number().int(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+  _count: z.object({
+    videos: z.number().int(),
+    weeks: z.number().int(),
+  }),
+});
+
+export const ProgramListResponseSchema = z.array(ProgramListItemSchema);

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { UserButton, useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
+import type { ProgramListItem } from "@guide-rail/shared";
 
 function getTimeAgo(date: Date): string {
   const now = new Date();
@@ -19,23 +20,10 @@ function getTimeAgo(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-interface Program {
-  id: string;
-  title: string;
-  durationWeeks: number;
-  published: boolean;
-  slug: string | null;
-  updatedAt: string;
-  _count: {
-    videos: number;
-    weeks: number;
-  };
-}
-
 export default function DashboardPage() {
   const router = useRouter();
   const { user: clerkUser, isLoaded } = useUser();
-  const [programs, setPrograms] = useState<Program[]>([]);
+  const [programs, setPrograms] = useState<ProgramListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
