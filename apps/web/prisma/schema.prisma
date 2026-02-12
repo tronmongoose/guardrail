@@ -11,7 +11,7 @@ datasource db {
 
 model User {
   id        String   @id @default(cuid())
-  clerkId   String   @unique
+  clerkId   String?  @unique  // Optional - only for creators using Clerk
   email     String   @unique
   name      String?
   role      Role     @default(LEARNER)
@@ -24,10 +24,32 @@ model User {
   outcomeTarget      String?  @db.Text
   onboardingComplete Boolean  @default(false)
 
+  // Stripe Connect fields (for creators)
+  stripeAccountId       String?  @unique  // Stripe Connect account ID
+  stripeAccountStatus   String?  // "pending", "active", "restricted"
+  stripeOnboardingComplete Boolean @default(false)
+
   programs            Program[]
   entitlements        Entitlement[]
   progress            LearnerProgress[]
   followedInfluencers UserInfluencer[]
+  magicLinks          MagicLink[]
+}
+
+// --- Magic Link for Learner Authentication ---
+
+model MagicLink {
+  id        String   @id @default(cuid())
+  token     String   @unique @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programId String?  // Optional: link to specific program for context
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([userId])
 }
 
 enum Role {
@@ -190,9 +212,24 @@ model Entitlement {
   stripeSessionId     String?  @unique
   stripePaymentIntent String?
   status              EntitlementStatus @default(ACTIVE)
+  currentWeek         Int      @default(1)  // Which week the learner has access to
   createdAt           DateTime @default(now())
 
+  weekCompletions     WeekCompletion[]
+
   @@unique([userId, programId])
+}
+
+// --- Week Completion Tracking ---
+
+model WeekCompletion {
+  id            String   @id @default(cuid())
+  entitlementId String
+  entitlement   Entitlement @relation(fields: [entitlementId], references: [id], onDelete: Cascade)
+  weekNumber    Int
+  completedAt   DateTime @default(now())
+
+  @@unique([entitlementId, weekNumber])
 }
 
 enum EntitlementStatus {

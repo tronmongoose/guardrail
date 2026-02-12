@@ -38,38 +38,23 @@ interface Props {
   };
   userId: string;
   enrolledAt: string;
+  currentWeek: number; // Which week the learner currently has access to
+  completedWeeks: number[]; // Array of completed week numbers
 }
 
-/**
- * Calculate which week number the learner has unlocked based on enrollment date.
- * Week 1 unlocks immediately, Week 2 after 7 days, etc.
- */
-function getUnlockedWeek(enrolledAt: string): number {
-  const enrolled = new Date(enrolledAt);
-  const now = new Date();
-  const daysSinceEnrollment = Math.floor(
-    (now.getTime() - enrolled.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  // Week 1 = days 0-6, Week 2 = days 7-13, etc.
-  return Math.floor(daysSinceEnrollment / 7) + 1;
-}
-
-/**
- * Calculate days until a specific week unlocks.
- */
-function daysUntilWeekUnlocks(enrolledAt: string, weekNumber: number): number {
-  const enrolled = new Date(enrolledAt);
-  const now = new Date();
-  const daysSinceEnrollment = Math.floor(
-    (now.getTime() - enrolled.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  const daysNeeded = (weekNumber - 1) * 7;
-  return Math.max(0, daysNeeded - daysSinceEnrollment);
-}
-
-export function LearnerTimeline({ program, userId, enrolledAt }: Props) {
+export function LearnerTimeline({
+  program,
+  userId,
+  enrolledAt,
+  currentWeek,
+  completedWeeks,
+}: Props) {
   const { showToast } = useToast();
-  const unlockedWeekNumber = getUnlockedWeek(enrolledAt);
+
+  const [unlockedWeekNumber, setUnlockedWeekNumber] = useState(currentWeek);
+  const [completedWeeksState, setCompletedWeeksState] = useState<Set<number>>(
+    () => new Set(completedWeeks)
+  );
 
   const [completedActions, setCompletedActions] = useState<Set<string>>(() => {
     const set = new Set<string>();
@@ -86,17 +71,42 @@ export function LearnerTimeline({ program, userId, enrolledAt }: Props) {
   const [reflections, setReflections] = useState<Record<string, string>>({});
   const [savingAction, setSavingAction] = useState<string | null>(null);
 
-  async function completeAction(actionId: string, reflectionText?: string) {
+  async function completeAction(
+    actionId: string,
+    weekNumber: number,
+    reflectionText?: string
+  ) {
     setSavingAction(actionId);
     try {
       const res = await fetch("/api/progress", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ actionId, reflectionText }),
+        body: JSON.stringify({
+          actionId,
+          reflectionText,
+          programId: program.id,
+          weekNumber,
+        }),
       });
+
       if (!res.ok) throw new Error("Failed to save");
+
+      const data = await res.json();
+
       setCompletedActions((prev) => new Set(prev).add(actionId));
-      showToast("Progress saved!", "success");
+
+      // Check if week was completed and next week unlocked
+      if (data.weekCompleted) {
+        setCompletedWeeksState((prev) => new Set(prev).add(weekNumber));
+        showToast(`Week ${weekNumber} complete! 🎉`, "success");
+      }
+
+      if (data.nextWeekUnlocked && data.newCurrentWeek) {
+        setUnlockedWeekNumber(data.newCurrentWeek);
+        showToast(`Week ${data.newCurrentWeek} unlocked!`, "success");
+      } else if (!data.weekCompleted) {
+        showToast("Progress saved!", "success");
+      }
     } catch {
       showToast("Failed to save progress", "error");
     } finally {
@@ -108,7 +118,7 @@ export function LearnerTimeline({ program, userId, enrolledAt }: Props) {
     <div className="min-h-screen gradient-bg-radial grid-bg">
       <nav className="flex items-center justify-between px-6 py-4 border-b border-surface-border/50 backdrop-blur-sm">
         <Link
-          href="/dashboard"
+          href="/"
           className="text-xl font-bold tracking-tight text-neon-cyan neon-text-cyan hover:opacity-80 transition"
         >
           ← GuideRail
@@ -123,30 +133,43 @@ export function LearnerTimeline({ program, userId, enrolledAt }: Props) {
         {/* Progress indicator */}
         <div className="bg-surface-card border border-surface-border rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-400 uppercase tracking-wider">Your Progress</span>
+            <span className="text-xs text-gray-400 uppercase tracking-wider">
+              Your Progress
+            </span>
             <span className="text-xs text-neon-cyan">
-              Week {Math.min(unlockedWeekNumber, program.weeks.length)} of {program.weeks.length} unlocked
+              Week {Math.min(unlockedWeekNumber, program.weeks.length)} of{" "}
+              {program.weeks.length} unlocked
             </span>
           </div>
           <div className="h-2 bg-surface-dark rounded-full overflow-hidden">
             <div
               className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all"
               style={{
-                width: `${(Math.min(unlockedWeekNumber, program.weeks.length) / program.weeks.length) * 100}%`,
+                width: `${
+                  (Math.min(unlockedWeekNumber, program.weeks.length) /
+                    program.weeks.length) *
+                  100
+                }%`,
               }}
             />
           </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Complete all actions in a week to unlock the next one
+          </p>
         </div>
 
         {program.weeks.map((week) => {
           const isUnlocked = week.weekNumber <= unlockedWeekNumber;
-          const isCurrentWeek = week.weekNumber === Math.min(unlockedWeekNumber, program.weeks.length);
-          const daysUntilUnlock = daysUntilWeekUnlocks(enrolledAt, week.weekNumber);
+          const isCurrentWeek =
+            week.weekNumber === Math.min(unlockedWeekNumber, program.weeks.length);
 
           // Calculate completion for this week
           const weekActions = week.sessions.flatMap((s) => s.actions);
-          const completedCount = weekActions.filter((a) => completedActions.has(a.id)).length;
-          const isWeekComplete = weekActions.length > 0 && completedCount === weekActions.length;
+          const completedCount = weekActions.filter((a) =>
+            completedActions.has(a.id)
+          ).length;
+          const isWeekComplete =
+            weekActions.length > 0 && completedCount === weekActions.length;
 
           return (
             <section
@@ -178,9 +201,18 @@ export function LearnerTimeline({ program, userId, enrolledAt }: Props) {
                   </span>
                   <h2 className="font-medium text-sm text-white">{week.title}</h2>
                 </div>
-                {isWeekComplete && (
-                  <span className="text-neon-cyan text-xs font-medium">✓ Complete</span>
-                )}
+                <div className="flex items-center gap-2">
+                  {isUnlocked && weekActions.length > 0 && (
+                    <span className="text-xs text-gray-500">
+                      {completedCount}/{weekActions.length}
+                    </span>
+                  )}
+                  {isWeekComplete && (
+                    <span className="text-neon-cyan text-xs font-medium">
+                      ✓ Complete
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Locked state */}
@@ -203,10 +235,11 @@ export function LearnerTimeline({ program, userId, enrolledAt }: Props) {
                       </svg>
                     </div>
                     <p className="text-sm text-gray-400">
-                      Unlocks in{" "}
+                      Complete{" "}
                       <span className="text-neon-yellow font-semibold">
-                        {daysUntilUnlock} day{daysUntilUnlock !== 1 ? "s" : ""}
-                      </span>
+                        Week {week.weekNumber - 1}
+                      </span>{" "}
+                      to unlock
                     </p>
                   </div>
                 </div>
@@ -240,7 +273,11 @@ export function LearnerTimeline({ program, userId, enrolledAt }: Props) {
                             <button
                               onClick={() => {
                                 if (!done && savingAction !== action.id) {
-                                  completeAction(action.id, reflections[action.id]);
+                                  completeAction(
+                                    action.id,
+                                    week.weekNumber,
+                                    reflections[action.id]
+                                  );
                                 }
                               }}
                               disabled={done || savingAction === action.id}
@@ -255,7 +292,11 @@ export function LearnerTimeline({ program, userId, enrolledAt }: Props) {
                               {savingAction === action.id ? (
                                 <Spinner size="sm" />
                               ) : done ? (
-                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <svg
+                                  className="w-3 h-3"
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
                                   <path
                                     fillRule="evenodd"
                                     d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
@@ -272,12 +313,16 @@ export function LearnerTimeline({ program, userId, enrolledAt }: Props) {
                               >
                                 {action.title}
                               </p>
-                              <span className={`text-xs uppercase tracking-wider ${actionTypeColor}`}>
+                              <span
+                                className={`text-xs uppercase tracking-wider ${actionTypeColor}`}
+                              >
                                 {action.type}
                               </span>
 
                               {action.instructions && !done && (
-                                <p className="text-xs text-gray-500 mt-2">{action.instructions}</p>
+                                <p className="text-xs text-gray-500 mt-2">
+                                  {action.instructions}
+                                </p>
                               )}
 
                               {/* YouTube embed */}
@@ -293,22 +338,27 @@ export function LearnerTimeline({ program, userId, enrolledAt }: Props) {
                               )}
 
                               {/* Reflection prompt */}
-                              {action.type === "REFLECT" && action.reflectionPrompt && !done && (
-                                <div className="mt-3">
-                                  <p className="text-xs text-neon-pink/80 italic mb-2">
-                                    {action.reflectionPrompt}
-                                  </p>
-                                  <textarea
-                                    value={reflections[action.id] ?? ""}
-                                    onChange={(e) =>
-                                      setReflections((r) => ({ ...r, [action.id]: e.target.value }))
-                                    }
-                                    placeholder="Write your reflection..."
-                                    rows={3}
-                                    className="w-full px-3 py-2 bg-surface-dark border border-surface-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-neon-pink focus:ring-1 focus:ring-neon-pink"
-                                  />
-                                </div>
-                              )}
+                              {action.type === "REFLECT" &&
+                                action.reflectionPrompt &&
+                                !done && (
+                                  <div className="mt-3">
+                                    <p className="text-xs text-neon-pink/80 italic mb-2">
+                                      {action.reflectionPrompt}
+                                    </p>
+                                    <textarea
+                                      value={reflections[action.id] ?? ""}
+                                      onChange={(e) =>
+                                        setReflections((r) => ({
+                                          ...r,
+                                          [action.id]: e.target.value,
+                                        }))
+                                      }
+                                      placeholder="Write your reflection..."
+                                      rows={3}
+                                      className="w-full px-3 py-2 bg-surface-dark border border-surface-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-neon-pink focus:ring-1 focus:ring-neon-pink"
+                                    />
+                                  </div>
+                                )}
                             </div>
                           </div>
                         </div>
