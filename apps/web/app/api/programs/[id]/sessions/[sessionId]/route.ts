@@ -28,6 +28,7 @@ export async function PATCH(
   const data: Record<string, unknown> = {};
   if (body.title !== undefined) data.title = body.title;
   if (body.summary !== undefined) data.summary = body.summary;
+  if (body.keyTakeaways !== undefined) data.keyTakeaways = body.keyTakeaways;
 
   const updated = await prisma.session.update({
     where: { id: sessionId },

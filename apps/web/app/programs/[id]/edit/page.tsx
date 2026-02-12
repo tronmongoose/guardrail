@@ -5,7 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import {
-  StructureBuilder,
+  ProgramBuilderSplit,
   type WeekData,
   type YouTubeVideoData,
 } from "@/components/builder";
@@ -40,9 +40,6 @@ export default function ProgramEditPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(searchParams.get("wizard") === "true");
 
-  const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [addingVideo, setAddingVideo] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
@@ -76,55 +73,6 @@ export default function ProgramEditPage() {
   useEffect(() => {
     load();
   }, [load]);
-
-  async function saveBasics(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const form = new FormData(e.currentTarget);
-      const res = await fetch(`/api/programs/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: form.get("title"),
-          description: form.get("description"),
-          outcomeStatement: form.get("outcomeStatement"),
-          durationWeeks: Number(form.get("durationWeeks")),
-          priceInCents: Math.round(Number(form.get("price")) * 100),
-        }),
-      });
-      if (!res.ok) throw new Error("Save failed");
-      await load();
-      showToast("Changes saved", "success");
-    } catch {
-      showToast("Failed to save changes", "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function addVideo() {
-    if (!youtubeUrl.trim()) return;
-    setAddingVideo(true);
-    try {
-      const res = await fetch(`/api/programs/${id}/videos`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: youtubeUrl }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Invalid YouTube URL");
-      }
-      setYoutubeUrl("");
-      await load();
-      showToast("Video added", "success");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to add video", "error");
-    } finally {
-      setAddingVideo(false);
-    }
-  }
 
   async function generateStructure() {
     setGenerating(true);
@@ -238,232 +186,163 @@ export default function ProgramEditPage() {
 
   return (
     <div className="min-h-screen gradient-bg-radial grid-bg">
-      <nav className="flex items-center justify-between px-6 py-4 border-b border-surface-border/50 backdrop-blur-sm">
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="text-xl font-bold tracking-tight text-neon-cyan neon-text-cyan hover:opacity-80 transition"
-        >
-          ← GuideRail
-        </button>
-        <div className="flex items-center gap-3">
+      {/* Header */}
+      <nav className="flex items-center justify-between px-6 py-3 border-b border-surface-border/50 backdrop-blur-sm">
+        <div className="flex items-center gap-4">
           <button
-            onClick={() => setShowWizard(true)}
-            className="text-xs px-3 py-1.5 rounded-full font-medium bg-neon-pink/10 text-neon-pink border border-neon-pink/30 hover:bg-neon-pink/20 transition"
+            onClick={() => router.push("/dashboard")}
+            className="text-xl font-bold tracking-tight text-neon-cyan neon-text-cyan hover:opacity-80 transition"
           >
-            Use Wizard
+            ← GuideRail
           </button>
+          <div className="h-6 w-px bg-surface-border" />
+          <h1 className="text-lg font-semibold text-white truncate max-w-[300px]">
+            {program.title}
+          </h1>
           <span
-            className={`text-xs px-3 py-1.5 rounded-full font-medium ${
+            className={`text-xs px-2 py-1 rounded font-medium ${
               program.published
-                ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
-                : "bg-surface-card text-gray-400 border border-surface-border"
+                ? "bg-neon-cyan/10 text-neon-cyan"
+                : "bg-surface-card text-gray-400"
             }`}
           >
             {program.published ? "Published" : "Draft"}
           </span>
         </div>
-      </nav>
 
-      <main className="max-w-2xl mx-auto px-4 py-8 space-y-6">
-        {/* Basics */}
-        <section className="bg-surface-card border border-surface-border rounded-xl p-6">
-          <h2 className="font-semibold text-white mb-4">Program Details</h2>
-          <form onSubmit={saveBasics} className="space-y-4">
-            <div>
-              <label className="text-sm text-gray-400">Title</label>
-              <input
-                name="title"
-                defaultValue={program.title}
-                className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-400">Description</label>
-              <textarea
-                name="description"
-                defaultValue={program.description ?? ""}
-                rows={3}
-                className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
-              />
-            </div>
-            <div>
-              <label className="text-sm text-gray-400">Outcome Statement</label>
-              <textarea
-                name="outcomeStatement"
-                defaultValue={program.outcomeStatement ?? ""}
-                rows={2}
-                placeholder="By the end of this program, learners will..."
-                className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm placeholder:text-gray-500 focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
-              />
-              <p className="text-xs text-gray-500 mt-1">What transformation will learners achieve?</p>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <label className="text-sm text-gray-400">Weeks</label>
-                <input
-                  name="durationWeeks"
-                  type="number"
-                  min={1}
-                  max={52}
-                  defaultValue={program.durationWeeks}
-                  className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
-                />
-              </div>
-              <div className="flex-1">
-                <label className="text-sm text-gray-400">Price (USD)</label>
-                <input
-                  name="price"
-                  type="number"
-                  step="0.01"
-                  min={0}
-                  defaultValue={(program.priceInCents / 100).toFixed(2)}
-                  className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
-                />
-              </div>
-            </div>
+        <div className="flex items-center gap-3">
+          {/* AI Generation button */}
+          {program.videos.length > 0 && (
             <button
-              type="submit"
-              disabled={saving}
-              className="px-5 py-2.5 bg-white text-surface-dark text-sm rounded-lg font-semibold hover:bg-gray-100 transition disabled:opacity-50 flex items-center gap-2"
+              onClick={() => {
+                if (program.weeks.length > 0) {
+                  if (!confirm("This will replace your current structure. Continue?")) {
+                    return;
+                  }
+                }
+                generateStructure();
+              }}
+              disabled={generating}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium bg-neon-pink/10 text-neon-pink border border-neon-pink/30 hover:bg-neon-pink/20 transition disabled:opacity-50 flex items-center gap-2"
             >
-              {saving ? (
+              {generating ? (
                 <>
-                  <Spinner size="sm" color="pink" />
-                  Saving...
+                  <Spinner size="sm" />
+                  Generating...
                 </>
               ) : (
-                "Save Changes"
+                <>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  {program.weeks.length > 0 ? "Regenerate" : "Generate with AI"}
+                </>
               )}
             </button>
-          </form>
-        </section>
+          )}
 
-        {/* Videos */}
-        <section className="bg-surface-card border border-surface-border rounded-xl p-6">
-          <h2 className="font-semibold text-white mb-4">YouTube Videos</h2>
-          <div className="flex gap-2 mb-4">
-            <input
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
-              placeholder="Paste YouTube URL..."
-              disabled={addingVideo}
-              onKeyDown={(e) => e.key === "Enter" && addVideo()}
-              className="flex-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm placeholder:text-gray-500 focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan disabled:opacity-50"
-            />
+          <button
+            onClick={() => setShowWizard(true)}
+            className="text-xs px-3 py-1.5 rounded-lg font-medium bg-surface-card text-gray-300 border border-surface-border hover:border-neon-cyan hover:text-neon-cyan transition"
+          >
+            Wizard
+          </button>
+
+          {/* Publish button */}
+          {!program.published && program.weeks.length > 0 && (
             <button
-              onClick={addVideo}
-              disabled={addingVideo || !youtubeUrl.trim()}
-              className="btn-neon px-5 py-2.5 rounded-lg text-surface-dark text-sm font-semibold disabled:opacity-50 flex items-center gap-2"
+              onClick={publishProgram}
+              disabled={publishing}
+              className="text-xs px-4 py-1.5 rounded-lg font-medium bg-gradient-to-r from-neon-cyan to-neon-pink text-surface-dark hover:opacity-90 transition disabled:opacity-50 flex items-center gap-2"
             >
-              {addingVideo ? (
+              {publishing ? (
                 <>
-                  <Spinner size="sm" color="pink" />
-                  Adding...
+                  <Spinner size="sm" />
+                  Publishing...
                 </>
               ) : (
-                "Add"
+                "Publish"
+              )}
+            </button>
+          )}
+
+          {program.published && (
+            <a
+              href={`/p/${program.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs px-3 py-1.5 rounded-lg font-medium bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 transition"
+            >
+              View Live →
+            </a>
+          )}
+        </div>
+      </nav>
+
+      {/* Main content - Split View Builder */}
+      <main className="p-4">
+        {program.weeks.length === 0 && program.videos.length === 0 ? (
+          // Empty state - encourage using wizard
+          <div className="max-w-lg mx-auto mt-16 text-center">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center">
+              <svg className="w-10 h-10 text-neon-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-3">Let&apos;s build your program</h2>
+            <p className="text-gray-400 mb-6">
+              Start by adding videos and content, then let AI help you create a structured learning experience.
+            </p>
+            <button
+              onClick={() => setShowWizard(true)}
+              className="btn-neon px-8 py-3 rounded-xl text-surface-dark font-semibold"
+            >
+              Open Program Wizard
+            </button>
+          </div>
+        ) : program.weeks.length === 0 ? (
+          // Has videos but no structure yet
+          <div className="max-w-lg mx-auto mt-16 text-center">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-neon-pink/10 border border-neon-pink/30 flex items-center justify-center">
+              <svg className="w-10 h-10 text-neon-pink" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-3">Ready to generate!</h2>
+            <p className="text-gray-400 mb-2">
+              You have {program.videos.length} video{program.videos.length !== 1 ? "s" : ""} ready.
+            </p>
+            <p className="text-gray-500 text-sm mb-6">
+              Let AI analyze your content and create a structured program.
+            </p>
+            <button
+              onClick={generateStructure}
+              disabled={generating}
+              className="btn-neon-pink px-8 py-3 rounded-xl text-white font-semibold disabled:opacity-50 flex items-center gap-2 mx-auto"
+            >
+              {generating ? (
+                <>
+                  <Spinner size="sm" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Generate Program Structure
+                </>
               )}
             </button>
           </div>
-
-          {/* Empty state */}
-          {program.videos.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-dark border border-surface-border flex items-center justify-center">
-                <svg className="w-6 h-6 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <p className="text-sm text-gray-400">No videos added yet</p>
-              <p className="text-xs text-gray-500 mt-1">Paste a YouTube URL above to get started</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {program.videos.map((v) => (
-                <div
-                  key={v.id}
-                  className="flex items-center gap-3 p-3 bg-surface-dark border border-surface-border rounded-lg"
-                >
-                  {v.thumbnailUrl ? (
-                    <img src={v.thumbnailUrl} alt="" className="w-20 h-12 rounded object-cover" />
-                  ) : (
-                    <div className="w-20 h-12 rounded bg-surface-card flex items-center justify-center">
-                      <svg className="w-6 h-6 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                  )}
-                  <span className="text-sm text-gray-300 flex-1">{v.title || v.videoId}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Structure Builder */}
-        <section className="bg-surface-card border border-surface-border rounded-xl p-6">
-          <h2 className="font-semibold text-white mb-4">Program Structure</h2>
-          <StructureBuilder
+        ) : (
+          // Has structure - show split builder
+          <ProgramBuilderSplit
             programId={program.id}
             weeks={program.weeks}
             videos={program.videos}
             onUpdate={load}
           />
-        </section>
-
-        {/* AI Generation (optional) */}
-        {program.videos.length > 0 && (
-          <section className="bg-surface-card border border-surface-border rounded-xl p-6">
-            <h2 className="font-semibold text-white mb-2">AI Structure Generation</h2>
-            <p className="text-sm text-gray-500 mb-4">
-              {program.weeks.length > 0
-                ? "Replace your current structure with an AI-generated one based on your videos."
-                : "Let AI create an initial structure from your videos."}
-            </p>
-
-            {generating ? (
-              <div className="flex items-center gap-3 py-2">
-                <Spinner size="md" color="pink" />
-                <div>
-                  <p className="text-sm text-white">Generating structure...</p>
-                  <p className="text-xs text-gray-500">This may take a moment</p>
-                </div>
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  if (program.weeks.length > 0) {
-                    if (!confirm("This will replace your current structure. Continue?")) {
-                      return;
-                    }
-                  }
-                  generateStructure();
-                }}
-                className="btn-neon-pink px-5 py-2.5 rounded-lg text-white text-sm font-semibold"
-              >
-                {program.weeks.length > 0 ? "Regenerate with AI" : "Generate with AI"}
-              </button>
-            )}
-          </section>
-        )}
-
-        {/* Publish */}
-        {!program.published && program.weeks.length > 0 && (
-          <button
-            onClick={publishProgram}
-            disabled={publishing}
-            className="w-full py-4 bg-gradient-to-r from-neon-cyan to-neon-pink text-surface-dark rounded-xl font-bold hover:opacity-90 transition disabled:opacity-50 flex items-center justify-center gap-2"
-          >
-            {publishing ? (
-              <>
-                <Spinner size="sm" color="white" />
-                Publishing...
-              </>
-            ) : (
-              "Publish Program"
-            )}
-          </button>
         )}
       </main>
     </div>

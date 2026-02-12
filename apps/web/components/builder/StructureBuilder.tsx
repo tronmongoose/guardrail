@@ -32,6 +32,7 @@ export interface SessionData {
   id: string;
   title: string;
   summary: string | null;
+  keyTakeaways?: string[];
   orderIndex: number;
   actions: ActionData[];
 }
