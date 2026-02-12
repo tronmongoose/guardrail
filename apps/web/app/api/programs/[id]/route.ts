@@ -86,6 +86,11 @@ export async function PATCH(
   if (body.durationWeeks) data.durationWeeks = body.durationWeeks;
   if (body.priceInCents !== undefined) data.priceInCents = body.priceInCents;
   if (body.styleInfluencers !== undefined) data.styleInfluencers = body.styleInfluencers;
+  // New program definition fields
+  if (body.targetAudience !== undefined) data.targetAudience = body.targetAudience;
+  if (body.targetTransformation !== undefined) data.targetTransformation = body.targetTransformation;
+  if (body.vibePrompt !== undefined) data.vibePrompt = body.vibePrompt;
+  if (body.skinId !== undefined) data.skinId = body.skinId;
 
   const program = await prisma.program.update({ where: { id }, data });
   return NextResponse.json(program);

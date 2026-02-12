@@ -5,7 +5,7 @@ import { WizardProgress } from "./WizardProgress";
 import { StepBasics } from "./steps/StepBasics";
 import { StepDuration } from "./steps/StepDuration";
 import { StepContent } from "./steps/StepContent";
-import { StepInfluencers } from "./steps/StepInfluencers";
+import { StepVibe } from "./steps/StepVibe";
 import { StepReview } from "./steps/StepReview";
 
 export interface WizardState {
@@ -13,6 +13,8 @@ export interface WizardState {
     title: string;
     description: string;
     outcomeStatement: string;
+    targetAudience: string;
+    targetTransformation: string;
   };
   duration: {
     weeks: number;
@@ -32,8 +34,8 @@ export interface WizardState {
       metadata: { pageCount?: number; wordCount: number };
     }>;
   };
-  influencers: {
-    selectedIds: string[];
+  vibe: {
+    vibePrompt: string;
   };
 }
 
@@ -45,10 +47,10 @@ interface ProgramWizardProps {
 }
 
 const STEPS = [
-  { label: "Basics", description: "Title & outcome" },
+  { label: "Basics", description: "Who & what" },
   { label: "Duration", description: "Program length" },
   { label: "Content", description: "Videos & files" },
-  { label: "Style", description: "Influencer style" },
+  { label: "Vibe", description: "Style & tone" },
   { label: "Review", description: "Generate" },
 ];
 
@@ -57,6 +59,8 @@ const DEFAULT_STATE: WizardState = {
     title: "",
     description: "",
     outcomeStatement: "",
+    targetAudience: "",
+    targetTransformation: "",
   },
   duration: {
     weeks: 8,
@@ -65,8 +69,8 @@ const DEFAULT_STATE: WizardState = {
     videos: [],
     artifacts: [],
   },
-  influencers: {
-    selectedIds: [],
+  vibe: {
+    vibePrompt: "",
   },
 };
 
@@ -115,12 +119,15 @@ export function ProgramWizard({
   const canProceed = useCallback((): boolean => {
     switch (currentStep) {
       case 0: // Basics
-        return state.basics.title.trim().length > 0;
+        return (
+          state.basics.title.trim().length > 0 &&
+          state.basics.targetTransformation.trim().length > 0
+        );
       case 1: // Duration
-        return state.duration.weeks >= 1 && state.duration.weeks <= 52;
+        return [6, 8, 12].includes(state.duration.weeks);
       case 2: // Content
         return state.content.videos.length > 0 || state.content.artifacts.length > 0;
-      case 3: // Influencers (optional)
+      case 3: // Vibe (optional)
         return true;
       case 4: // Review
         return true;
@@ -152,8 +159,10 @@ export function ProgramWizard({
           title: state.basics.title,
           description: state.basics.description,
           outcomeStatement: state.basics.outcomeStatement,
+          targetAudience: state.basics.targetAudience,
+          targetTransformation: state.basics.targetTransformation,
           durationWeeks: state.duration.weeks,
-          styleInfluencers: state.influencers.selectedIds,
+          vibePrompt: state.vibe.vibePrompt,
         }),
       });
 
@@ -227,11 +236,9 @@ export function ProgramWizard({
         );
       case 3:
         return (
-          <StepInfluencers
-            selectedIds={state.influencers.selectedIds}
-            onChange={(selectedIds) =>
-              updateState("influencers", { selectedIds })
-            }
+          <StepVibe
+            value={state.vibe.vibePrompt}
+            onChange={(vibePrompt) => updateState("vibe", { vibePrompt })}
           />
         );
       case 4:

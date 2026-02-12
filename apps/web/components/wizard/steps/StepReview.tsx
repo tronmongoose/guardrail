@@ -34,16 +34,16 @@ export function StepReview({ state, isGenerating, onGenerate }: StepReviewProps)
               <label className="text-xs text-gray-500">Title</label>
               <p className="text-white">{state.basics.title || "Untitled"}</p>
             </div>
-            {state.basics.description && (
+            {state.basics.targetAudience && (
               <div>
-                <label className="text-xs text-gray-500">Description</label>
-                <p className="text-sm text-gray-300 line-clamp-2">{state.basics.description}</p>
+                <label className="text-xs text-gray-500">Target Audience</label>
+                <p className="text-sm text-gray-300 line-clamp-2">{state.basics.targetAudience}</p>
               </div>
             )}
-            {state.basics.outcomeStatement && (
+            {state.basics.targetTransformation && (
               <div>
-                <label className="text-xs text-gray-500">Outcome</label>
-                <p className="text-sm text-gray-300 line-clamp-2">{state.basics.outcomeStatement}</p>
+                <label className="text-xs text-gray-500">Transformation</label>
+                <p className="text-sm text-gray-300 line-clamp-2">{state.basics.targetTransformation}</p>
               </div>
             )}
           </div>
@@ -84,13 +84,11 @@ export function StepReview({ state, isGenerating, onGenerate }: StepReviewProps)
           </div>
         </div>
 
-        {/* Style */}
+        {/* Vibe */}
         <div className="p-4 bg-surface-dark rounded-lg border border-surface-border">
-          <h3 className="text-sm font-medium text-neon-cyan mb-3">Style Influences</h3>
-          {state.influencers.selectedIds.length > 0 ? (
-            <p className="text-white">
-              {state.influencers.selectedIds.length} influencer{state.influencers.selectedIds.length > 1 ? "s" : ""} selected
-            </p>
+          <h3 className="text-sm font-medium text-neon-cyan mb-3">Vibe & Style</h3>
+          {state.vibe.vibePrompt ? (
+            <p className="text-sm text-gray-300 line-clamp-3">{state.vibe.vibePrompt}</p>
           ) : (
             <p className="text-gray-400">Using default AI style</p>
           )}

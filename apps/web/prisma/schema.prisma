@@ -54,6 +54,12 @@ model Program {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
+  // Enhanced program definition fields
+  targetAudience       String?   @db.Text  // "Who it's for" / industry
+  targetTransformation String?   @db.Text  // 1-2 sentence transformation goal
+  vibePrompt           String?   @db.Text  // AI generation style guidance
+  skinId               String    @default("default")
+
   creatorId     String
   creator       User        @relation(fields: [creatorId], references: [id])
 
@@ -89,13 +95,14 @@ model Week {
 }
 
 model Session {
-  id         String   @id @default(cuid())
-  title      String
-  summary    String?
-  orderIndex Int
-  weekId     String
-  week       Week     @relation(fields: [weekId], references: [id], onDelete: Cascade)
-  actions    Action[]
+  id           String   @id @default(cuid())
+  title        String
+  summary      String?
+  orderIndex   Int
+  weekId       String
+  week         Week     @relation(fields: [weekId], references: [id], onDelete: Cascade)
+  actions      Action[]
+  keyTakeaways String[] // 2-3 key takeaway bullets per session
 }
 
 model Action {

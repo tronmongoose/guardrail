@@ -27,6 +27,7 @@ export const SessionSchema = z.object({
   id: z.string().optional(),
   title: z.string().min(1).max(200),
   summary: z.string().max(500).optional(),
+  keyTakeaways: z.array(z.string().max(200)).max(5).optional(), // 2-3 key takeaway bullets
   orderIndex: z.number().int().min(0),
   actions: z.array(ActionSchema).min(1),
 });

@@ -16,6 +16,10 @@ interface Program {
   title: string;
   description: string | null;
   outcomeStatement: string | null;
+  targetAudience: string | null;
+  targetTransformation: string | null;
+  vibePrompt: string | null;
+  skinId: string;
   durationWeeks: number;
   slug: string;
   published: boolean;
@@ -209,6 +213,8 @@ export default function ProgramEditPage() {
             title: program.title,
             description: program.description || "",
             outcomeStatement: program.outcomeStatement || "",
+            targetAudience: program.targetAudience || "",
+            targetTransformation: program.targetTransformation || "",
           },
           duration: {
             weeks: program.durationWeeks,
@@ -217,8 +223,8 @@ export default function ProgramEditPage() {
             videos: program.videos,
             artifacts: [],
           },
-          influencers: {
-            selectedIds: [],
+          vibe: {
+            vibePrompt: program.vibePrompt || "",
           },
         }}
         onComplete={() => {
