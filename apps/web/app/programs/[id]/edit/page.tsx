@@ -47,6 +47,7 @@ export default function ProgramEditPage() {
   const [publishing, setPublishing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showSkinPicker, setShowSkinPicker] = useState(false);
+  const [showPricePicker, setShowPricePicker] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [publishErrors, setPublishErrors] = useState<{ field: string; message: string }[] | null>(null);
 
@@ -149,6 +150,29 @@ export default function ProgramEditPage() {
     } catch {
       showToast("Failed to update theme", "error");
     }
+  }
+
+  async function handlePriceChange(priceInCents: number) {
+    try {
+      const res = await fetch(`/api/programs/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceInCents }),
+      });
+      if (!res.ok) throw new Error("Failed to update price");
+      await load();
+      showToast("Price updated", "success");
+    } catch {
+      showToast("Failed to update price", "error");
+    }
+  }
+
+  function formatPrice(cents: number): string {
+    if (cents === 0) return "Free";
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(cents / 100);
   }
 
   // Loading state
@@ -415,6 +439,51 @@ export default function ProgramEditPage() {
               </svg>
               Preview
             </button>
+          )}
+
+          {/* Price picker */}
+          {program.weeks.length > 0 && (
+            <div className="relative">
+              <button
+                onClick={() => setShowPricePicker(!showPricePicker)}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium bg-surface-card text-gray-300 border border-surface-border hover:border-neon-pink hover:text-neon-pink transition flex items-center gap-1.5"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {formatPrice(program.priceInCents)}
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {showPricePicker && (
+                <>
+                  <div
+                    className="fixed inset-0 z-10"
+                    onClick={() => setShowPricePicker(false)}
+                  />
+                  <div className="absolute right-0 mt-2 w-48 p-2 bg-surface-card border border-surface-border rounded-xl shadow-xl z-20">
+                    <p className="text-xs text-gray-400 px-2 py-1 mb-1">Set price</p>
+                    {[0, 1900, 2900, 4900, 9900, 14900, 19900].map((price) => (
+                      <button
+                        key={price}
+                        onClick={() => {
+                          handlePriceChange(price);
+                          setShowPricePicker(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-sm rounded-lg transition ${
+                          program.priceInCents === price
+                            ? "bg-neon-pink/10 text-neon-pink"
+                            : "text-gray-300 hover:bg-surface-dark"
+                        }`}
+                      >
+                        {formatPrice(price)}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           )}
 
           <button
