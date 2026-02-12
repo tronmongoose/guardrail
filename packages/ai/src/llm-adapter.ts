@@ -16,6 +16,9 @@ interface GenerateInput {
   programTitle: string;
   programDescription?: string;
   outcomeStatement?: string;
+  targetAudience?: string;
+  targetTransformation?: string;
+  vibePrompt?: string;
   durationWeeks: number;
   clusters: {
     clusterId: number;
@@ -41,6 +44,9 @@ export async function generateProgramDraft(
     totalVideos: input.clusters.reduce((sum, c) => sum + c.videoIds.length, 0),
     clusterCount: input.clusters.length,
     hasOutcomeStatement: !!input.outcomeStatement,
+    hasTargetAudience: !!input.targetAudience,
+    hasTargetTransformation: !!input.targetTransformation,
+    hasVibePrompt: !!input.vibePrompt,
     hasTranscripts: input.clusters.some(c => c.videoTranscripts?.some(t => t && t.length > 0)),
   };
   console.log(`[LLM] Generation request:`, JSON.stringify(inputSummary));
@@ -131,33 +137,54 @@ function buildPrompt(input: GenerateInput): string {
   const totalVideos = allVideos.length;
   const videosPerWeek = Math.max(1, Math.ceil(totalVideos / input.durationWeeks));
 
+  // Build audience and transformation context
+  const audienceContext = input.targetAudience
+    ? `- Target Audience: ${input.targetAudience}`
+    : "";
+  const transformationContext = input.targetTransformation
+    ? `- Target Transformation: ${input.targetTransformation}`
+    : "";
+
+  // Build vibe/style instructions
+  const vibeInstructions = input.vibePrompt
+    ? `\nCREATOR'S STYLE GUIDE:
+${input.vibePrompt}
+
+Apply this style throughout all titles, descriptions, instructions, and reflection prompts.`
+    : "";
+
   return `You are an expert curriculum designer creating a transformational learning program.
 
-PROGRAM DETAILS:
+PROGRAM CONTEXT:
 - Title: "${input.programTitle}"
 - Duration: EXACTLY ${input.durationWeeks} weeks (you MUST create ${input.durationWeeks} weeks)
 - Total videos available: ${totalVideos}
 ${input.programDescription ? `- Description: ${input.programDescription}` : ""}
-${input.outcomeStatement ? `- Intended learner outcome: ${input.outcomeStatement}` : ""}
+${audienceContext}
+${transformationContext}
+${input.outcomeStatement ? `- Outcome Statement: ${input.outcomeStatement}` : ""}
+${vibeInstructions}
 
 AVAILABLE VIDEO CONTENT:
 ${videoDescriptions}
 
 YOUR TASK:
-Create a ${input.durationWeeks}-week structured learning program that transforms learners toward the intended outcome.
+Create a ${input.durationWeeks}-week structured learning program that transforms ${input.targetAudience || "learners"} toward ${input.targetTransformation || "the intended outcome"}.
 
 CRITICAL REQUIREMENTS:
 1. Generate EXACTLY ${input.durationWeeks} weeks (weekNumber 1 through ${input.durationWeeks})
 2. Distribute videos logically across all ${input.durationWeeks} weeks (approximately ${videosPerWeek} video(s) per week)
-3. Each week needs a clear theme that builds toward the outcome
+3. Each week needs a clear theme that builds toward the transformation
 4. Videos from the same cluster share related topics - use this to group them logically
+5. Each session MUST include 2-3 key takeaways (keyTakeaways array)
 
 STRUCTURE EACH WEEK WITH:
 - 1-2 sessions per week
 - Each session should have:
+  * keyTakeaways: 2-3 concise bullet points summarizing what learners will gain
   * WATCH action(s) - reference videos by their exact ID
   * DO action - practical exercise applying what was learned
-  * REFLECT action (at least one per week) - thought-provoking prompt connecting to the outcome
+  * REFLECT action (at least one per week) - thought-provoking prompt connecting to the transformation
 
 OUTPUT FORMAT (JSON only, no markdown):
 {
@@ -175,6 +202,11 @@ OUTPUT FORMAT (JSON only, no markdown):
         {
           "title": "Session title",
           "summary": "Session focus",
+          "keyTakeaways": [
+            "First key insight or skill they'll gain",
+            "Second key insight or skill they'll gain",
+            "Third key insight or skill they'll gain"
+          ],
           "orderIndex": 0,
           "actions": [
             {
@@ -194,7 +226,7 @@ OUTPUT FORMAT (JSON only, no markdown):
               "title": "Reflect: [Topic]",
               "type": "reflect",
               "instructions": "Context for the reflection",
-              "reflectionPrompt": "Thought-provoking question connecting to the outcome",
+              "reflectionPrompt": "Thought-provoking question connecting to the transformation",
               "orderIndex": 2
             }
           ]
@@ -205,12 +237,14 @@ OUTPUT FORMAT (JSON only, no markdown):
 }
 
 QUALITY GUIDELINES:
-- Week titles should be engaging and outcome-oriented (e.g., "Week 1: Building Your Foundation")
+- Week titles should be engaging and transformation-oriented (e.g., "Week 1: Building Your Foundation")
+- Key takeaways should be specific, actionable outcomes - not vague promises
 - Instructions should be specific and actionable, not generic
 - DO actions should have concrete exercises learners can complete
 - REFLECT prompts should encourage deep thinking and personal application
 - Build complexity progressively - earlier weeks introduce concepts, later weeks integrate them
-- Final week should synthesize learning and prepare for real-world application`;
+- Final week should synthesize learning and prepare for real-world application
+- If a style guide was provided, ensure all content matches that tone and energy`;
 }
 
 async function callAnthropic(input: GenerateInput): Promise<string> {

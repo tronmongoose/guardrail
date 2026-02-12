@@ -62,6 +62,9 @@ export async function POST(
       programTitle: program.title,
       programDescription: program.description ?? undefined,
       outcomeStatement: program.outcomeStatement ?? undefined,
+      targetAudience: program.targetAudience ?? undefined,
+      targetTransformation: program.targetTransformation ?? undefined,
+      vibePrompt: program.vibePrompt ?? undefined,
       durationWeeks: program.durationWeeks,
       clusters,
     });
@@ -111,6 +114,7 @@ export async function POST(
           weekId: createdWeek.id,
           title: session.title,
           summary: session.summary,
+          keyTakeaways: session.keyTakeaways ?? [],
           orderIndex: session.orderIndex,
         },
       });

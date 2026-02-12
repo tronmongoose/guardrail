@@ -49,6 +49,7 @@ model Program {
   priceInCents     Int         @default(0)
   currency         String      @default("usd")
   published        Boolean     @default(false)
+  status           ProgramStatus @default(DRAFT)
   stripeProductId  String?
   stripePriceId    String?
   createdAt        DateTime    @default(now())
@@ -78,6 +79,17 @@ model Program {
 enum PacingMode {
   DRIP_BY_WEEK
   // future: UNLOCK_ON_COMPLETION, COHORT_START
+}
+
+enum ProgramStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum DurationPreset {
+  SIX_WEEKS    // 6
+  EIGHT_WEEKS  // 8
+  TWELVE_WEEKS // 12
 }
 
 // --- Week / Session / Action ---
@@ -131,17 +143,18 @@ enum ActionType {
 // --- YouTube Video ---
 
 model YouTubeVideo {
-  id            String   @id @default(cuid())
-  videoId       String   // YouTube video ID
-  url           String
-  title         String?
-  authorName    String?
-  thumbnailUrl  String?
-  description   String?
-  transcript    String?  @db.Text  // Auto-fetched captions/transcript
-  programId     String
-  program       Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
-  createdAt     DateTime @default(now())
+  id              String   @id @default(cuid())
+  videoId         String   // YouTube video ID
+  url             String
+  title           String?
+  authorName      String?
+  thumbnailUrl    String?
+  description     String?
+  durationSeconds Int?     // Video duration in seconds
+  transcript      String?  @db.Text  // Auto-fetched captions/transcript
+  programId       String
+  program         Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
+  createdAt       DateTime @default(now())
 
   actions       Action[]
   embeddings    Embedding[]

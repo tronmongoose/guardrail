@@ -10,6 +10,9 @@ interface StubInput {
   programTitle: string;
   programDescription?: string;
   outcomeStatement?: string;
+  targetAudience?: string;
+  targetTransformation?: string;
+  vibePrompt?: string;
   durationWeeks: number;
   clusters: {
     clusterId: number;
@@ -77,6 +80,21 @@ export function generateWithStub(input: StubInput): ProgramDraft {
       ? weekVideos[0].title.split(":")[0] || `Topic ${weekNum}`
       : `Review & Integration`;
 
+    // Generate keyTakeaways based on context
+    const keyTakeaways = weekVideos.length > 0
+      ? [
+          `Understand the core concepts from ${weekVideos[0].title}`,
+          `Apply practical techniques to your own situation`,
+          input.targetTransformation
+            ? `Progress toward: ${input.targetTransformation.slice(0, 80)}`
+            : `Build foundational skills for week ${weekNum + 1}`,
+        ]
+      : [
+          `Consolidate your learning from previous weeks`,
+          `Identify gaps in your understanding`,
+          `Prepare for advanced application`,
+        ];
+
     weeks.push({
       title: `Week ${weekNum}: ${weekTitle}`,
       summary: weekVideos.length > 0
@@ -87,6 +105,7 @@ export function generateWithStub(input: StubInput): ProgramDraft {
         {
           title: weekVideos.length > 0 ? `Learning Session` : `Review Session`,
           summary: `Week ${weekNum} core activities`,
+          keyTakeaways,
           orderIndex: 0,
           actions,
         },
