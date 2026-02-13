@@ -24,6 +24,7 @@ interface Program {
   vibePrompt: string | null;
   skinId: string;
   durationWeeks: number;
+  pacingMode: "DRIP_BY_WEEK" | "UNLOCK_ON_COMPLETE";
   slug: string;
   published: boolean;
   priceInCents: number;
@@ -225,6 +226,7 @@ export default function ProgramEditPage() {
           },
           duration: {
             weeks: program.durationWeeks,
+            pacingMode: program.pacingMode === "DRIP_BY_WEEK" ? "drip_by_week" : "unlock_on_complete",
           },
           content: {
             videos: program.videos,

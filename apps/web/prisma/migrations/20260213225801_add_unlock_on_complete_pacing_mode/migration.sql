@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "PacingMode" ADD VALUE 'UNLOCK_ON_COMPLETE';

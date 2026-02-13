@@ -18,6 +18,7 @@ export interface WizardState {
   };
   duration: {
     weeks: number;
+    pacingMode: "drip_by_week" | "unlock_on_complete";
   };
   content: {
     videos: Array<{
@@ -64,6 +65,7 @@ const DEFAULT_STATE: WizardState = {
   },
   duration: {
     weeks: 8,
+    pacingMode: "unlock_on_complete", // Default to staged progression for better completion rates
   },
   content: {
     videos: [],
@@ -162,6 +164,7 @@ export function ProgramWizard({
           targetAudience: state.basics.targetAudience,
           targetTransformation: state.basics.targetTransformation,
           durationWeeks: state.duration.weeks,
+          pacingMode: state.duration.pacingMode,
           vibePrompt: state.vibe.vibePrompt,
         }),
       });
@@ -216,8 +219,10 @@ export function ProgramWizard({
       case 1:
         return (
           <StepDuration
-            value={state.duration.weeks}
-            onChange={(weeks) => updateState("duration", { weeks })}
+            weeks={state.duration.weeks}
+            pacingMode={state.duration.pacingMode}
+            onWeeksChange={(weeks) => updateState("duration", { weeks })}
+            onPacingModeChange={(pacingMode) => updateState("duration", { pacingMode })}
           />
         );
       case 2:

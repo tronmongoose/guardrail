@@ -91,6 +91,14 @@ export async function PATCH(
   if (body.targetTransformation !== undefined) data.targetTransformation = body.targetTransformation;
   if (body.vibePrompt !== undefined) data.vibePrompt = body.vibePrompt;
   if (body.skinId !== undefined) data.skinId = body.skinId;
+  if (body.pacingMode !== undefined) {
+    // Map from shared schema format to Prisma enum format
+    const pacingModeMap: Record<string, string> = {
+      drip_by_week: "DRIP_BY_WEEK",
+      unlock_on_complete: "UNLOCK_ON_COMPLETE",
+    };
+    data.pacingMode = pacingModeMap[body.pacingMode] || "DRIP_BY_WEEK";
+  }
 
   const program = await prisma.program.update({ where: { id }, data });
   return NextResponse.json(program);

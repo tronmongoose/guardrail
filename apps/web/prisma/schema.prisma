@@ -99,8 +99,8 @@ model Program {
 }
 
 enum PacingMode {
-  DRIP_BY_WEEK
-  // future: UNLOCK_ON_COMPLETION, COHORT_START
+  DRIP_BY_WEEK        // Weekly release: content unlocks on a time-based schedule
+  UNLOCK_ON_COMPLETE  // Staged: next session/week unlocks after completing the current one
 }
 
 enum ProgramStatus {

@@ -21,6 +21,8 @@ interface ActionData {
   progress: ActionProgress[];
 }
 
+type PacingMode = "DRIP_BY_WEEK" | "UNLOCK_ON_COMPLETE";
+
 interface Props {
   program: {
     id: string;
@@ -40,6 +42,7 @@ interface Props {
   enrolledAt: string;
   currentWeek: number; // Which week the learner currently has access to
   completedWeeks: number[]; // Array of completed week numbers
+  pacingMode: PacingMode; // How content unlocks
 }
 
 export function LearnerTimeline({
@@ -48,6 +51,7 @@ export function LearnerTimeline({
   enrolledAt,
   currentWeek,
   completedWeeks,
+  pacingMode,
 }: Props) {
   const { showToast } = useToast();
 
@@ -154,7 +158,9 @@ export function LearnerTimeline({
             />
           </div>
           <p className="text-xs text-gray-500 mt-2">
-            Complete all actions in a week to unlock the next one
+            {pacingMode === "UNLOCK_ON_COMPLETE"
+              ? "Complete all actions in a week to unlock the next one"
+              : "New content unlocks each week"}
           </p>
         </div>
 
@@ -235,11 +241,28 @@ export function LearnerTimeline({
                       </svg>
                     </div>
                     <p className="text-sm text-gray-400">
-                      Complete{" "}
-                      <span className="text-neon-yellow font-semibold">
-                        Week {week.weekNumber - 1}
-                      </span>{" "}
-                      to unlock
+                      {pacingMode === "UNLOCK_ON_COMPLETE" ? (
+                        <>
+                          Complete{" "}
+                          <span className="text-neon-yellow font-semibold">
+                            Week {week.weekNumber - 1}
+                          </span>{" "}
+                          to unlock
+                        </>
+                      ) : (
+                        <>
+                          Unlocks in{" "}
+                          <span className="text-neon-cyan font-semibold">
+                            {(() => {
+                              const enrolled = new Date(enrolledAt);
+                              const unlockDate = new Date(enrolled.getTime() + (week.weekNumber - 1) * 7 * 24 * 60 * 60 * 1000);
+                              const now = new Date();
+                              const daysUntil = Math.ceil((unlockDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                              return daysUntil === 1 ? "1 day" : `${daysUntil} days`;
+                            })()}
+                          </span>
+                        </>
+                      )}
                     </p>
                   </div>
                 </div>

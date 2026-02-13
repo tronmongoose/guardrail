@@ -90,14 +90,15 @@ export async function POST(req: NextRequest) {
               weekNumber,
             });
 
-            // Get total weeks in program
+            // Get program details including pacing mode
             const program = await prisma.program.findUnique({
               where: { id: programId },
-              select: { durationWeeks: true },
+              select: { durationWeeks: true, pacingMode: true },
             });
 
-            // Unlock next week if available
-            if (program && weekNumber < program.durationWeeks) {
+            // Only unlock next week for UNLOCK_ON_COMPLETE mode
+            // For DRIP_BY_WEEK mode, unlocking is handled by time-based calculation in learner UI
+            if (program && program.pacingMode === "UNLOCK_ON_COMPLETE" && weekNumber < program.durationWeeks) {
               const nextWeek = weekNumber + 1;
 
               // Only unlock if this was the current week
@@ -114,6 +115,7 @@ export async function POST(req: NextRequest) {
                   operation: "progress.week_unlocked",
                   userId: user.id,
                   programId,
+                  pacingMode: program.pacingMode,
                   newWeek: nextWeek,
                 });
               }

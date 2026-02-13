@@ -5,8 +5,8 @@ import { z } from "zod";
 export const ActionTypeSchema = z.enum(["watch", "read", "do", "reflect"]);
 
 export const PacingModeSchema = z.enum([
-  "drip_by_week",
-  // future: "unlock_on_completion", "cohort_start"
+  "drip_by_week",      // Weekly release: content unlocks on a time-based schedule
+  "unlock_on_complete", // Staged: next session/week unlocks after completing the current one
 ]);
 
 // --- Action ---
