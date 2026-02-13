@@ -180,10 +180,15 @@ export function ProgramWizard({
         }
       }
 
-      // Run auto-structure
-      await fetch(`/api/programs/${programId}/auto-structure`, {
+      // Run auto-structure (embeddings + clustering)
+      const structureRes = await fetch(`/api/programs/${programId}/auto-structure`, {
         method: "POST",
       });
+
+      if (!structureRes.ok) {
+        const structureError = await structureRes.json();
+        throw new Error(structureError.detail || structureError.error || "Auto-structure failed");
+      }
 
       // Generate program
       const genRes = await fetch(`/api/programs/${programId}/generate`, {
