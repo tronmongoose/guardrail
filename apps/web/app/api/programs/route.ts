@@ -41,10 +41,26 @@ export async function GET(req: NextRequest) {
             weeks: true,
           },
         },
+        generationJobs: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: {
+            status: true,
+            stage: true,
+            progress: true,
+          },
+        },
       },
     });
 
-    return NextResponse.json(programs);
+    // Transform to include latest generation job
+    const programsWithGen = programs.map((p) => ({
+      ...p,
+      generationJob: p.generationJobs[0] || null,
+      generationJobs: undefined,
+    }));
+
+    return NextResponse.json(programsWithGen);
   } catch (error) {
     console.error("Failed to fetch programs:", error);
     return NextResponse.json(

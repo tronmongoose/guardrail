@@ -95,6 +95,7 @@ model Program {
   cohorts          Cohort[]
   artifacts        ProgramArtifact[]
   rating           ProgramRating?
+  generationJobs   GenerationJob[]
   styleInfluencers String[]  // Array of influencer IDs that influenced this program
 }
 
@@ -350,4 +351,29 @@ model ProgramRating {
   completenessScore Float?    // 0-100 (future AI evaluation)
   evaluatedAt       DateTime?
   createdAt         DateTime  @default(now())
+}
+
+// --- Async Generation Job ---
+
+model GenerationJob {
+  id            String          @id @default(cuid())
+  programId     String
+  program       Program         @relation(fields: [programId], references: [id], onDelete: Cascade)
+  status        GenerationStatus @default(PENDING)
+  stage         String?         // "embedding", "clustering", "generating", "persisting"
+  progress      Int             @default(0)  // 0-100
+  error         String?         @db.Text
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime        @default(now())
+
+  @@index([programId])
+  @@index([status])
+}
+
+enum GenerationStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }

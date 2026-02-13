@@ -6,6 +6,16 @@ import { UserButton, useUser } from "@clerk/nextjs";
 import { useEffect, useState } from "react";
 import type { ProgramListItem } from "@guide-rail/shared";
 
+interface GenerationJob {
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  stage: string | null;
+  progress: number;
+}
+
+interface ProgramWithGeneration extends ProgramListItem {
+  generationJob?: GenerationJob | null;
+}
+
 interface StripeConnectStatus {
   connected: boolean;
   status: string | null;
@@ -38,7 +48,7 @@ function formatPrice(cents: number): string {
 export default function DashboardPage() {
   const router = useRouter();
   const { user: clerkUser, isLoaded } = useUser();
-  const [programs, setPrograms] = useState<ProgramListItem[]>([]);
+  const [programs, setPrograms] = useState<ProgramWithGeneration[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -234,6 +244,9 @@ export default function DashboardPage() {
           <div className="space-y-3">
             {programs.map((p) => {
               const timeAgo = getTimeAgo(new Date(p.updatedAt));
+              const isGenerating = p.generationJob?.status === "PENDING" || p.generationJob?.status === "PROCESSING";
+              const generationFailed = p.generationJob?.status === "FAILED";
+
               return (
                 <Link
                   key={p.id}
@@ -244,21 +257,43 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h2 className="font-semibold text-white truncate">{p.title}</h2>
-                        <span
-                          className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${
-                            p.published
-                              ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
-                              : "bg-gray-500/10 text-gray-400 border border-gray-500/30"
-                          }`}
-                        >
-                          {p.published ? "Published" : "Draft"}
-                        </span>
+                        {isGenerating ? (
+                          <span className="flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium bg-neon-pink/10 text-neon-pink border border-neon-pink/30 flex items-center gap-1">
+                            <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                            </svg>
+                            Generating {p.generationJob?.progress}%
+                          </span>
+                        ) : generationFailed ? (
+                          <span className="flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium bg-red-500/10 text-red-400 border border-red-500/30">
+                            Generation Failed
+                          </span>
+                        ) : (
+                          <span
+                            className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${
+                              p.published
+                                ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
+                                : "bg-gray-500/10 text-gray-400 border border-gray-500/30"
+                            }`}
+                          >
+                            {p.published ? "Published" : "Draft"}
+                          </span>
+                        )}
                         {p.priceInCents > 0 && (
                           <span className="flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium bg-neon-pink/10 text-neon-pink border border-neon-pink/30">
                             {formatPrice(p.priceInCents)}
                           </span>
                         )}
                       </div>
+                      {isGenerating && (
+                        <div className="mb-2 h-1 bg-surface-dark rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all"
+                            style={{ width: `${p.generationJob?.progress || 0}%` }}
+                          />
+                        </div>
+                      )}
                       <div className="flex items-center gap-3 text-sm text-gray-500">
                         <span className="flex items-center gap-1">
                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

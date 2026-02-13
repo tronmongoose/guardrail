@@ -7,6 +7,7 @@ import { StepDuration } from "./steps/StepDuration";
 import { StepContent } from "./steps/StepContent";
 import { StepVibe } from "./steps/StepVibe";
 import { StepReview } from "./steps/StepReview";
+import { useGeneration } from "@/components/generation";
 
 export interface WizardState {
   basics: {
@@ -86,6 +87,7 @@ export function ProgramWizard({
   onComplete,
   onCancel,
 }: ProgramWizardProps) {
+  const { startGeneration } = useGeneration();
   const [currentStep, setCurrentStep] = useState(0);
   const [state, setState] = useState<WizardState>(() => {
     // Try to load from localStorage first
@@ -154,7 +156,7 @@ export function ProgramWizard({
     setIsGenerating(true);
     try {
       // Save program details
-      await fetch(`/api/programs/${programId}`, {
+      const patchRes = await fetch(`/api/programs/${programId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -169,6 +171,10 @@ export function ProgramWizard({
         }),
       });
 
+      if (!patchRes.ok) {
+        throw new Error("Failed to save program details");
+      }
+
       // Save artifacts
       for (const artifact of state.content.artifacts) {
         if (!artifact.id) {
@@ -180,34 +186,27 @@ export function ProgramWizard({
         }
       }
 
-      // Run auto-structure (embeddings + clustering)
-      const structureRes = await fetch(`/api/programs/${programId}/auto-structure`, {
-        method: "POST",
-      });
-
-      if (!structureRes.ok) {
-        const structureError = await structureRes.json();
-        throw new Error(structureError.detail || structureError.error || "Auto-structure failed");
-      }
-
-      // Generate program
-      const genRes = await fetch(`/api/programs/${programId}/generate`, {
+      // Start async generation (returns immediately)
+      const genRes = await fetch(`/api/programs/${programId}/generate-async`, {
         method: "POST",
       });
 
       if (!genRes.ok) {
         const error = await genRes.json();
-        throw new Error(error.detail || error.error || "Generation failed");
+        throw new Error(error.detail || error.error || "Failed to start generation");
       }
 
       // Clear wizard state from localStorage
       localStorage.removeItem(getStorageKey(programId));
 
+      // Register with notification system to track progress
+      startGeneration(programId);
+
+      // Navigate away immediately - user will see notification when complete
       onComplete();
     } catch (error) {
       console.error("Generation error:", error);
       alert(`Generation failed: ${error instanceof Error ? error.message : "Unknown error"}`);
-    } finally {
       setIsGenerating(false);
     }
   };
