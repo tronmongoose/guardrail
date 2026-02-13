@@ -41,6 +41,7 @@ export default function OnboardingPage() {
   const [customNiche, setCustomNiche] = useState("");
   const [outcomeTarget, setOutcomeTarget] = useState("");
   const [enhancing, setEnhancing] = useState(false);
+  const [originalOutcome, setOriginalOutcome] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -108,12 +109,25 @@ export default function OnboardingPage() {
       }
 
       const { enhanced } = await res.json();
+      // Store original so user can revert
+      setOriginalOutcome(outcomeTarget);
       setOutcomeTarget(enhanced);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to enhance text");
     } finally {
       setEnhancing(false);
     }
+  };
+
+  const handleRevert = () => {
+    if (originalOutcome) {
+      setOutcomeTarget(originalOutcome);
+      setOriginalOutcome(null);
+    }
+  };
+
+  const handleKeep = () => {
+    setOriginalOutcome(null);
   };
 
   const handleComplete = async () => {
@@ -264,36 +278,72 @@ export default function OnboardingPage() {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-sm text-gray-400">Outcome statement</label>
-                  <button
-                    type="button"
-                    onClick={handleEnhance}
-                    disabled={enhancing || outcomeTarget.length < 10}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-neon-pink/10 text-neon-pink border border-neon-pink/30 hover:bg-neon-pink/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {enhancing ? (
-                      <>
-                        <Spinner size="sm" color="pink" />
-                        Enhancing...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  {originalOutcome ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleRevert}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-surface-dark text-gray-400 border border-surface-border hover:text-white hover:border-gray-500 transition"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                         </svg>
-                        AI Assist
-                      </>
-                    )}
-                  </button>
+                        Revert
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleKeep}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 transition"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Keep
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleEnhance}
+                      disabled={enhancing || outcomeTarget.length < 10}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-neon-pink/10 text-neon-pink border border-neon-pink/30 hover:bg-neon-pink/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {enhancing ? (
+                        <>
+                          <Spinner size="sm" color="pink" />
+                          Enhancing...
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          AI Assist
+                        </>
+                      )}
+                    </button>
+                  )}
                 </div>
                 <textarea
                   value={outcomeTarget}
-                  onChange={(e) => setOutcomeTarget(e.target.value)}
+                  onChange={(e) => {
+                    setOutcomeTarget(e.target.value);
+                    // Clear revert state if user manually edits
+                    if (originalOutcome) setOriginalOutcome(null);
+                  }}
                   placeholder="I help people go from [current state] to [desired outcome]..."
                   rows={4}
                   maxLength={500}
-                  className="w-full px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan resize-none"
+                  className={`w-full px-3 py-2.5 bg-surface-dark border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan resize-none ${
+                    originalOutcome ? "border-neon-pink/50" : "border-surface-border"
+                  }`}
                 />
-                <p className="text-xs text-gray-500 mt-1">{outcomeTarget.length}/500</p>
+                <div className="flex items-center justify-between mt-1">
+                  <p className="text-xs text-gray-500">{outcomeTarget.length}/500</p>
+                  {originalOutcome && (
+                    <p className="text-xs text-neon-pink">AI enhanced - review and keep or revert</p>
+                  )}
+                </div>
               </div>
 
               <div className="bg-surface-dark border border-surface-border rounded-lg p-3">
@@ -303,21 +353,24 @@ export default function OnboardingPage() {
                 </p>
               </div>
 
-              {/* Motivational stats card */}
+              {/* Example outcome stats card */}
               <div className="bg-gradient-to-r from-neon-cyan/5 via-neon-pink/5 to-neon-yellow/5 border border-surface-border rounded-lg p-4">
-                <p className="text-xs text-gray-400 mb-3 text-center">Creators on GuideRail are seeing results</p>
-                <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="flex items-center justify-center gap-2 mb-3">
+                  <p className="text-xs text-gray-400">What you could achieve</p>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-dark text-gray-500 border border-surface-border">Example</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 sm:gap-3 text-center">
                   <div>
-                    <p className="text-lg font-bold text-neon-cyan">{PLATFORM_STATS.totalLearners}</p>
-                    <p className="text-xs text-gray-500">Total Learners</p>
+                    <p className="text-base sm:text-lg font-bold text-neon-cyan">{PLATFORM_STATS.totalLearners}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500">Learners</p>
                   </div>
                   <div>
-                    <p className="text-lg font-bold text-neon-pink">{PLATFORM_STATS.totalRevenue}</p>
-                    <p className="text-xs text-gray-500">Revenue Earned</p>
+                    <p className="text-base sm:text-lg font-bold text-neon-pink">{PLATFORM_STATS.totalRevenue}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500">Revenue</p>
                   </div>
                   <div>
-                    <p className="text-lg font-bold text-neon-yellow">{PLATFORM_STATS.avgCompletion}</p>
-                    <p className="text-xs text-gray-500">Completion Rate</p>
+                    <p className="text-base sm:text-lg font-bold text-neon-yellow">{PLATFORM_STATS.avgCompletion}</p>
+                    <p className="text-[10px] sm:text-xs text-gray-500">Completion</p>
                   </div>
                 </div>
               </div>
