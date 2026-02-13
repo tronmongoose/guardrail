@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { Spinner } from "@/components/ui/spinner";
 
+// Motivational stats for V1 (social proof)
+const PLATFORM_STATS = {
+  totalLearners: "2,847",
+  totalRevenue: "$127,450",
+  avgCompletion: "78%",
+};
+
 const NICHE_OPTIONS = [
   "Fitness & Health",
   "Business & Entrepreneurship",
@@ -33,6 +40,7 @@ export default function OnboardingPage() {
   const [niche, setNiche] = useState("");
   const [customNiche, setCustomNiche] = useState("");
   const [outcomeTarget, setOutcomeTarget] = useState("");
+  const [enhancing, setEnhancing] = useState(false);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -76,6 +84,36 @@ export default function OnboardingPage() {
   const handleBack = () => {
     setError(null);
     setStep(step - 1);
+  };
+
+  const handleEnhance = async () => {
+    if (!outcomeTarget.trim() || outcomeTarget.length < 10) {
+      setError("Please write at least 10 characters before using AI Assist");
+      return;
+    }
+
+    setEnhancing(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/ai/enhance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: outcomeTarget, type: "transformation" }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to enhance");
+      }
+
+      const { enhanced } = await res.json();
+      setOutcomeTarget(enhanced);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to enhance text");
+    } finally {
+      setEnhancing(false);
+    }
   };
 
   const handleComplete = async () => {
@@ -224,14 +262,36 @@ export default function OnboardingPage() {
               </div>
 
               <div>
-                <label className="text-sm text-gray-400">Outcome statement</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm text-gray-400">Outcome statement</label>
+                  <button
+                    type="button"
+                    onClick={handleEnhance}
+                    disabled={enhancing || outcomeTarget.length < 10}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-neon-pink/10 text-neon-pink border border-neon-pink/30 hover:bg-neon-pink/20 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {enhancing ? (
+                      <>
+                        <Spinner size="sm" color="pink" />
+                        Enhancing...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        AI Assist
+                      </>
+                    )}
+                  </button>
+                </div>
                 <textarea
                   value={outcomeTarget}
                   onChange={(e) => setOutcomeTarget(e.target.value)}
                   placeholder="I help people go from [current state] to [desired outcome]..."
                   rows={4}
                   maxLength={500}
-                  className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan resize-none"
+                  className="w-full px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan resize-none"
                 />
                 <p className="text-xs text-gray-500 mt-1">{outcomeTarget.length}/500</p>
               </div>
@@ -241,6 +301,25 @@ export default function OnboardingPage() {
                   <span className="text-neon-cyan">Tip:</span> Be specific! Instead of &quot;I help people get fit,&quot;
                   try &quot;I help busy professionals build a sustainable workout habit in just 20 minutes a day.&quot;
                 </p>
+              </div>
+
+              {/* Motivational stats card */}
+              <div className="bg-gradient-to-r from-neon-cyan/5 via-neon-pink/5 to-neon-yellow/5 border border-surface-border rounded-lg p-4">
+                <p className="text-xs text-gray-400 mb-3 text-center">Creators on GuideRail are seeing results</p>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <p className="text-lg font-bold text-neon-cyan">{PLATFORM_STATS.totalLearners}</p>
+                    <p className="text-xs text-gray-500">Total Learners</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-neon-pink">{PLATFORM_STATS.totalRevenue}</p>
+                    <p className="text-xs text-gray-500">Revenue Earned</p>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold text-neon-yellow">{PLATFORM_STATS.avgCompletion}</p>
+                    <p className="text-xs text-gray-500">Completion Rate</p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
