@@ -103,6 +103,20 @@ export async function POST(
   // Warn if no videos (not blocking, but included in response)
   const hasVideos = program.videos.length > 0;
 
+  // Check Stripe Connect requirement for paid programs
+  if (program.priceInCents > 0) {
+    if (!user.stripeOnboardingComplete) {
+      return NextResponse.json(
+        {
+          error: "Stripe account required",
+          code: "STRIPE_REQUIRED",
+          message: "To publish a paid program, please connect your Stripe account first.",
+        },
+        { status: 402 }
+      );
+    }
+  }
+
   if (errors.length > 0) {
     logger.warn({
       operation: "program.publish.validation_failed",
