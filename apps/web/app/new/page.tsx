@@ -57,6 +57,7 @@ export default function NewProgramPage() {
   const [videos, setVideos] = useState<Video[]>([]);
   const [videoUrl, setVideoUrl] = useState("");
   const [addingVideo, setAddingVideo] = useState(false);
+  const [videoAddStage, setVideoAddStage] = useState<"idle" | "fetching" | "transcript" | "ready">("idle");
   const [durationWeeks, setDurationWeeks] = useState(8);
   const [pacingMode, setPacingMode] = useState<"unlock_on_complete" | "drip_by_week">("unlock_on_complete");
   const [vibePrompt, setVibePrompt] = useState("");
@@ -165,7 +166,11 @@ export default function NewProgramPage() {
     if (!videoUrl.trim() || !programId) return;
 
     setAddingVideo(true);
+    setVideoAddStage("fetching");
     setError(null);
+
+    // Simulate transcript extraction stage after a short delay
+    const transcriptTimer = setTimeout(() => setVideoAddStage("transcript"), 1200);
 
     try {
       const res = await fetch(`/api/programs/${programId}/videos`, {
@@ -180,12 +185,21 @@ export default function NewProgramPage() {
       }
 
       const video = await res.json();
+
+      clearTimeout(transcriptTimer);
+      setVideoAddStage("ready");
+
+      // Hold "ready" state briefly for visual satisfaction
+      await new Promise(resolve => setTimeout(resolve, 600));
+
       setVideos(prev => [...prev, video]);
       setVideoUrl("");
     } catch (err) {
+      clearTimeout(transcriptTimer);
       setError(err instanceof Error ? err.message : "Failed to add video");
     } finally {
       setAddingVideo(false);
+      setVideoAddStage("idle");
     }
   };
 
@@ -413,6 +427,17 @@ export default function NewProgramPage() {
                   {addingVideo ? <Spinner size="sm" /> : "Add"}
                 </button>
               </div>
+
+              {addingVideo && (
+                <div className="flex items-center gap-2 text-xs" aria-live="polite">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    videoAddStage === "ready" ? "bg-neon-cyan" : "bg-neon-pink animate-pulse"
+                  }`} />
+                  {videoAddStage === "fetching" && <span className="text-gray-400">Fetching video info...</span>}
+                  {videoAddStage === "transcript" && <span className="text-gray-400">Extracting transcript...</span>}
+                  {videoAddStage === "ready" && <span className="text-neon-cyan">Content ready</span>}
+                </div>
+              )}
 
               {videos.length > 0 ? (
                 <div className="space-y-2">

@@ -97,10 +97,12 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<string | 
 
     if (lines.length === 0) return null;
 
-    // Join and truncate to reasonable length (keep first ~4000 chars for LLM context)
+    // Join and truncate to reasonable length for storage
+    // 30K chars covers most 20-30 min videos (~15K chars per 10 min of speech)
+    const TRANSCRIPT_LIMIT = 30000;
     const fullTranscript = lines.join(" ");
-    return fullTranscript.length > 4000
-      ? fullTranscript.slice(0, 4000) + "..."
+    return fullTranscript.length > TRANSCRIPT_LIMIT
+      ? fullTranscript.slice(0, TRANSCRIPT_LIMIT) + "..."
       : fullTranscript;
   } catch (err) {
     console.error("Failed to fetch transcript:", err);

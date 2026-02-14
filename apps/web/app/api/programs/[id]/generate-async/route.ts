@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEmbeddings, clusterEmbeddings, generateProgramDraft } from "@guide-rail/ai";
+import { getEmbeddings, clusterEmbeddings, generateProgramDraft, extractContentDigests } from "@guide-rail/ai";
 import { ProgramDraftSchema } from "@guide-rail/shared";
 import { aiLogger, createTimer } from "@/lib/logger";
 
@@ -87,7 +87,7 @@ async function processGenerationJob(jobId: string, programId: string) {
     // Mark as processing
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { status: "PROCESSING", stage: "embedding", progress: 10, startedAt: new Date() },
+      data: { status: "PROCESSING", stage: "embedding", progress: 5, startedAt: new Date() },
     });
 
     // Fetch program with videos
@@ -102,7 +102,7 @@ async function processGenerationJob(jobId: string, programId: string) {
     const embeddingInputs = program.videos.map((v) => ({
       videoId: v.id,
       text: v.transcript
-        ? `${v.title ?? ""}: ${v.transcript}`.slice(0, 2000)
+        ? `${v.title ?? ""}: ${v.transcript}`.slice(0, 4000)
         : `${v.title ?? ""} ${v.description ?? ""}`.trim() || v.videoId,
     }));
 
@@ -125,7 +125,7 @@ async function processGenerationJob(jobId: string, programId: string) {
 
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { stage: "clustering", progress: 40 },
+      data: { stage: "clustering", progress: 25 },
     });
 
     // Step 2: Clustering (40-50%)
@@ -153,12 +153,40 @@ async function processGenerationJob(jobId: string, programId: string) {
       }
     }
 
+    // Step 2.5: Content Extraction / Analysis (35-60%)
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { stage: "generating", progress: 50 },
+      data: { stage: "analyzing", progress: 35 },
     });
 
-    // Step 3: LLM Generation (50-90%)
+    const videosForExtraction = program.videos.map((v) => ({
+      videoId: v.id,
+      videoTitle: v.title ?? "Untitled",
+      transcript: v.transcript,
+    }));
+
+    aiLogger.extractionStart(programId, videosForExtraction.length);
+    const extractionTimer = createTimer();
+
+    const contentDigests = await extractContentDigests(
+      videosForExtraction,
+      async (completed, total) => {
+        const extractionProgress = 35 + Math.round((completed / total) * 25);
+        await prisma.generationJob.update({
+          where: { id: jobId },
+          data: { progress: extractionProgress },
+        });
+      },
+    );
+
+    aiLogger.extractionSuccess(programId, extractionTimer.elapsed(), contentDigests.length);
+
+    // Step 3: LLM Generation (60-85%)
+    await prisma.generationJob.update({
+      where: { id: jobId },
+      data: { stage: "generating", progress: 60 },
+    });
+
     const videoMap = new Map(program.videos.map((v) => [v.id, v]));
     const clusterData = clusters.map((c) => ({
       clusterId: c.clusterId,
@@ -184,6 +212,7 @@ async function processGenerationJob(jobId: string, programId: string) {
       vibePrompt: program.vibePrompt ?? undefined,
       durationWeeks: program.durationWeeks,
       clusters: clusterData,
+      contentDigests,
     });
 
     await prisma.generationJob.update({

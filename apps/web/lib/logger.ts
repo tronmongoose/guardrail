@@ -266,4 +266,33 @@ export const aiLogger = {
       issueCount,
     });
   },
+
+  extractionStart(programId: string, videoCount: number) {
+    logger.info({
+      operation: "ai.extraction.start",
+      programId,
+      videoCount,
+    });
+  },
+
+  extractionSuccess(programId: string, durationMs: number, videoCount: number) {
+    logger.info({
+      operation: "ai.extraction.success",
+      programId,
+      durationMs,
+      videoCount,
+      success: true,
+    });
+  },
+
+  extractionFailure(programId: string, durationMs: number, error: unknown) {
+    logger.error(
+      {
+        operation: "ai.extraction.failure",
+        programId,
+        durationMs,
+      },
+      error,
+    );
+  },
 };

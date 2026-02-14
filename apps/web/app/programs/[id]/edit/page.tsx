@@ -13,6 +13,8 @@ import { ProgramWizard } from "@/components/wizard/ProgramWizard";
 import { SkinPicker } from "@/components/skins/SkinPicker";
 import { PreviewModal } from "@/components/preview/PreviewModal";
 import { getSkin } from "@/lib/skins";
+import { useGenerationSteps } from "@/components/generation/useGenerationSteps";
+import { GenerationSteps } from "@/components/generation/GenerationSteps";
 
 interface StripeConnectStatus {
   connected: boolean;
@@ -37,6 +39,35 @@ interface Program {
   videos: YouTubeVideoData[];
   drafts: { id: string; status: string; createdAt: string }[];
   weeks: WeekData[];
+}
+
+function GenerationProgress({ stage, progress }: { stage: string | null; progress: number }) {
+  const stepsData = useGenerationSteps({ stage, progress, status: "PROCESSING" });
+
+  return (
+    <div className="max-w-lg mx-auto mt-16 text-center">
+      <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-neon-pink/10 border border-neon-pink/30 flex items-center justify-center">
+        <svg className="w-10 h-10 text-neon-pink animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+      </div>
+      <h2 className="text-2xl font-bold text-white mb-3">Building your program...</h2>
+      <p className="text-gray-400 mb-8">
+        AI is analyzing your content and crafting a structured curriculum
+      </p>
+
+      <GenerationSteps
+        steps={stepsData.steps}
+        activeStepIndex={stepsData.activeStepIndex}
+        displayProgress={stepsData.displayProgress}
+        variant="full"
+      />
+
+      <p className="text-xs text-gray-600 mt-4">
+        This usually takes 10-30 seconds
+      </p>
+    </div>
+  );
 }
 
 export default function ProgramEditPage() {
@@ -101,14 +132,24 @@ export default function ProgramEditPage() {
       .then(data => {
         if (data) setStripeStatus(data);
       });
-    // Check if async generation is in progress
+    // Check if async generation is in progress or just completed
     fetch(`/api/programs/${id}/generate-async/status`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (data && (data.status === "PENDING" || data.status === "PROCESSING")) {
+        if (!data) return;
+        if (data.status === "PENDING" || data.status === "PROCESSING") {
           setAsyncGenerating(true);
           setAsyncStage(data.stage);
           setAsyncProgress(data.progress || 0);
+        } else if (data.status === "COMPLETED" && data.completedAt) {
+          // Generation finished recently - reload program to pick up persisted weeks.
+          // This handles the race where the user is redirected from /new and generation
+          // finishes before or just as the edit page loads.
+          const completedAt = new Date(data.completedAt);
+          if (Date.now() - completedAt.getTime() < 30000) {
+            // Small delay to ensure persistence is fully committed
+            setTimeout(() => load(), 500);
+          }
         }
       });
   }, [load, id]);
@@ -700,40 +741,8 @@ export default function ProgramEditPage() {
             </button>
           </div>
         ) : program.weeks.length === 0 && asyncGenerating ? (
-          // Async generation in progress - show live progress
-          <div className="max-w-lg mx-auto mt-16 text-center">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-neon-pink/10 border border-neon-pink/30 flex items-center justify-center">
-              <svg className="w-10 h-10 text-neon-pink animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-              </svg>
-            </div>
-            <h2 className="text-2xl font-bold text-white mb-3">Building your program...</h2>
-            <p className="text-gray-400 mb-6">
-              {asyncStage === "embedding"
-                ? "Analyzing your videos..."
-                : asyncStage === "clustering"
-                ? "Grouping content into themes..."
-                : asyncStage === "generating"
-                ? "Creating your curriculum with AI..."
-                : asyncStage === "persisting"
-                ? "Saving your program..."
-                : "Queued and starting up..."}
-            </p>
-
-            <div className="max-w-sm mx-auto mb-4">
-              <div className="h-2 bg-surface-dark rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all duration-500"
-                  style={{ width: `${asyncProgress}%` }}
-                />
-              </div>
-              <p className="text-sm text-gray-500 mt-2">{asyncProgress}% complete</p>
-            </div>
-
-            <p className="text-xs text-gray-600">
-              This usually takes 10-30 seconds
-            </p>
-          </div>
+          // Async generation in progress - show rich staged progress
+          <GenerationProgress stage={asyncStage} progress={asyncProgress} />
         ) : program.weeks.length === 0 ? (
           // Has videos but no structure yet (and no async generation running)
           <div className="max-w-lg mx-auto mt-16 text-center">

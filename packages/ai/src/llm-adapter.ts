@@ -1,15 +1,29 @@
 /**
  * LLM adapter — provider-agnostic wrapper for generating ProgramDraft JSON.
  *
+ * Two-pass architecture:
+ *   Pass 1 (extractContentDigests): Per-video content extraction → structured digests
+ *   Pass 2 (generateProgramDraft):  Curriculum design using rich digests
+ *
  * Supports: "anthropic" | "openai" | "stub"
  * Configured via LLM_PROVIDER env var. Defaults to "stub" for local dev.
  */
 
 import { ProgramDraftSchema } from "@guide-rail/shared";
 import type { ProgramDraft } from "@guide-rail/shared";
-import { generateWithStub } from "./llm-stub";
+import { generateWithStub, generateStubContentDigest } from "./llm-stub";
 
 export type LLMProvider = "anthropic" | "openai" | "stub";
+
+export interface ContentDigest {
+  videoId: string;
+  videoTitle: string;
+  keyConcepts: string[];
+  skillsIntroduced: string[];
+  memorableExamples: string[];
+  difficultyLevel: string;
+  summary: string;
+}
 
 interface GenerateInput {
   programId: string;
@@ -27,9 +41,169 @@ interface GenerateInput {
     videoTranscripts?: string[];
     summary?: string;
   }[];
+  contentDigests?: ContentDigest[];
 }
 
 const MAX_REPAIR_ATTEMPTS = 2;
+
+// ---------------------------------------------------------------------------
+// Pass 1: Content Extraction
+// ---------------------------------------------------------------------------
+
+function buildExtractionPrompt(videoTitle: string, transcript: string): string {
+  return `You are an expert content analyst. Analyze the following video transcript and extract structured information about what it teaches.
+
+VIDEO TITLE: "${videoTitle}"
+
+TRANSCRIPT:
+${transcript}
+
+Extract the following information as JSON (no markdown, no code fences):
+{
+  "keyConcepts": ["3-5 key concepts, techniques, or ideas taught in this video"],
+  "skillsIntroduced": ["specific skills, frameworks, or methodologies introduced"],
+  "memorableExamples": ["notable examples, case studies, or stories used to illustrate points"],
+  "difficultyLevel": "beginner | intermediate | advanced",
+  "summary": "2-3 sentence summary of what this video teaches and its core message"
+}
+
+Be specific and concrete — reference actual content from the transcript, not generic descriptions.
+Return ONLY the JSON object.`;
+}
+
+async function extractSingleDigest(
+  videoId: string,
+  videoTitle: string,
+  transcript: string,
+  provider: LLMProvider,
+): Promise<ContentDigest> {
+  const prompt = buildExtractionPrompt(videoTitle, transcript);
+
+  let raw: string;
+  if (provider === "anthropic") {
+    const key = process.env.ANTHROPIC_API_KEY;
+    if (!key) throw new Error("ANTHROPIC_API_KEY not set");
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
+        max_tokens: 1024,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) throw new Error(`Anthropic API error: ${res.status}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await res.json();
+    raw = data.content[0].text;
+  } else {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) throw new Error("OPENAI_API_KEY not set");
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || "gpt-4o",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 1024,
+      }),
+    });
+    if (!res.ok) throw new Error(`OpenAI API error: ${res.status}`);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await res.json();
+    raw = data.choices[0].message.content;
+  }
+
+  try {
+    const json = extractJSON(raw);
+    const parsed = JSON.parse(json);
+    return {
+      videoId,
+      videoTitle,
+      keyConcepts: parsed.keyConcepts ?? [],
+      skillsIntroduced: parsed.skillsIntroduced ?? [],
+      memorableExamples: parsed.memorableExamples ?? [],
+      difficultyLevel: parsed.difficultyLevel ?? "intermediate",
+      summary: parsed.summary ?? "",
+    };
+  } catch (err) {
+    console.error(`[LLM] Failed to parse content digest for ${videoId}:`, err);
+    return fallbackDigest(videoId, videoTitle);
+  }
+}
+
+function fallbackDigest(videoId: string, videoTitle: string): ContentDigest {
+  return {
+    videoId,
+    videoTitle,
+    keyConcepts: [],
+    skillsIntroduced: [],
+    memorableExamples: [],
+    difficultyLevel: "intermediate",
+    summary: `Content from "${videoTitle}"`,
+  };
+}
+
+/**
+ * Pass 1: Extract structured content digests from each video's transcript.
+ * Parallelized with concurrency limit. Gracefully falls back per-video on failure.
+ */
+export async function extractContentDigests(
+  videos: { videoId: string; videoTitle: string; transcript: string | null }[],
+  onProgress?: (completed: number, total: number) => void,
+): Promise<ContentDigest[]> {
+  const provider = (process.env.LLM_PROVIDER || "stub") as LLMProvider;
+
+  if (provider === "stub") {
+    const digests = videos.map((v) =>
+      generateStubContentDigest(v.videoId, v.videoTitle),
+    );
+    onProgress?.(videos.length, videos.length);
+    return digests;
+  }
+
+  const CONCURRENCY = 3;
+  const digests: ContentDigest[] = [];
+  let completed = 0;
+
+  for (let i = 0; i < videos.length; i += CONCURRENCY) {
+    const batch = videos.slice(i, i + CONCURRENCY);
+    const results = await Promise.allSettled(
+      batch.map((v) => {
+        if (!v.transcript || v.transcript.length < 50) {
+          return Promise.resolve(fallbackDigest(v.videoId, v.videoTitle));
+        }
+        return extractSingleDigest(v.videoId, v.videoTitle, v.transcript, provider);
+      }),
+    );
+
+    for (let j = 0; j < results.length; j++) {
+      const result = results[j];
+      if (result.status === "fulfilled") {
+        digests.push(result.value);
+      } else {
+        console.error("[LLM] Content extraction failed:", result.reason);
+        digests.push(fallbackDigest(batch[j].videoId, batch[j].videoTitle));
+      }
+    }
+
+    completed += batch.length;
+    onProgress?.(completed, videos.length);
+  }
+
+  return digests;
+}
+
+// ---------------------------------------------------------------------------
+// Pass 2: Curriculum Generation
+// ---------------------------------------------------------------------------
 
 export async function generateProgramDraft(
   input: GenerateInput
@@ -48,6 +222,8 @@ export async function generateProgramDraft(
     hasTargetTransformation: !!input.targetTransformation,
     hasVibePrompt: !!input.vibePrompt,
     hasTranscripts: input.clusters.some(c => c.videoTranscripts?.some(t => t && t.length > 0)),
+    hasContentDigests: !!input.contentDigests?.length,
+    digestCount: input.contentDigests?.length ?? 0,
   };
   console.log(`[LLM] Generation request:`, JSON.stringify(inputSummary));
   console.log(`[LLM] Using provider: ${provider}`);
@@ -101,6 +277,10 @@ export async function generateProgramDraft(
   throw new Error("Unreachable");
 }
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 function extractJSON(text: string): string {
   // Try to find JSON block in markdown code fence or raw
   const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -113,6 +293,11 @@ function extractJSON(text: string): string {
 }
 
 function buildPrompt(input: GenerateInput): string {
+  // Build digest lookup
+  const digestMap = new Map(
+    (input.contentDigests ?? []).map((d) => [d.videoId, d]),
+  );
+
   // Flatten all videos with their transcripts for the prompt
   const allVideos: { id: string; title: string; transcript?: string; clusterId: number }[] = [];
   for (const c of input.clusters) {
@@ -126,8 +311,20 @@ function buildPrompt(input: GenerateInput): string {
     }
   }
 
-  // Build video descriptions with transcripts
+  // Build video descriptions — use rich digests when available, fall back to transcript snippet
   const videoDescriptions = allVideos.map((v, i) => {
+    const digest = digestMap.get(v.id);
+    if (digest && digest.keyConcepts.length > 0) {
+      return [
+        `${i + 1}. "${v.title}" (ID: ${v.id}, Cluster: ${v.clusterId})`,
+        `   Summary: ${digest.summary}`,
+        `   Key concepts: ${digest.keyConcepts.join(", ")}`,
+        `   Skills introduced: ${digest.skillsIntroduced.join(", ") || "N/A"}`,
+        `   Notable examples: ${digest.memorableExamples.join("; ") || "N/A"}`,
+        `   Difficulty: ${digest.difficultyLevel}`,
+      ].join("\n");
+    }
+    // Fallback to transcript snippet
     const transcriptSnippet = v.transcript
       ? `\n   Content preview: ${v.transcript.slice(0, 600)}${v.transcript.length > 600 ? "..." : ""}`
       : "";
@@ -244,7 +441,11 @@ QUALITY GUIDELINES:
 - REFLECT prompts should encourage deep thinking and personal application
 - Build complexity progressively - earlier weeks introduce concepts, later weeks integrate them
 - Final week should synthesize learning and prepare for real-world application
-- If a style guide was provided, ensure all content matches that tone and energy`;
+- If a style guide was provided, ensure all content matches that tone and energy
+- Use the specific concepts, skills, and examples from each video to design exercises and reflection prompts
+- DO exercises should reference real techniques from the video content, not generic activities
+- Reflection prompts should ask about specific concepts or examples mentioned in the videos
+- Key takeaways should reflect actual insights from the video content`;
 }
 
 async function callAnthropic(input: GenerateInput): Promise<string> {
@@ -260,7 +461,7 @@ async function callAnthropic(input: GenerateInput): Promise<string> {
     },
     body: JSON.stringify({
       model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [{ role: "user", content: buildPrompt(input) }],
     }),
   });
@@ -287,7 +488,7 @@ async function callOpenAI(input: GenerateInput): Promise<string> {
     body: JSON.stringify({
       model,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 4096,
+      max_tokens: 8192,
     }),
   });
 
@@ -304,7 +505,7 @@ async function repairJSON(
   badOutput: string,
   error: string,
   provider: LLMProvider,
-  input: GenerateInput
+  _input: GenerateInput
 ): Promise<string> {
   const repairPrompt = `The following JSON output was invalid:\n\n${badOutput}\n\nError: ${error}\n\nPlease fix the JSON to match the required schema and return ONLY valid JSON.`;
 
@@ -319,7 +520,7 @@ async function repairJSON(
       },
       body: JSON.stringify({
         model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
-        max_tokens: 4096,
+        max_tokens: 8192,
         messages: [{ role: "user", content: repairPrompt }],
       }),
     });
@@ -339,7 +540,7 @@ async function repairJSON(
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL || "gpt-4o",
       messages: [{ role: "user", content: repairPrompt }],
-      max_tokens: 4096,
+      max_tokens: 8192,
     }),
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -40,6 +40,9 @@ const config: Config = {
         "slide-up-delay-3": "slide-up 0.8s ease-out 0.45s both",
         "gradient-x": "gradient-x 8s ease infinite",
         "border-glow": "border-glow 4s ease infinite",
+        "step-pulse": "step-pulse 2s ease-in-out infinite",
+        "step-complete": "step-complete 0.4s ease-out",
+        "text-shimmer": "text-shimmer 3s linear infinite",
       },
       keyframes: {
         "glow-pulse": {
@@ -62,6 +65,20 @@ const config: Config = {
           "0%, 100%": { borderColor: "#00fff0" },
           "33%": { borderColor: "#ff2dff" },
           "66%": { borderColor: "#ffe600" },
+        },
+        "step-pulse": {
+          "0%": { boxShadow: "0 0 0 0 rgba(255, 45, 255, 0.4)" },
+          "70%": { boxShadow: "0 0 0 8px rgba(255, 45, 255, 0)" },
+          "100%": { boxShadow: "0 0 0 0 rgba(255, 45, 255, 0)" },
+        },
+        "step-complete": {
+          "0%": { transform: "scale(0.8)", opacity: "0" },
+          "50%": { transform: "scale(1.15)" },
+          "100%": { transform: "scale(1)", opacity: "1" },
+        },
+        "text-shimmer": {
+          "0%": { backgroundPosition: "-200% center" },
+          "100%": { backgroundPosition: "200% center" },
         },
       },
     },

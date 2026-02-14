@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useGenerationSteps } from "./useGenerationSteps";
+import { GenerationSteps } from "./GenerationSteps";
 
 interface GenerationJob {
   jobId: string;
@@ -17,16 +19,6 @@ interface GenerationNotificationProps {
   onComplete?: () => void;
   onDismiss?: () => void;
 }
-
-const STAGE_LABELS: Record<string, string> = {
-  queued: "Queued",
-  embedding: "Analyzing videos...",
-  clustering: "Grouping content...",
-  generating: "Creating curriculum...",
-  validating: "Validating structure...",
-  persisting: "Saving program...",
-  complete: "Complete!",
-};
 
 export function GenerationNotification({
   programId,
@@ -86,8 +78,6 @@ export function GenerationNotification({
     router.push(`/programs/${programId}/edit`);
     handleDismiss();
   };
-
-  const stageLabel = job.stage ? STAGE_LABELS[job.stage] || job.stage : "Starting...";
 
   return (
     <div className="fixed bottom-4 right-4 z-50 max-w-sm animate-slide-up">
@@ -155,17 +145,7 @@ export function GenerationNotification({
                 Your program has been generated and is ready to edit.
               </p>
             ) : (
-              <>
-                <p className="text-xs text-gray-400 mt-1">{stageLabel}</p>
-                {/* Progress bar */}
-                <div className="mt-2 h-1.5 bg-surface-dark rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all duration-500"
-                    style={{ width: `${job.progress}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-gray-500 mt-1">{job.progress}% complete</p>
-              </>
+              <CompactProgress stage={job.stage} progress={job.progress} status={job.status} />
             )}
 
             {/* Actions */}
@@ -192,6 +172,20 @@ export function GenerationNotification({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CompactProgress({ stage, progress, status }: { stage: string | null; progress: number; status: string }) {
+  const stepsData = useGenerationSteps({ stage, progress, status });
+  return (
+    <div className="mt-1">
+      <GenerationSteps
+        steps={stepsData.steps}
+        activeStepIndex={stepsData.activeStepIndex}
+        displayProgress={stepsData.displayProgress}
+        variant="compact"
+      />
     </div>
   );
 }
