@@ -1,5 +1,5 @@
 /**
- * Hugging Face Inference API — embeddings.
+ * Hugging Face Inference API — embeddings via official SDK.
  *
  * Default model: sentence-transformers/all-MiniLM-L6-v2 (384-dim, fast, free-tier friendly)
  * Override via HF_EMBEDDING_MODEL env var.
@@ -7,9 +7,9 @@
  * If HUGGINGFACEHUB_API_TOKEN is not set, uses deterministic stub embeddings for local dev.
  */
 
+import { InferenceClient } from "@huggingface/inference";
+
 const DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2";
-const MAX_RETRIES = 3;
-const BASE_DELAY_MS = 1000;
 const EMBEDDING_DIM = 384;
 
 interface EmbeddingResult {
@@ -52,7 +52,7 @@ export async function getEmbeddings(
   }
 
   const model = process.env.HF_EMBEDDING_MODEL || DEFAULT_MODEL;
-  const url = `https://api-inference.huggingface.co/pipeline/feature-extraction/${model}`;
+  const client = new InferenceClient(token);
 
   const results: EmbeddingResult[] = [];
 
@@ -62,47 +62,25 @@ export async function getEmbeddings(
     const batch = inputs.slice(i, i + batchSize);
     const texts = batch.map((b) => b.text);
 
-    const embeddings = await fetchWithRetry(url, token, texts);
+    // Use featureExtraction which correctly routes the task
+    // even for models tagged as sentence-similarity
+    const embeddings = await client.featureExtraction({
+      model,
+      inputs: texts,
+      provider: "hf-inference",
+    });
+
+    // Response is number[][] (one embedding per input text)
+    const embeddingArrays = embeddings as unknown as number[][];
 
     for (let j = 0; j < batch.length; j++) {
       results.push({
         videoId: batch[j].videoId,
         text: batch[j].text,
-        embedding: embeddings[j],
+        embedding: embeddingArrays[j],
       });
     }
   }
 
   return results;
-}
-
-async function fetchWithRetry(
-  url: string,
-  token: string,
-  inputs: string[]
-): Promise<number[][]> {
-  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ inputs, options: { wait_for_model: true } }),
-    });
-
-    if (res.ok) {
-      return res.json();
-    }
-
-    if (res.status === 429 || res.status >= 500) {
-      const delay = BASE_DELAY_MS * Math.pow(2, attempt);
-      await new Promise((r) => setTimeout(r, delay));
-      continue;
-    }
-
-    throw new Error(`HF API error: ${res.status} ${await res.text()}`);
-  }
-
-  throw new Error("HF API: max retries exceeded");
 }

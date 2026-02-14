@@ -6,6 +6,7 @@
   "scripts": {},
   "dependencies": {
     "@guide-rail/shared": "workspace:*",
+    "@huggingface/inference": "^4.13.12",
     "zod": "^3.23.8"
   },
   "devDependencies": {
