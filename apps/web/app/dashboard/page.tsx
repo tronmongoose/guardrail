@@ -16,13 +16,6 @@ interface ProgramWithGeneration extends ProgramListItem {
   generationJob?: GenerationJob | null;
 }
 
-interface StripeConnectStatus {
-  connected: boolean;
-  status: string | null;
-  onboardingComplete: boolean;
-  chargesEnabled?: boolean;
-  payoutsEnabled?: boolean;
-}
 
 function getTimeAgo(date: Date): string {
   const now = new Date();
@@ -52,8 +45,6 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus | null>(null);
-  const [connectingStripe, setConnectingStripe] = useState(false);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -62,31 +53,19 @@ export default function DashboardPage() {
       return;
     }
 
-    // Check if onboarding is complete
-    fetch("/api/user/onboarding")
-      .then((res) => res.json())
-      .then((data) => {
-        if (!data.onboardingComplete) {
-          router.push("/onboarding");
-          return null;
+    // Fetch programs and user data in parallel
+    Promise.all([
+      fetch("/api/programs").then(r => r.json()),
+      fetch("/api/user/onboarding").then(r => r.json()),
+    ])
+      .then(([programsData, userData]) => {
+        // If no programs and onboarding not complete, redirect to /new
+        if ((!Array.isArray(programsData) || programsData.length === 0) && !userData.onboardingComplete) {
+          router.push("/new");
+          return;
         }
-        return Promise.all([
-          fetch("/api/programs"),
-          fetch("/api/stripe/connect"),
-        ]);
-      })
-      .then(async (responses) => {
-        if (!responses) return;
-        const [programsRes, stripeRes] = responses;
 
-        if (!programsRes.ok) throw new Error("Failed to load programs");
-        const programsData = await programsRes.json();
         setPrograms(programsData);
-
-        if (stripeRes.ok) {
-          const stripeData = await stripeRes.json();
-          setStripeStatus(stripeData);
-        }
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -106,31 +85,6 @@ export default function DashboardPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create program");
       setCreating(false);
-    }
-  };
-
-  const handleConnectStripe = async () => {
-    setConnectingStripe(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/stripe/connect", { method: "POST" });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        // Build detailed error message
-        let errorMsg = data.error || "Failed to start Stripe onboarding";
-        if (data.code) {
-          errorMsg += ` (${data.code})`;
-        }
-        if (data.hint) {
-          errorMsg += `. ${data.hint}`;
-        }
-        throw new Error(errorMsg);
-      }
-      // Redirect to Stripe onboarding
-      window.location.href = data.url;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to connect Stripe");
-      setConnectingStripe(false);
     }
   };
 
@@ -157,53 +111,6 @@ export default function DashboardPage() {
       </nav>
 
       <main className="max-w-2xl mx-auto px-4 py-8">
-        {/* Stripe Connect Card */}
-        <div className="mb-8 bg-surface-card border border-surface-border rounded-xl p-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <div className="flex items-center gap-2 mb-1">
-                <svg className="w-5 h-5 text-[#635BFF]" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305z" />
-                </svg>
-                <h3 className="font-semibold text-white">Payouts</h3>
-                {stripeStatus?.onboardingComplete ? (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30">
-                    Connected
-                  </span>
-                ) : stripeStatus?.connected ? (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-neon-yellow/10 text-neon-yellow border border-neon-yellow/30">
-                    Pending
-                  </span>
-                ) : (
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-500/10 text-gray-400 border border-gray-500/30">
-                    Not connected
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-gray-400">
-                {stripeStatus?.onboardingComplete
-                  ? "Your Stripe account is connected. You'll receive payouts for paid programs."
-                  : stripeStatus?.connected
-                  ? "Complete your Stripe setup to start receiving payouts."
-                  : "Connect Stripe to receive payouts when learners purchase your programs."}
-              </p>
-            </div>
-            {!stripeStatus?.onboardingComplete && (
-              <button
-                onClick={handleConnectStripe}
-                disabled={connectingStripe}
-                className="flex-shrink-0 px-4 py-2 bg-[#635BFF] text-white text-sm font-medium rounded-lg hover:bg-[#5851ea] transition disabled:opacity-50"
-              >
-                {connectingStripe
-                  ? "Connecting..."
-                  : stripeStatus?.connected
-                  ? "Complete Setup"
-                  : "Connect Stripe"}
-              </button>
-            )}
-          </div>
-        </div>
-
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-white">Your Programs</h1>
           <button

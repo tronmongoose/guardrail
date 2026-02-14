@@ -43,6 +43,7 @@ export function AuthCTA() {
         </SignInButton>
       </SignedOut>
       <SignedIn>
+        {/* Dashboard will redirect to /new if they have no programs */}
         <Link
           href="/dashboard"
           className="btn-neon px-8 py-4 rounded-xl text-surface-dark text-center font-bold"

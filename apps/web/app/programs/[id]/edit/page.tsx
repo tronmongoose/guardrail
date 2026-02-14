@@ -14,6 +14,12 @@ import { SkinPicker } from "@/components/skins/SkinPicker";
 import { PreviewModal } from "@/components/preview/PreviewModal";
 import { getSkin } from "@/lib/skins";
 
+interface StripeConnectStatus {
+  connected: boolean;
+  status: string | null;
+  onboardingComplete: boolean;
+}
+
 interface Program {
   id: string;
   title: string;
@@ -51,6 +57,14 @@ export default function ProgramEditPage() {
   const [showPricePicker, setShowPricePicker] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [publishErrors, setPublishErrors] = useState<{ field: string; message: string }[] | null>(null);
+  const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus | null>(null);
+  const [showStripePrompt, setShowStripePrompt] = useState(false);
+  const [connectingStripe, setConnectingStripe] = useState(false);
+
+  // Async generation tracking
+  const [asyncGenerating, setAsyncGenerating] = useState(false);
+  const [asyncStage, setAsyncStage] = useState<string | null>(null);
+  const [asyncProgress, setAsyncProgress] = useState(0);
 
   const load = useCallback(async (retryCount = 0) => {
     const maxRetries = 3;
@@ -81,7 +95,52 @@ export default function ProgramEditPage() {
 
   useEffect(() => {
     load();
-  }, [load]);
+    // Fetch Stripe status
+    fetch("/api/stripe/connect")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data) setStripeStatus(data);
+      });
+    // Check if async generation is in progress
+    fetch(`/api/programs/${id}/generate-async/status`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && (data.status === "PENDING" || data.status === "PROCESSING")) {
+          setAsyncGenerating(true);
+          setAsyncStage(data.stage);
+          setAsyncProgress(data.progress || 0);
+        }
+      });
+  }, [load, id]);
+
+  // Poll for async generation progress
+  useEffect(() => {
+    if (!asyncGenerating) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/programs/${id}/generate-async/status`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        setAsyncStage(data.stage);
+        setAsyncProgress(data.progress || 0);
+
+        if (data.status === "COMPLETED") {
+          setAsyncGenerating(false);
+          await load();
+          showToast("Program generated!", "success");
+        } else if (data.status === "FAILED") {
+          setAsyncGenerating(false);
+          showToast(data.error || "Generation failed", "error");
+        }
+      } catch {
+        // silently retry next interval
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [asyncGenerating, id, load, showToast]);
 
   async function generateStructure() {
     setGenerating(true);
@@ -119,6 +178,12 @@ export default function ProgramEditPage() {
       const data = await res.json();
 
       if (!res.ok) {
+        // Handle Stripe requirement for paid programs
+        if (data.code === "STRIPE_REQUIRED") {
+          setPublishing(false);
+          setShowStripePrompt(true);
+          return;
+        }
         if (data.validationErrors) {
           setPublishErrors(data.validationErrors);
           showToast("Please fix the issues before publishing", "error");
@@ -154,6 +219,13 @@ export default function ProgramEditPage() {
   }
 
   async function handlePriceChange(priceInCents: number) {
+    // If setting a paid price and Stripe not connected, show the prompt
+    if (priceInCents > 0 && !stripeStatus?.onboardingComplete) {
+      setShowPricePicker(false);
+      setShowStripePrompt(true);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/programs/${id}`, {
         method: "PATCH",
@@ -165,6 +237,22 @@ export default function ProgramEditPage() {
       showToast("Price updated", "success");
     } catch {
       showToast("Failed to update price", "error");
+    }
+  }
+
+  async function handleConnectStripe() {
+    setConnectingStripe(true);
+    try {
+      const res = await fetch("/api/stripe/connect", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to start Stripe onboarding");
+      }
+      // Redirect to Stripe onboarding
+      window.location.href = data.url;
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to connect Stripe", "error");
+      setConnectingStripe(false);
     }
   }
 
@@ -333,6 +421,70 @@ export default function ProgramEditPage() {
           >
             Got it
           </button>
+        </div>
+      </div>
+    )}
+
+    {/* Stripe Connect Prompt Modal */}
+    {showStripePrompt && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="bg-surface-card border border-surface-border rounded-2xl p-8 max-w-md w-full mx-4 text-center">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[#635BFF]/10 border border-[#635BFF]/30 flex items-center justify-center">
+            <svg className="w-8 h-8 text-[#635BFF]" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Connect Stripe to Get Paid</h2>
+          <p className="text-gray-400 mb-6 text-sm">
+            To sell your program, you&apos;ll need to connect a Stripe account. This takes just a few minutes and lets you receive payments directly.
+          </p>
+
+          <div className="bg-surface-dark rounded-lg p-4 mb-6 text-left">
+            <h3 className="text-sm font-medium text-white mb-2">What happens next:</h3>
+            <ul className="space-y-2 text-sm text-gray-400">
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-neon-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Quick setup through Stripe (2-3 min)
+              </li>
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-neon-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Receive payments directly to your bank
+              </li>
+              <li className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-neon-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Return here to publish your program
+              </li>
+            </ul>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowStripePrompt(false)}
+              className="flex-1 px-4 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-gray-300 hover:border-neon-cyan transition"
+            >
+              Maybe later
+            </button>
+            <button
+              onClick={handleConnectStripe}
+              disabled={connectingStripe}
+              className="flex-1 px-4 py-2.5 bg-[#635BFF] text-white font-medium rounded-lg hover:bg-[#5851ea] transition disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              {connectingStripe ? (
+                <>
+                  <Spinner size="sm" />
+                  Connecting...
+                </>
+              ) : (
+                "Connect Stripe"
+              )}
+            </button>
+          </div>
         </div>
       </div>
     )}
@@ -547,8 +699,43 @@ export default function ProgramEditPage() {
               Open Program Wizard
             </button>
           </div>
+        ) : program.weeks.length === 0 && asyncGenerating ? (
+          // Async generation in progress - show live progress
+          <div className="max-w-lg mx-auto mt-16 text-center">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-neon-pink/10 border border-neon-pink/30 flex items-center justify-center">
+              <svg className="w-10 h-10 text-neon-pink animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-3">Building your program...</h2>
+            <p className="text-gray-400 mb-6">
+              {asyncStage === "embedding"
+                ? "Analyzing your videos..."
+                : asyncStage === "clustering"
+                ? "Grouping content into themes..."
+                : asyncStage === "generating"
+                ? "Creating your curriculum with AI..."
+                : asyncStage === "persisting"
+                ? "Saving your program..."
+                : "Queued and starting up..."}
+            </p>
+
+            <div className="max-w-sm mx-auto mb-4">
+              <div className="h-2 bg-surface-dark rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all duration-500"
+                  style={{ width: `${asyncProgress}%` }}
+                />
+              </div>
+              <p className="text-sm text-gray-500 mt-2">{asyncProgress}% complete</p>
+            </div>
+
+            <p className="text-xs text-gray-600">
+              This usually takes 10-30 seconds
+            </p>
+          </div>
         ) : program.weeks.length === 0 ? (
-          // Has videos but no structure yet
+          // Has videos but no structure yet (and no async generation running)
           <div className="max-w-lg mx-auto mt-16 text-center">
             <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-neon-pink/10 border border-neon-pink/30 flex items-center justify-center">
               <svg className="w-10 h-10 text-neon-pink" fill="none" stroke="currentColor" viewBox="0 0 24 24">
