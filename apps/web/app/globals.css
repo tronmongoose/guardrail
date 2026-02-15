@@ -110,3 +110,46 @@ body {
   0% { background-position: -200% center; }
   100% { background-position: 200% center; }
 }
+
+/* Pulse ring for "Up Next" action highlight */
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(0, 255, 240, 0.3); }
+  70% { box-shadow: 0 0 0 6px rgba(0, 255, 240, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 255, 240, 0); }
+}
+
+.pulse-ring-border {
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+/* Confetti burst for milestone celebrations */
+.confetti-burst {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  pointer-events: none;
+}
+
+@keyframes confetti-dot-burst {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(var(--dot-angle)) translateX(0) scale(1);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-50%, -50%) rotate(var(--dot-angle)) translateX(var(--dot-distance)) scale(1.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--dot-angle)) translateX(var(--dot-distance)) scale(0);
+  }
+}
+
+.confetti-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot-color);
+  animation: confetti-dot-burst 0.8s ease-out forwards;
+}
