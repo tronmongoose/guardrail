@@ -169,20 +169,20 @@ export const videoLogger = {
  * AI generation logging helpers
  */
 export const aiLogger = {
-  embeddingStart(programId: string, videoCount: number) {
+  embeddingStart(programId: string, contentCount: number) {
     logger.info({
       operation: "ai.embedding.start",
       programId,
-      videoCount,
+      contentCount,
     });
   },
 
-  embeddingSuccess(programId: string, durationMs: number, videoCount: number) {
+  embeddingSuccess(programId: string, durationMs: number, contentCount: number) {
     logger.info({
       operation: "ai.embedding.success",
       programId,
       durationMs,
-      videoCount,
+      contentCount,
       success: true,
     });
   },
@@ -267,20 +267,20 @@ export const aiLogger = {
     });
   },
 
-  extractionStart(programId: string, videoCount: number) {
+  extractionStart(programId: string, contentCount: number) {
     logger.info({
       operation: "ai.extraction.start",
       programId,
-      videoCount,
+      contentCount,
     });
   },
 
-  extractionSuccess(programId: string, durationMs: number, videoCount: number) {
+  extractionSuccess(programId: string, durationMs: number, contentCount: number) {
     logger.info({
       operation: "ai.extraction.success",
       programId,
       durationMs,
-      videoCount,
+      contentCount,
       success: true,
     });
   },

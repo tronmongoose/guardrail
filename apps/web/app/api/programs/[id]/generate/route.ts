@@ -36,17 +36,17 @@ export async function POST(
 
   // Build cluster groups from stored assignments
   const videoMap = new Map(program.videos.map((v) => [v.id, v]));
-  const clusterMap = new Map<number, { videoIds: string[]; videoTitles: string[]; videoTranscripts: string[] }>();
+  const clusterMap = new Map<number, { contentIds: string[]; contentTitles: string[]; contentTranscripts: string[] }>();
 
   for (const ca of program.clusters) {
     if (!clusterMap.has(ca.clusterId)) {
-      clusterMap.set(ca.clusterId, { videoIds: [], videoTitles: [], videoTranscripts: [] });
+      clusterMap.set(ca.clusterId, { contentIds: [], contentTitles: [], contentTranscripts: [] });
     }
     const group = clusterMap.get(ca.clusterId)!;
     const video = videoMap.get(ca.videoId);
-    group.videoIds.push(ca.videoId);
-    group.videoTitles.push(video?.title ?? "Untitled");
-    group.videoTranscripts.push(video?.transcript ?? "");
+    group.contentIds.push(ca.videoId);
+    group.contentTitles.push(video?.title ?? "Untitled");
+    group.contentTranscripts.push(video?.transcript ?? "");
   }
 
   const clusters = Array.from(clusterMap.entries())
@@ -54,7 +54,7 @@ export async function POST(
     .map(([clusterId, data]) => ({
       clusterId,
       ...data,
-      summary: `Group of ${data.videoIds.length} video(s)`,
+      summary: `Group of ${data.contentIds.length} video(s)`,
     }));
 
   aiLogger.generationStart(programId, {

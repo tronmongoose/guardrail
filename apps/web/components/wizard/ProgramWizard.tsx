@@ -32,7 +32,7 @@ export interface WizardState {
       id?: string;
       originalFilename: string;
       fileType: string;
-      extractedText: string;
+      extractedText?: string;
       metadata: { pageCount?: number; wordCount: number };
     }>;
   };
@@ -105,9 +105,16 @@ export function ProgramWizard({
   });
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Persist state to localStorage
+  // Persist state to localStorage (exclude extractedText to avoid quota issues with large docs)
   useEffect(() => {
-    localStorage.setItem(getStorageKey(programId), JSON.stringify(state));
+    const serializable = {
+      ...state,
+      content: {
+        ...state.content,
+        artifacts: state.content.artifacts.map(({ extractedText, ...rest }) => rest),
+      },
+    };
+    localStorage.setItem(getStorageKey(programId), JSON.stringify(serializable));
   }, [programId, state]);
 
   const updateState = useCallback(

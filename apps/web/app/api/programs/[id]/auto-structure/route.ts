@@ -31,7 +31,7 @@ export async function POST(
   // Step 1: Get embeddings via HF
   // Use transcript if available, otherwise fall back to title + description
   const embeddingInputs = program.videos.map((v) => ({
-    videoId: v.id,
+    contentId: v.id,
     text: v.transcript
       ? `${v.title ?? ""}: ${v.transcript}`.slice(0, 2000) // Truncate for embedding
       : `${v.title ?? ""} ${v.description ?? ""}`.trim() || v.videoId,
@@ -58,13 +58,13 @@ export async function POST(
       where: {
         programId_videoId_model: {
           programId,
-          videoId: result.videoId,
+          videoId: result.contentId,
           model: HF_MODEL,
         },
       },
       create: {
         programId,
-        videoId: result.videoId,
+        videoId: result.contentId,
         model: HF_MODEL,
         vector: result.embedding,
       },
@@ -76,7 +76,7 @@ export async function POST(
 
   // Step 3: Cluster
   const clusterInputs = embeddingResults.map((r) => ({
-    videoId: r.videoId,
+    contentId: r.contentId,
     embedding: r.embedding,
   }));
 
@@ -90,7 +90,7 @@ export async function POST(
 
   // Step 4: Store cluster assignments
   for (const cluster of clusters) {
-    for (const videoId of cluster.videoIds) {
+    for (const videoId of cluster.contentIds) {
       await prisma.clusterAssignment.upsert({
         where: { programId_videoId: { programId, videoId } },
         create: { programId, videoId, clusterId: cluster.clusterId },
@@ -103,9 +103,9 @@ export async function POST(
   const videoMap = new Map(program.videos.map((v) => [v.id, v]));
   const clusterResponse = clusters.map((c) => ({
     clusterId: c.clusterId,
-    videoIds: c.videoIds,
-    videoTitles: c.videoIds.map((vid) => videoMap.get(vid)?.title ?? "Untitled"),
-    summary: `Group of ${c.videoIds.length} related video(s)`,
+    videoIds: c.contentIds,
+    videoTitles: c.contentIds.map((vid) => videoMap.get(vid)?.title ?? "Untitled"),
+    summary: `Group of ${c.contentIds.length} related video(s)`,
   }));
 
   return NextResponse.json({ programId, clusters: clusterResponse });

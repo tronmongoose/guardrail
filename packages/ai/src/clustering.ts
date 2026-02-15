@@ -6,13 +6,13 @@
  */
 
 export interface ClusterInput {
-  videoId: string;
+  contentId: string;
   embedding: number[];
 }
 
 export interface ClusterOutput {
   clusterId: number;
-  videoIds: string[];
+  contentIds: string[];
 }
 
 export function clusterEmbeddings(
@@ -27,7 +27,7 @@ export function clusterEmbeddings(
   if (n <= numClusters) {
     return inputs.map((inp, i) => ({
       clusterId: i,
-      videoIds: [inp.videoId],
+      contentIds: [inp.contentId],
     }));
   }
 
@@ -76,17 +76,17 @@ export function clusterEmbeddings(
     }
   }
 
-  // Build output, stable ordering by first videoId appearance
+  // Build output, stable ordering by first contentId appearance
   const clusterMap = new Map<number, string[]>();
   for (let i = 0; i < n; i++) {
     const c = assignments[i];
     if (!clusterMap.has(c)) clusterMap.set(c, []);
-    clusterMap.get(c)!.push(inputs[i].videoId);
+    clusterMap.get(c)!.push(inputs[i].contentId);
   }
 
   return Array.from(clusterMap.entries())
     .sort((a, b) => a[0] - b[0])
-    .map(([clusterId, videoIds]) => ({ clusterId, videoIds }));
+    .map(([clusterId, contentIds]) => ({ clusterId, contentIds }));
 }
 
 function euclideanDistSq(a: number[], b: number[]): number {

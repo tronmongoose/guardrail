@@ -13,7 +13,7 @@ const DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2";
 const EMBEDDING_DIM = 384;
 
 interface EmbeddingResult {
-  videoId: string;
+  contentId: string;
   text: string;
   embedding: number[];
 }
@@ -37,7 +37,7 @@ function generateStubEmbedding(text: string): number[] {
 }
 
 export async function getEmbeddings(
-  inputs: { videoId: string; text: string }[]
+  inputs: { contentId: string; text: string }[]
 ): Promise<EmbeddingResult[]> {
   const token = process.env.HUGGINGFACEHUB_API_TOKEN;
 
@@ -45,7 +45,7 @@ export async function getEmbeddings(
   if (!token) {
     console.log("[embeddings] No HF token, using stub embeddings");
     return inputs.map((input) => ({
-      videoId: input.videoId,
+      contentId: input.contentId,
       text: input.text,
       embedding: generateStubEmbedding(input.text),
     }));
@@ -75,7 +75,7 @@ export async function getEmbeddings(
 
     for (let j = 0; j < batch.length; j++) {
       results.push({
-        videoId: batch[j].videoId,
+        contentId: batch[j].contentId,
         text: batch[j].text,
         embedding: embeddingArrays[j],
       });

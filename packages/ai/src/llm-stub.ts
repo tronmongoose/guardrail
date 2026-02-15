@@ -1,6 +1,6 @@
 /**
  * Stub LLM — generates deterministic ProgramDraft JSON for local dev without API keys.
- * Distributes videos evenly across all weeks.
+ * Distributes content evenly across all weeks.
  */
 
 import type { ProgramDraft } from "@guide-rail/shared";
@@ -17,27 +17,31 @@ interface StubInput {
   durationWeeks: number;
   clusters: {
     clusterId: number;
-    videoIds: string[];
-    videoTitles: string[];
-    videoTranscripts?: string[];
+    contentIds: string[];
+    contentTitles: string[];
+    contentTranscripts?: string[];
+    contentTypes?: ("video" | "document")[];
     summary?: string;
   }[];
   contentDigests?: ContentDigest[];
 }
 
 /**
- * Generate a deterministic content digest from a video title (no API call).
+ * Generate a deterministic content digest from a title (no API call).
  */
 export function generateStubContentDigest(
-  videoId: string,
-  videoTitle: string,
+  contentId: string,
+  contentTitle: string,
+  contentType: "video" | "document" = "video",
 ): ContentDigest {
-  const titleWords = videoTitle.split(/\s+/).filter((w) => w.length > 3);
+  const titleWords = contentTitle.split(/\s+/).filter((w) => w.length > 3);
   const topic = titleWords.slice(0, 3).join(" ") || "the topic";
+  const sourceLabel = contentType === "video" ? "video" : "document";
 
   return {
-    videoId,
-    videoTitle,
+    contentId,
+    contentTitle,
+    contentType,
     keyConcepts: [
       `Core framework for ${topic}`,
       `Practical application of ${titleWords[0] || "key"} techniques`,
@@ -51,58 +55,68 @@ export function generateStubContentDigest(
       `Case study demonstrating ${topic} in practice`,
     ],
     difficultyLevel: "intermediate",
-    summary: `This video teaches ${topic} through practical examples and frameworks. Viewers learn actionable techniques they can apply immediately.`,
+    summary: `This ${sourceLabel} teaches ${topic} through practical examples and frameworks. Learners gain actionable techniques they can apply immediately.`,
   };
 }
 
 export function generateWithStub(input: StubInput): ProgramDraft {
-  // Flatten all videos from all clusters
-  const allVideos: { id: string; title: string }[] = [];
+  // Flatten all content from all clusters
+  const allContent: { id: string; title: string; type: "video" | "document" }[] = [];
   for (const c of input.clusters) {
-    for (let i = 0; i < c.videoIds.length; i++) {
-      allVideos.push({
-        id: c.videoIds[i],
-        title: c.videoTitles[i] ?? `Video ${allVideos.length + 1}`,
+    for (let i = 0; i < c.contentIds.length; i++) {
+      allContent.push({
+        id: c.contentIds[i],
+        title: c.contentTitles[i] ?? `Content ${allContent.length + 1}`,
+        type: c.contentTypes?.[i] ?? "video",
       });
     }
   }
 
   // Build digest lookup
   const digestMap = new Map(
-    (input.contentDigests ?? []).map((d) => [d.videoId, d]),
+    (input.contentDigests ?? []).map((d) => [d.contentId, d]),
   );
 
-  // Distribute videos across weeks
-  const videosPerWeek = Math.max(1, Math.ceil(allVideos.length / input.durationWeeks));
+  // Distribute content across weeks
+  const itemsPerWeek = Math.max(1, Math.ceil(allContent.length / input.durationWeeks));
   const weeks: ProgramDraft["weeks"] = [];
 
   for (let weekNum = 1; weekNum <= input.durationWeeks; weekNum++) {
-    const startIdx = (weekNum - 1) * videosPerWeek;
-    const weekVideos = allVideos.slice(startIdx, startIdx + videosPerWeek);
+    const startIdx = (weekNum - 1) * itemsPerWeek;
+    const weekContent = allContent.slice(startIdx, startIdx + itemsPerWeek);
 
     const actions: ProgramDraft["weeks"][0]["sessions"][0]["actions"] = [];
     let orderIndex = 0;
 
-    // Add watch actions for each video
-    for (const video of weekVideos) {
-      actions.push({
-        title: `Watch: ${video.title}`,
-        type: "watch" as const,
-        instructions: `Watch the video carefully and take notes on the key concepts discussed.`,
-        youtubeVideoId: video.id,
-        orderIndex: orderIndex++,
-      });
+    // Add watch/read actions for each content item
+    for (const item of weekContent) {
+      if (item.type === "video") {
+        actions.push({
+          title: `Watch: ${item.title}`,
+          type: "watch" as const,
+          instructions: `Watch the video carefully and take notes on the key concepts discussed.`,
+          youtubeVideoId: item.id,
+          orderIndex: orderIndex++,
+        });
+      } else {
+        actions.push({
+          title: `Read: ${item.title}`,
+          type: "read" as const,
+          instructions: `Read through the document and identify the key concepts, frameworks, and actionable insights.`,
+          orderIndex: orderIndex++,
+        });
+      }
     }
 
     // Use digest for content-aware DO/REFLECT when available
-    const weekDigest = weekVideos.length > 0
-      ? digestMap.get(weekVideos[0].id)
+    const weekDigest = weekContent.length > 0
+      ? digestMap.get(weekContent[0].id)
       : undefined;
 
     // Add a DO action
     const doInstructions = weekDigest && weekDigest.keyConcepts.length > 0
-      ? `Apply the "${weekDigest.keyConcepts[0]}" concept:\n1. Review the framework presented in the video\n2. Identify a real situation where this applies to you\n3. Practice using the ${weekDigest.skillsIntroduced[0] || "technique"} on that situation\n4. Document your results and insights`
-      : `Apply what you learned this week:\n1. Review your notes from the videos\n2. Identify one key concept to practice\n3. Complete a hands-on exercise applying that concept\n4. Document what you learned`;
+      ? `Apply the "${weekDigest.keyConcepts[0]}" concept:\n1. Review the framework presented in the content\n2. Identify a real situation where this applies to you\n3. Practice using the ${weekDigest.skillsIntroduced[0] || "technique"} on that situation\n4. Document your results and insights`
+      : `Apply what you learned this week:\n1. Review your notes from the content\n2. Identify one key concept to practice\n3. Complete a hands-on exercise applying that concept\n4. Document what you learned`;
 
     actions.push({
       title: weekDigest
@@ -128,16 +142,16 @@ export function generateWithStub(input: StubInput): ProgramDraft {
       orderIndex: orderIndex++,
     });
 
-    const weekTitle = weekVideos.length > 0
-      ? weekVideos[0].title.split(":")[0] || `Topic ${weekNum}`
+    const weekTitle = weekContent.length > 0
+      ? weekContent[0].title.split(":")[0] || `Topic ${weekNum}`
       : `Review & Integration`;
 
     // Generate keyTakeaways based on digest or context
     const keyTakeaways = weekDigest && weekDigest.keyConcepts.length > 0
       ? weekDigest.keyConcepts.slice(0, 3).map((c) => c.slice(0, 200))
-      : weekVideos.length > 0
+      : weekContent.length > 0
         ? [
-            `Understand the core concepts from ${weekVideos[0].title}`,
+            `Understand the core concepts from ${weekContent[0].title}`,
             `Apply practical techniques to your own situation`,
             input.targetTransformation
               ? `Progress toward: ${input.targetTransformation.slice(0, 80)}`
@@ -153,13 +167,13 @@ export function generateWithStub(input: StubInput): ProgramDraft {
       title: `Week ${weekNum}: ${weekTitle}`,
       summary: weekDigest
         ? weekDigest.summary.slice(0, 500)
-        : weekVideos.length > 0
-          ? `Explore ${weekVideos.length} video(s) and practice key concepts`
+        : weekContent.length > 0
+          ? `Explore ${weekContent.length} content source(s) and practice key concepts`
           : `Review previous weeks and consolidate your learning`,
       weekNumber: weekNum,
       sessions: [
         {
-          title: weekVideos.length > 0 ? `Learning Session` : `Review Session`,
+          title: weekContent.length > 0 ? `Learning Session` : `Review Session`,
           summary: `Week ${weekNum} core activities`,
           keyTakeaways,
           orderIndex: 0,

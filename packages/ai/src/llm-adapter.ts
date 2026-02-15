@@ -2,7 +2,7 @@
  * LLM adapter — provider-agnostic wrapper for generating ProgramDraft JSON.
  *
  * Two-pass architecture:
- *   Pass 1 (extractContentDigests): Per-video content extraction → structured digests
+ *   Pass 1 (extractContentDigests): Per-content-source extraction → structured digests
  *   Pass 2 (generateProgramDraft):  Curriculum design using rich digests
  *
  * Supports: "anthropic" | "openai" | "stub"
@@ -16,8 +16,9 @@ import { generateWithStub, generateStubContentDigest } from "./llm-stub";
 export type LLMProvider = "anthropic" | "openai" | "stub";
 
 export interface ContentDigest {
-  videoId: string;
-  videoTitle: string;
+  contentId: string;
+  contentTitle: string;
+  contentType: "video" | "document";
   keyConcepts: string[];
   skillsIntroduced: string[];
   memorableExamples: string[];
@@ -36,9 +37,10 @@ interface GenerateInput {
   durationWeeks: number;
   clusters: {
     clusterId: number;
-    videoIds: string[];
-    videoTitles: string[];
-    videoTranscripts?: string[];
+    contentIds: string[];
+    contentTitles: string[];
+    contentTranscripts?: string[];
+    contentTypes?: ("video" | "document")[];
     summary?: string;
   }[];
   contentDigests?: ContentDigest[];
@@ -50,34 +52,38 @@ const MAX_REPAIR_ATTEMPTS = 2;
 // Pass 1: Content Extraction
 // ---------------------------------------------------------------------------
 
-function buildExtractionPrompt(videoTitle: string, transcript: string): string {
-  return `You are an expert content analyst. Analyze the following video transcript and extract structured information about what it teaches.
+function buildExtractionPrompt(contentTitle: string, text: string, contentType: "video" | "document" = "video"): string {
+  const sourceLabel = contentType === "video" ? "VIDEO" : "DOCUMENT";
+  const textLabel = contentType === "video" ? "TRANSCRIPT" : "CONTENT";
+  const truncated = text.slice(0, 8000);
+  return `You are an expert content analyst. Analyze the following ${sourceLabel.toLowerCase()} and extract structured information about what it teaches.
 
-VIDEO TITLE: "${videoTitle}"
+${sourceLabel} TITLE: "${contentTitle}"
 
-TRANSCRIPT:
-${transcript}
+${textLabel}:
+${truncated}${text.length > 8000 ? "..." : ""}
 
 Extract the following information as JSON (no markdown, no code fences):
 {
-  "keyConcepts": ["3-5 key concepts, techniques, or ideas taught in this video"],
+  "keyConcepts": ["3-5 key concepts, techniques, or ideas taught in this ${sourceLabel.toLowerCase()}"],
   "skillsIntroduced": ["specific skills, frameworks, or methodologies introduced"],
   "memorableExamples": ["notable examples, case studies, or stories used to illustrate points"],
   "difficultyLevel": "beginner | intermediate | advanced",
-  "summary": "2-3 sentence summary of what this video teaches and its core message"
+  "summary": "2-3 sentence summary of what this ${sourceLabel.toLowerCase()} teaches and its core message"
 }
 
-Be specific and concrete — reference actual content from the transcript, not generic descriptions.
+Be specific and concrete — reference actual content from the ${textLabel.toLowerCase()}, not generic descriptions.
 Return ONLY the JSON object.`;
 }
 
 async function extractSingleDigest(
-  videoId: string,
-  videoTitle: string,
-  transcript: string,
+  contentId: string,
+  contentTitle: string,
+  text: string,
+  contentType: "video" | "document",
   provider: LLMProvider,
 ): Promise<ContentDigest> {
-  const prompt = buildExtractionPrompt(videoTitle, transcript);
+  const prompt = buildExtractionPrompt(contentTitle, text, contentType);
 
   let raw: string;
   if (provider === "anthropic") {
@@ -125,8 +131,9 @@ async function extractSingleDigest(
     const json = extractJSON(raw);
     const parsed = JSON.parse(json);
     return {
-      videoId,
-      videoTitle,
+      contentId,
+      contentTitle,
+      contentType,
       keyConcepts: parsed.keyConcepts ?? [],
       skillsIntroduced: parsed.skillsIntroduced ?? [],
       memorableExamples: parsed.memorableExamples ?? [],
@@ -134,38 +141,39 @@ async function extractSingleDigest(
       summary: parsed.summary ?? "",
     };
   } catch (err) {
-    console.error(`[LLM] Failed to parse content digest for ${videoId}:`, err);
-    return fallbackDigest(videoId, videoTitle);
+    console.error(`[LLM] Failed to parse content digest for ${contentId}:`, err);
+    return fallbackDigest(contentId, contentTitle, contentType);
   }
 }
 
-function fallbackDigest(videoId: string, videoTitle: string): ContentDigest {
+function fallbackDigest(contentId: string, contentTitle: string, contentType: "video" | "document" = "video"): ContentDigest {
   return {
-    videoId,
-    videoTitle,
+    contentId,
+    contentTitle,
+    contentType,
     keyConcepts: [],
     skillsIntroduced: [],
     memorableExamples: [],
     difficultyLevel: "intermediate",
-    summary: `Content from "${videoTitle}"`,
+    summary: `Content from "${contentTitle}"`,
   };
 }
 
 /**
- * Pass 1: Extract structured content digests from each video's transcript.
- * Parallelized with concurrency limit. Gracefully falls back per-video on failure.
+ * Pass 1: Extract structured content digests from each content source.
+ * Parallelized with concurrency limit. Gracefully falls back per-item on failure.
  */
 export async function extractContentDigests(
-  videos: { videoId: string; videoTitle: string; transcript: string | null }[],
+  items: { contentId: string; contentTitle: string; text: string | null; contentType?: "video" | "document" }[],
   onProgress?: (completed: number, total: number) => void,
 ): Promise<ContentDigest[]> {
   const provider = (process.env.LLM_PROVIDER || "stub") as LLMProvider;
 
   if (provider === "stub") {
-    const digests = videos.map((v) =>
-      generateStubContentDigest(v.videoId, v.videoTitle),
+    const digests = items.map((item) =>
+      generateStubContentDigest(item.contentId, item.contentTitle, item.contentType ?? "video"),
     );
-    onProgress?.(videos.length, videos.length);
+    onProgress?.(items.length, items.length);
     return digests;
   }
 
@@ -173,14 +181,15 @@ export async function extractContentDigests(
   const digests: ContentDigest[] = [];
   let completed = 0;
 
-  for (let i = 0; i < videos.length; i += CONCURRENCY) {
-    const batch = videos.slice(i, i + CONCURRENCY);
+  for (let i = 0; i < items.length; i += CONCURRENCY) {
+    const batch = items.slice(i, i + CONCURRENCY);
     const results = await Promise.allSettled(
-      batch.map((v) => {
-        if (!v.transcript || v.transcript.length < 50) {
-          return Promise.resolve(fallbackDigest(v.videoId, v.videoTitle));
+      batch.map((item) => {
+        const ct = item.contentType ?? "video";
+        if (!item.text || item.text.length < 50) {
+          return Promise.resolve(fallbackDigest(item.contentId, item.contentTitle, ct));
         }
-        return extractSingleDigest(v.videoId, v.videoTitle, v.transcript, provider);
+        return extractSingleDigest(item.contentId, item.contentTitle, item.text, ct, provider);
       }),
     );
 
@@ -190,12 +199,12 @@ export async function extractContentDigests(
         digests.push(result.value);
       } else {
         console.error("[LLM] Content extraction failed:", result.reason);
-        digests.push(fallbackDigest(batch[j].videoId, batch[j].videoTitle));
+        digests.push(fallbackDigest(batch[j].contentId, batch[j].contentTitle, batch[j].contentType ?? "video"));
       }
     }
 
     completed += batch.length;
-    onProgress?.(completed, videos.length);
+    onProgress?.(completed, items.length);
   }
 
   return digests;
@@ -215,13 +224,13 @@ export async function generateProgramDraft(
     programId: input.programId,
     programTitle: input.programTitle,
     durationWeeks: input.durationWeeks,
-    totalVideos: input.clusters.reduce((sum, c) => sum + c.videoIds.length, 0),
+    totalContent: input.clusters.reduce((sum, c) => sum + c.contentIds.length, 0),
     clusterCount: input.clusters.length,
     hasOutcomeStatement: !!input.outcomeStatement,
     hasTargetAudience: !!input.targetAudience,
     hasTargetTransformation: !!input.targetTransformation,
     hasVibePrompt: !!input.vibePrompt,
-    hasTranscripts: input.clusters.some(c => c.videoTranscripts?.some(t => t && t.length > 0)),
+    hasTranscripts: input.clusters.some(c => c.contentTranscripts?.some(t => t && t.length > 0)),
     hasContentDigests: !!input.contentDigests?.length,
     digestCount: input.contentDigests?.length ?? 0,
   };
@@ -295,28 +304,35 @@ function extractJSON(text: string): string {
 function buildPrompt(input: GenerateInput): string {
   // Build digest lookup
   const digestMap = new Map(
-    (input.contentDigests ?? []).map((d) => [d.videoId, d]),
+    (input.contentDigests ?? []).map((d) => [d.contentId, d]),
   );
 
-  // Flatten all videos with their transcripts for the prompt
-  const allVideos: { id: string; title: string; transcript?: string; clusterId: number }[] = [];
+  // Flatten all content items with their text for the prompt
+  const allContent: { id: string; title: string; text?: string; clusterId: number; type: "video" | "document" }[] = [];
   for (const c of input.clusters) {
-    for (let i = 0; i < c.videoIds.length; i++) {
-      allVideos.push({
-        id: c.videoIds[i],
-        title: c.videoTitles[i],
-        transcript: c.videoTranscripts?.[i],
+    for (let i = 0; i < c.contentIds.length; i++) {
+      allContent.push({
+        id: c.contentIds[i],
+        title: c.contentTitles[i],
+        text: c.contentTranscripts?.[i],
         clusterId: c.clusterId,
+        type: c.contentTypes?.[i] ?? "video",
       });
     }
   }
 
-  // Build video descriptions — use rich digests when available, fall back to transcript snippet
-  const videoDescriptions = allVideos.map((v, i) => {
-    const digest = digestMap.get(v.id);
+  const videoCount = allContent.filter(c => c.type === "video").length;
+  const docCount = allContent.filter(c => c.type === "document").length;
+  const hasVideos = videoCount > 0;
+  const hasDocs = docCount > 0;
+
+  // Build content descriptions — use rich digests when available, fall back to text snippet
+  const contentDescriptions = allContent.map((item, i) => {
+    const typeLabel = item.type === "video" ? "VIDEO" : "DOCUMENT";
+    const digest = digestMap.get(item.id);
     if (digest && digest.keyConcepts.length > 0) {
       return [
-        `${i + 1}. "${v.title}" (ID: ${v.id}, Cluster: ${v.clusterId})`,
+        `${i + 1}. [${typeLabel}] "${item.title}" (ID: ${item.id}, Cluster: ${item.clusterId})`,
         `   Summary: ${digest.summary}`,
         `   Key concepts: ${digest.keyConcepts.join(", ")}`,
         `   Skills introduced: ${digest.skillsIntroduced.join(", ") || "N/A"}`,
@@ -324,15 +340,21 @@ function buildPrompt(input: GenerateInput): string {
         `   Difficulty: ${digest.difficultyLevel}`,
       ].join("\n");
     }
-    // Fallback to transcript snippet
-    const transcriptSnippet = v.transcript
-      ? `\n   Content preview: ${v.transcript.slice(0, 600)}${v.transcript.length > 600 ? "..." : ""}`
+    // Fallback to text snippet
+    const textSnippet = item.text
+      ? `\n   Content preview: ${item.text.slice(0, 600)}${item.text.length > 600 ? "..." : ""}`
       : "";
-    return `${i + 1}. "${v.title}" (ID: ${v.id}, Cluster: ${v.clusterId})${transcriptSnippet}`;
+    return `${i + 1}. [${typeLabel}] "${item.title}" (ID: ${item.id}, Cluster: ${item.clusterId})${textSnippet}`;
   }).join("\n\n");
 
-  const totalVideos = allVideos.length;
-  const videosPerWeek = Math.max(1, Math.ceil(totalVideos / input.durationWeeks));
+  const totalContent = allContent.length;
+  const contentPerWeek = Math.max(1, Math.ceil(totalContent / input.durationWeeks));
+
+  // Build content summary line
+  const contentSummaryParts: string[] = [];
+  if (hasVideos) contentSummaryParts.push(`${videoCount} video(s)`);
+  if (hasDocs) contentSummaryParts.push(`${docCount} document(s)`);
+  const contentSummary = contentSummaryParts.join(" and ");
 
   // Build audience and transformation context
   const audienceContext = input.targetAudience
@@ -350,38 +372,82 @@ ${input.vibePrompt}
 Apply this style throughout all titles, descriptions, instructions, and reflection prompts.`
     : "";
 
+  // Build content-type-specific action instructions
+  const actionInstructions = [];
+  if (hasVideos) {
+    actionInstructions.push(`  * WATCH action(s) — for VIDEO content, reference videos by their exact ID in the youtubeVideoId field`);
+  }
+  if (hasDocs) {
+    actionInstructions.push(`  * READ action(s) — for DOCUMENT content, create reading assignments that reference the document's key points`);
+  }
+  actionInstructions.push(`  * DO action — practical exercise applying what was learned`);
+  actionInstructions.push(`  * REFLECT action (at least one per week) — thought-provoking prompt connecting to the transformation`);
+
+  // Build action format examples
+  const actionExamples = [];
+  if (hasVideos) {
+    actionExamples.push(`            {
+              "title": "Watch: [Video title]",
+              "type": "watch",
+              "instructions": "Specific guidance on what to focus on while watching",
+              "youtubeVideoId": "[exact video ID from above]",
+              "orderIndex": 0
+            }`);
+  }
+  if (hasDocs) {
+    actionExamples.push(`            {
+              "title": "Read: [Document title or section]",
+              "type": "read",
+              "instructions": "Key sections to focus on and what to look for",
+              "orderIndex": ${hasVideos ? 1 : 0}
+            }`);
+  }
+  actionExamples.push(`            {
+              "title": "Practice: [Exercise name]",
+              "type": "do",
+              "instructions": "Clear, actionable exercise (3-5 steps)",
+              "orderIndex": ${actionExamples.length}
+            }`);
+  actionExamples.push(`            {
+              "title": "Reflect: [Topic]",
+              "type": "reflect",
+              "instructions": "Context for the reflection",
+              "reflectionPrompt": "Thought-provoking question connecting to the transformation",
+              "orderIndex": ${actionExamples.length}
+            }`);
+
   return `You are an expert curriculum designer creating a transformational learning program.
 
 PROGRAM CONTEXT:
 - Title: "${input.programTitle}"
 - Duration: EXACTLY ${input.durationWeeks} weeks (you MUST create ${input.durationWeeks} weeks)
-- Total videos available: ${totalVideos}
+- Content available: ${contentSummary}
 ${input.programDescription ? `- Description: ${input.programDescription}` : ""}
 ${audienceContext}
 ${transformationContext}
 ${input.outcomeStatement ? `- Outcome Statement: ${input.outcomeStatement}` : ""}
 ${vibeInstructions}
 
-AVAILABLE VIDEO CONTENT:
-${videoDescriptions}
+AVAILABLE CONTENT SOURCES:
+${contentDescriptions}
 
 YOUR TASK:
 Create a ${input.durationWeeks}-week structured learning program that transforms ${input.targetAudience || "learners"} toward ${input.targetTransformation || "the intended outcome"}.
 
 CRITICAL REQUIREMENTS:
 1. Generate EXACTLY ${input.durationWeeks} weeks (weekNumber 1 through ${input.durationWeeks})
-2. Distribute videos logically across all ${input.durationWeeks} weeks (approximately ${videosPerWeek} video(s) per week)
+2. Distribute content logically across all ${input.durationWeeks} weeks (approximately ${contentPerWeek} source(s) per week)
 3. Each week needs a clear theme that builds toward the transformation
-4. Videos from the same cluster share related topics - use this to group them logically
+4. Content from the same cluster shares related topics — use this to group them logically
 5. Each session MUST include 2-3 key takeaways (keyTakeaways array)
+${hasVideos ? `6. For VIDEO content: create WATCH actions with the exact youtubeVideoId` : ""}
+${hasDocs ? `${hasVideos ? "7" : "6"}. For DOCUMENT content: create READ actions referencing key points from the document` : ""}
 
 STRUCTURE EACH WEEK WITH:
 - 1-2 sessions per week
 - Each session should have:
   * keyTakeaways: 2-3 concise bullet points summarizing what learners will gain
-  * WATCH action(s) - reference videos by their exact ID
-  * DO action - practical exercise applying what was learned
-  * REFLECT action (at least one per week) - thought-provoking prompt connecting to the transformation
+${actionInstructions.join("\n")}
 
 OUTPUT FORMAT (JSON only, no markdown):
 {
@@ -406,26 +472,7 @@ OUTPUT FORMAT (JSON only, no markdown):
           ],
           "orderIndex": 0,
           "actions": [
-            {
-              "title": "Watch: [Video title]",
-              "type": "watch",
-              "instructions": "Specific guidance on what to focus on while watching",
-              "youtubeVideoId": "[exact video ID from above]",
-              "orderIndex": 0
-            },
-            {
-              "title": "Practice: [Exercise name]",
-              "type": "do",
-              "instructions": "Clear, actionable exercise (3-5 steps)",
-              "orderIndex": 1
-            },
-            {
-              "title": "Reflect: [Topic]",
-              "type": "reflect",
-              "instructions": "Context for the reflection",
-              "reflectionPrompt": "Thought-provoking question connecting to the transformation",
-              "orderIndex": 2
-            }
+${actionExamples.join(",\n")}
           ]
         }
       ]
@@ -435,17 +482,17 @@ OUTPUT FORMAT (JSON only, no markdown):
 
 QUALITY GUIDELINES:
 - Week titles should be engaging and transformation-oriented (e.g., "Week 1: Building Your Foundation")
-- Key takeaways should be specific, actionable outcomes - not vague promises
+- Key takeaways should be specific, actionable outcomes — not vague promises
 - Instructions should be specific and actionable, not generic
 - DO actions should have concrete exercises learners can complete
 - REFLECT prompts should encourage deep thinking and personal application
-- Build complexity progressively - earlier weeks introduce concepts, later weeks integrate them
+- Build complexity progressively — earlier weeks introduce concepts, later weeks integrate them
 - Final week should synthesize learning and prepare for real-world application
 - If a style guide was provided, ensure all content matches that tone and energy
-- Use the specific concepts, skills, and examples from each video to design exercises and reflection prompts
-- DO exercises should reference real techniques from the video content, not generic activities
-- Reflection prompts should ask about specific concepts or examples mentioned in the videos
-- Key takeaways should reflect actual insights from the video content`;
+- Use the specific concepts, skills, and examples from each content source to design exercises and reflection prompts
+- DO exercises should reference real techniques from the content, not generic activities
+- Reflection prompts should ask about specific concepts or examples from the content
+- Key takeaways should reflect actual insights from the content`;
 }
 
 async function callAnthropic(input: GenerateInput): Promise<string> {

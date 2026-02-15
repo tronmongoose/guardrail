@@ -13,7 +13,7 @@ const STEP_DEFINITIONS = [
   { key: "topics", label: "Extracting topics" },
   { key: "progression", label: "Detecting skill progression" },
   { key: "clustering", label: "Clustering themes" },
-  { key: "digesting", label: "Digesting video content" },
+  { key: "digesting", label: "Analyzing content" },
   { key: "weeks", label: "Building weeks" },
   { key: "sessions", label: "Crafting sessions" },
   { key: "actions", label: "Designing actions" },

@@ -7,17 +7,17 @@ describe("clusterEmbeddings", () => {
   });
 
   it("clusters single item into one cluster", () => {
-    const result = clusterEmbeddings([{ videoId: "v1", embedding: [1, 0, 0] }], 1);
+    const result = clusterEmbeddings([{ contentId: "v1", embedding: [1, 0, 0] }], 1);
     expect(result).toHaveLength(1);
-    expect(result[0].videoIds).toEqual(["v1"]);
+    expect(result[0].contentIds).toEqual(["v1"]);
   });
 
   it("produces deterministic output across runs", () => {
     const inputs = [
-      { videoId: "v1", embedding: [1, 0, 0] },
-      { videoId: "v2", embedding: [0.9, 0.1, 0] },
-      { videoId: "v3", embedding: [0, 0, 1] },
-      { videoId: "v4", embedding: [0, 0.1, 0.9] },
+      { contentId: "v1", embedding: [1, 0, 0] },
+      { contentId: "v2", embedding: [0.9, 0.1, 0] },
+      { contentId: "v3", embedding: [0, 0, 1] },
+      { contentId: "v4", embedding: [0, 0.1, 0.9] },
     ];
 
     const run1 = clusterEmbeddings(inputs, 2);
@@ -30,25 +30,25 @@ describe("clusterEmbeddings", () => {
 
   it("respects k parameter", () => {
     const inputs = Array.from({ length: 9 }, (_, i) => ({
-      videoId: `v${i}`,
+      contentId: `v${i}`,
       embedding: Array.from({ length: 3 }, () => Math.sin(i)),
     }));
 
     const result = clusterEmbeddings(inputs, 3);
     expect(result.length).toBeLessThanOrEqual(3);
     // All video IDs accounted for
-    const allIds = result.flatMap((c) => c.videoIds).sort();
-    expect(allIds).toEqual(inputs.map((i) => i.videoId).sort());
+    const allIds = result.flatMap((c) => c.contentIds).sort();
+    expect(allIds).toEqual(inputs.map((i) => i.contentId).sort());
   });
 
   it("assigns each video to exactly one cluster", () => {
     const inputs = [
-      { videoId: "a", embedding: [1, 0] },
-      { videoId: "b", embedding: [0, 1] },
-      { videoId: "c", embedding: [1, 1] },
+      { contentId: "a", embedding: [1, 0] },
+      { contentId: "b", embedding: [0, 1] },
+      { contentId: "c", embedding: [1, 1] },
     ];
     const result = clusterEmbeddings(inputs, 2);
-    const allIds = result.flatMap((c) => c.videoIds);
+    const allIds = result.flatMap((c) => c.contentIds);
     expect(new Set(allIds).size).toBe(allIds.length);
   });
 });
