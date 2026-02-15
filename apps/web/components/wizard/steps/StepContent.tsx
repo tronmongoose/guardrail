@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { parseYouTubeVideoId } from "@guide-rail/shared";
+import { extractAudioChunks, isAudioVideoFile, MAX_AUDIO_DURATION_SECONDS } from "@/lib/audio-extract";
 
 interface Video {
   id: string;
@@ -15,7 +16,7 @@ interface Artifact {
   originalFilename: string;
   fileType: string;
   extractedText?: string;
-  metadata: { pageCount?: number; wordCount: number };
+  metadata: { pageCount?: number; wordCount: number; duration?: number; transcriptionProvider?: string };
 }
 
 interface StepContentProps {
@@ -31,11 +32,12 @@ type ContentTab = "youtube" | "upload";
 interface FileExtractionState {
   filename: string;
   progress: number;
-  status: "extracting" | "done" | "error";
+  status: "extracting" | "transcribing" | "done" | "error";
   error?: string;
+  phase?: string;
 }
 
-const ACCEPTED_FILE_TYPES = ".pdf,.docx,.txt,.md";
+const ACCEPTED_FILE_TYPES = ".pdf,.docx,.txt,.md,.mp4,.webm,.mov,.mp3,.m4a,.wav";
 
 function getFileType(filename: string): string | null {
   const lower = filename.toLowerCase();
@@ -43,6 +45,8 @@ function getFileType(filename: string): string | null {
   if (lower.endsWith(".docx")) return "docx";
   if (lower.endsWith(".txt")) return "txt";
   if (lower.endsWith(".md")) return "md";
+  if (lower.endsWith(".mp4") || lower.endsWith(".webm") || lower.endsWith(".mov")) return "video";
+  if (lower.endsWith(".mp3") || lower.endsWith(".m4a") || lower.endsWith(".wav")) return "audio";
   return null;
 }
 
@@ -52,8 +56,16 @@ function getFileTypeColor(fileType: string): string {
     case "docx": return "bg-blue-500/20 text-blue-400";
     case "txt": return "bg-green-500/20 text-green-400";
     case "md": return "bg-purple-500/20 text-purple-400";
+    case "video": return "bg-orange-500/20 text-orange-400";
+    case "audio": return "bg-yellow-500/20 text-yellow-400";
     default: return "bg-gray-500/20 text-gray-400";
   }
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
 export function StepContent({
@@ -76,7 +88,7 @@ export function StepContent({
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, errors: [] as string[] });
 
-  const isExtracting = extractionStates.some((s) => s.status === "extracting");
+  const isExtracting = extractionStates.some((s) => s.status === "extracting" || s.status === "transcribing");
 
   const handleAddVideo = async () => {
     const videoId = parseYouTubeVideoId(videoUrl);
@@ -244,6 +256,73 @@ export function StepContent({
     };
   };
 
+  const extractAudioVideoFile = async (file: File): Promise<Artifact | null> => {
+    const fileType = getFileType(file.name);
+    if (!fileType || (fileType !== "video" && fileType !== "audio")) return null;
+
+    if (file.size > 100 * 1024 * 1024) {
+      throw new Error(`${file.name}: File must be less than 100MB`);
+    }
+
+    const updateState = (progress: number, phase: string, status: "extracting" | "transcribing" = "extracting") => {
+      setExtractionStates((prev) =>
+        prev.map((s) => s.filename === file.name ? { ...s, progress, phase, status } : s)
+      );
+    };
+
+    // Phase 1: Extract audio and chunk
+    updateState(5, "Extracting audio");
+    const { chunks, totalDurationSeconds, totalChunks } = await extractAudioChunks(
+      file,
+      (progress) => updateState(Math.round(progress * 0.5), "Extracting audio")
+    );
+
+    // Phase 2: Transcribe each chunk via server
+    const transcriptParts: string[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const phaseLabel = totalChunks > 1 ? `Transcribing (${i + 1}/${totalChunks})` : "Transcribing";
+      updateState(Math.round(50 + ((i + 1) / totalChunks) * 45), phaseLabel, "transcribing");
+
+      const res = await fetch(`/api/programs/${programId}/transcribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          audioBase64: chunk.base64,
+          chunkIndex: chunk.index,
+          totalChunks,
+          filename: file.name,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ error: "Transcription failed" }));
+        throw new Error(error.error || `Transcription failed for part ${i + 1}`);
+      }
+
+      const result = await res.json();
+      if (result.text) transcriptParts.push(result.text);
+    }
+
+    const extractedText = transcriptParts.join(" ");
+    const wordCount = extractedText.split(/\s+/).filter(Boolean).length;
+
+    if (wordCount < 5) {
+      throw new Error(`${file.name}: Could not extract meaningful transcript. The audio may be silent or unsupported.`);
+    }
+
+    return {
+      originalFilename: file.name,
+      fileType,
+      extractedText,
+      metadata: {
+        wordCount,
+        duration: Math.round(totalDurationSeconds),
+        transcriptionProvider: "whisper",
+      },
+    };
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
@@ -261,7 +340,9 @@ export function StepContent({
     // Process files sequentially — extract text then save to API immediately
     for (const file of files) {
       try {
-        const artifact = await extractSingleFile(file);
+        const artifact = isAudioVideoFile(file.name)
+          ? await extractAudioVideoFile(file)
+          : await extractSingleFile(file);
         if (artifact) {
           // Save to API immediately so extractedText is persisted server-side
           try {
@@ -303,7 +384,7 @@ export function StepContent({
 
     // Clear completed extraction states after a delay
     setTimeout(() => {
-      setExtractionStates((prev) => prev.filter((s) => s.status === "extracting"));
+      setExtractionStates((prev) => prev.filter((s) => s.status === "extracting" || s.status === "transcribing"));
     }, 2000);
 
     // Reset file input
@@ -315,9 +396,12 @@ export function StepContent({
   };
 
   // Content summary
+  const docArtifacts = artifacts.filter((a) => a.fileType !== "video" && a.fileType !== "audio");
+  const avArtifacts = artifacts.filter((a) => a.fileType === "video" || a.fileType === "audio");
   const contentParts: string[] = [];
-  if (videos.length > 0) contentParts.push(`${videos.length} video${videos.length !== 1 ? "s" : ""}`);
-  if (artifacts.length > 0) contentParts.push(`${artifacts.length} document${artifacts.length !== 1 ? "s" : ""}`);
+  if (videos.length > 0) contentParts.push(`${videos.length} YouTube video${videos.length !== 1 ? "s" : ""}`);
+  if (avArtifacts.length > 0) contentParts.push(`${avArtifacts.length} uploaded recording${avArtifacts.length !== 1 ? "s" : ""}`);
+  if (docArtifacts.length > 0) contentParts.push(`${docArtifacts.length} document${docArtifacts.length !== 1 ? "s" : ""}`);
   const contentSummary = contentParts.length > 0
     ? contentParts.join(", ") + " added"
     : "No content added yet";
@@ -517,7 +601,7 @@ export function StepContent({
                   <p className="text-sm text-gray-400 block sm:hidden">
                     <span className="text-neon-cyan">Tap to choose files</span>
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">PDF, DOCX, TXT, or Markdown — max 10MB each</p>
+                  <p className="text-xs text-gray-500 mt-1">PDF, DOCX, TXT, Markdown, or Video/Audio (MP4, MP3, WAV) — max 5 min</p>
                 </>
               )}
             </div>
@@ -539,7 +623,8 @@ export function StepContent({
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs text-gray-400 truncate flex-1">{state.filename}</span>
                     <span className="text-xs ml-2">
-                      {state.status === "extracting" && <span className="text-neon-pink">{Math.round(state.progress)}%</span>}
+                      {state.status === "extracting" && <span className="text-neon-pink">{state.phase ?? `${Math.round(state.progress)}%`}</span>}
+                      {state.status === "transcribing" && <span className="text-neon-cyan">{state.phase ?? "Transcribing..."}</span>}
                       {state.status === "done" && <span className="text-green-400">Done</span>}
                       {state.status === "error" && <span className="text-red-400">Error</span>}
                     </span>
@@ -547,7 +632,7 @@ export function StepContent({
                   <div className="h-1 bg-surface-border rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-300 ${
-                        state.status === "error" ? "bg-red-500" : state.status === "done" ? "bg-green-500" : "bg-neon-pink"
+                        state.status === "error" ? "bg-red-500" : state.status === "done" ? "bg-green-500" : state.status === "transcribing" ? "bg-neon-cyan" : "bg-neon-pink"
                       }`}
                       style={{ width: `${state.progress}%` }}
                     />
@@ -572,12 +657,13 @@ export function StepContent({
                     w-10 h-10 rounded flex items-center justify-center text-xs font-medium
                     ${getFileTypeColor(artifact.fileType)}
                   `}>
-                    {artifact.fileType.toUpperCase()}
+                    {artifact.fileType === "video" ? "VID" : artifact.fileType === "audio" ? "AUD" : artifact.fileType.toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-white truncate">{artifact.originalFilename}</p>
                     <p className="text-xs text-gray-500">
                       {artifact.metadata.pageCount && `${artifact.metadata.pageCount} pages · `}
+                      {artifact.metadata.duration && `${formatDuration(artifact.metadata.duration)} · `}
                       {artifact.metadata.wordCount.toLocaleString()} words
                     </p>
                   </div>
@@ -602,7 +688,7 @@ export function StepContent({
             <div>
               <p className="text-sm text-neon-cyan font-medium">Privacy First</p>
               <p className="text-xs text-gray-400">
-                Documents are processed entirely in your browser. Only the extracted text is saved — your original files never leave your device.
+                Documents are processed entirely in your browser. Audio is extracted locally, then sent securely for transcription. Only the extracted text is saved.
               </p>
             </div>
           </div>
