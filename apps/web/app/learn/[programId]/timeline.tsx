@@ -43,6 +43,8 @@ interface Props {
   currentWeek: number;
   completedWeeks: number[];
   pacingMode: PacingMode;
+  skinId: string;
+  skinCSSVars: Record<string, string>;
 }
 
 const ACTION_TYPE_COLORS: Record<string, string> = {
@@ -66,6 +68,8 @@ export function LearnerTimeline({
   currentWeek,
   completedWeeks,
   pacingMode,
+  skinId,
+  skinCSSVars,
 }: Props) {
   const { showToast } = useToast();
 
@@ -238,7 +242,7 @@ export function LearnerTimeline({
   }, [nextActionId, program.weeks]);
 
   return (
-    <div className="min-h-screen gradient-bg-radial grid-bg">
+    <div className="min-h-screen gradient-bg-radial grid-bg" data-skin={skinId} style={skinCSSVars as React.CSSProperties}>
       <nav className="flex items-center justify-between px-6 py-4 border-b border-surface-border/50 backdrop-blur-sm">
         <Link
           href="/"

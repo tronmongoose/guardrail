@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { EnrollButton } from "./enroll-button";
+import { getSkin, getSkinCSSVars } from "@/lib/skins";
 
 export default async function SalesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -11,13 +12,16 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
 
   if (!program || !program.published) notFound();
 
+  const skin = getSkin(program.skinId);
+  const skinCSSVars = getSkinCSSVars(skin);
+
   const priceDisplay =
     program.priceInCents === 0
       ? "Free"
       : `$${(program.priceInCents / 100).toFixed(2)}`;
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white" data-skin={program.skinId} style={skinCSSVars as React.CSSProperties}>
       <main className="max-w-xl mx-auto px-6 py-12">
         <div className="space-y-6">
           <div>
