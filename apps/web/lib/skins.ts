@@ -1,7 +1,12 @@
 /**
  * Skin definitions for the learner experience.
  * Each skin defines colors, styles, and visual treatment.
+ *
+ * For the full design token system, see @guide-rail/shared SkinTokens.
+ * Use skin-bridge.ts to convert between Skin and SkinTokens.
  */
+
+import type { SkinId } from "@guide-rail/shared";
 
 export interface Skin {
   id: string;
@@ -21,7 +26,7 @@ export interface Skin {
   cardStyle: "elevated" | "flat" | "bordered";
 }
 
-export const SKINS: Record<string, Skin> = {
+export const SKINS: Record<SkinId, Skin> = {
   default: {
     id: "default",
     name: "Dark Neon",
@@ -95,7 +100,7 @@ export const SKINS: Record<string, Skin> = {
 export const SKIN_IDS = Object.keys(SKINS) as (keyof typeof SKINS)[];
 
 export function getSkin(skinId: string): Skin {
-  return SKINS[skinId] || SKINS.default;
+  return SKINS[skinId as SkinId] || SKINS.default;
 }
 
 /**
