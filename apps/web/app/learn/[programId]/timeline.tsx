@@ -54,11 +54,18 @@ const ACTION_TYPE_COLORS: Record<string, string> = {
   READ: "text-neon-cyan",
 };
 
+const ACTION_TYPE_BG: Record<string, string> = {
+  WATCH: "bg-neon-cyan/10 border-neon-cyan/30",
+  REFLECT: "bg-neon-pink/10 border-neon-pink/30",
+  DO: "bg-neon-yellow/10 border-neon-yellow/30",
+  READ: "bg-neon-cyan/10 border-neon-cyan/30",
+};
+
 const ACTION_TYPE_VERBS: Record<string, string> = {
-  WATCH: "Watch this video",
-  READ: "Read this content",
-  DO: "Complete this exercise",
-  REFLECT: "Write your reflection",
+  WATCH: "Watch",
+  READ: "Read",
+  DO: "Practice",
+  REFLECT: "Reflect",
 };
 
 export function LearnerTimeline({
@@ -92,6 +99,10 @@ export function LearnerTimeline({
 
   const [reflections, setReflections] = useState<Record<string, string>>({});
   const [savingAction, setSavingAction] = useState<string | null>(null);
+  const [justCompleted, setJustCompleted] = useState<string | null>(null);
+
+  // Track which action is expanded (for mobile detail view)
+  const [expandedAction, setExpandedAction] = useState<string | null>(null);
 
   // Celebration overlay state
   const [celebration, setCelebration] = useState<{
@@ -104,9 +115,6 @@ export function LearnerTimeline({
   // Ref for auto-scrolling to next action
   const nextActionRef = useRef<HTMLDivElement>(null);
   const hasScrolledRef = useRef(false);
-
-  // Floating continue button visibility
-  const [showFloatingContinue, setShowFloatingContinue] = useState(false);
 
   // Compute overall progress
   const { totalActions, completedCount, progressPercent } = useMemo(() => {
@@ -146,27 +154,10 @@ export function LearnerTimeline({
   useEffect(() => {
     if (nextActionRef.current && !hasScrolledRef.current) {
       hasScrolledRef.current = true;
-      // Small delay to let the layout settle
       setTimeout(() => {
         nextActionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 300);
     }
-  }, [nextActionId]);
-
-  // IntersectionObserver for floating continue button
-  useEffect(() => {
-    const el = nextActionRef.current;
-    if (!el || !nextActionId) {
-      setShowFloatingContinue(false);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => setShowFloatingContinue(!entry.isIntersecting),
-      { threshold: 0.3 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
   }, [nextActionId]);
 
   const scrollToNextAction = useCallback(() => {
@@ -195,12 +186,16 @@ export function LearnerTimeline({
 
       const data = await res.json();
 
+      // Trigger completion animation
+      setJustCompleted(actionId);
+      setTimeout(() => setJustCompleted(null), 1000);
+
       setCompletedActions((prev) => new Set(prev).add(actionId));
+      setExpandedAction(null);
 
       if (data.weekCompleted) {
         setCompletedWeeksState((prev) => new Set(prev).add(weekNumber));
 
-        // Find week details for celebration
         const week = program.weeks.find((w) => w.weekNumber === weekNumber);
         const weekActionCount = week?.sessions.flatMap((s) => s.actions).length ?? 0;
         const isLastWeek = weekNumber === program.weeks.length;
@@ -212,7 +207,6 @@ export function LearnerTimeline({
           isLastWeek,
         });
 
-        // Auto-dismiss celebration after 6 seconds
         setTimeout(() => setCelebration(null), 6000);
       }
 
@@ -228,124 +222,99 @@ export function LearnerTimeline({
     }
   }
 
-  // Find the next action's details for floating button
-  const nextActionDetails = useMemo(() => {
-    if (!nextActionId) return null;
-    for (const week of program.weeks) {
-      for (const session of week.sessions) {
-        for (const action of session.actions) {
-          if (action.id === nextActionId) return action;
-        }
-      }
-    }
-    return null;
-  }, [nextActionId, program.weeks]);
+  // SVG arc for progress circle
+  const progressArc = useMemo(() => {
+    const r = 18;
+    const circ = 2 * Math.PI * r;
+    const offset = circ - (progressPercent / 100) * circ;
+    return { r, circ, offset };
+  }, [progressPercent]);
 
   return (
-    <div className="min-h-screen gradient-bg-radial grid-bg" data-skin={skinId} style={skinCSSVars as React.CSSProperties}>
-      <nav className="flex items-center justify-between px-6 py-4 border-b border-surface-border/50 backdrop-blur-sm">
-        <Link
-          href="/"
-          className="text-xl font-bold tracking-tight text-neon-cyan neon-text-cyan hover:opacity-80 transition"
-        >
-          &larr; GuideRail
-        </Link>
-        <div className="text-right">
-          <p className="text-xs text-gray-500 uppercase tracking-wider">Learning</p>
-          <h1 className="text-sm font-semibold text-white">{program.title}</h1>
+    <div className="min-h-screen bg-[#0a0a0f]" data-skin={skinId} style={skinCSSVars as React.CSSProperties}>
+      {/* Fixed top bar */}
+      <nav className="sticky top-0 z-30 bg-surface-dark/95 backdrop-blur-sm border-b border-surface-border">
+        <div className="flex items-center justify-between px-4 py-3 max-w-xl mx-auto">
+          <Link href="/" className="text-neon-cyan text-sm font-bold">&larr;</Link>
+          <div className="flex-1 text-center px-4">
+            <h1 className="text-sm font-semibold text-white truncate">{program.title}</h1>
+          </div>
+          {/* Progress circle */}
+          <div className="relative w-10 h-10 flex-shrink-0">
+            <svg className="w-10 h-10 -rotate-90" viewBox="0 0 40 40">
+              <circle cx="20" cy="20" r={progressArc.r} fill="none" stroke="#1f2937" strokeWidth="3" />
+              <circle
+                cx="20" cy="20" r={progressArc.r}
+                fill="none" stroke="url(#progressGrad)" strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={progressArc.circ}
+                strokeDashoffset={progressArc.offset}
+                className="transition-all duration-700"
+              />
+              <defs>
+                <linearGradient id="progressGrad">
+                  <stop offset="0%" stopColor="#00fff0" />
+                  <stop offset="100%" stopColor="#ff2dff" />
+                </linearGradient>
+              </defs>
+            </svg>
+            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white">
+              {progressPercent}%
+            </span>
+          </div>
         </div>
       </nav>
 
-      <main className="max-w-xl mx-auto px-4 py-8 space-y-6 pb-24">
-        {/* Action-level progress bar */}
-        <div className="bg-surface-card border border-surface-border rounded-xl p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-gray-400 uppercase tracking-wider">
-              Your Progress
-            </span>
-            <span className="text-xs text-neon-cyan font-medium">
-              {completedCount} of {totalActions} actions &middot; {progressPercent}%
-            </span>
-          </div>
-          <div className="h-2 bg-surface-dark rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all duration-500"
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <p className="text-xs text-gray-500 mt-2">
-            {isProgramComplete
-              ? "You've completed everything!"
-              : pacingMode === "UNLOCK_ON_COMPLETE"
-              ? "Complete all actions in a week to unlock the next one"
-              : "New content unlocks each week"}
+      <main className="max-w-xl mx-auto px-4 py-6 pb-24 space-y-4">
+        {/* Progress summary */}
+        <div className="text-center mb-2">
+          <p className="text-xs text-gray-500">
+            {completedCount} of {totalActions} actions complete
+            {isProgramComplete && " — You did it!"}
           </p>
         </div>
 
-        {/* Week cards */}
+        {/* Week sections */}
         {program.weeks.map((week) => {
           const isUnlocked = week.weekNumber <= unlockedWeekNumber;
-          const isCurrentWeek =
-            week.weekNumber === Math.min(unlockedWeekNumber, program.weeks.length);
-
           const weekActions = week.sessions.flatMap((s) => s.actions);
-          const weekCompletedCount = weekActions.filter((a) =>
-            completedActions.has(a.id)
-          ).length;
-          const isWeekComplete =
-            weekActions.length > 0 && weekCompletedCount === weekActions.length;
-          const weekProgress =
-            weekActions.length > 0
-              ? Math.round((weekCompletedCount / weekActions.length) * 100)
-              : 0;
+          const weekCompletedCount = weekActions.filter((a) => completedActions.has(a.id)).length;
+          const isWeekComplete = weekActions.length > 0 && weekCompletedCount === weekActions.length;
+          const weekProgress = weekActions.length > 0 ? Math.round((weekCompletedCount / weekActions.length) * 100) : 0;
 
           return (
-            <section
-              key={week.id}
-              className={`rounded-xl border p-5 transition-all ${
-                !isUnlocked
-                  ? "bg-surface-dark/50 border-surface-border opacity-60"
-                  : isCurrentWeek
-                  ? "bg-surface-card border-neon-cyan/40 shadow-lg shadow-neon-cyan/5"
-                  : isWeekComplete
-                  ? "bg-surface-card border-neon-cyan/20"
-                  : "bg-surface-card border-surface-border"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`text-xs font-bold uppercase tracking-widest px-2.5 py-1 rounded-full ${
-                      !isUnlocked
-                        ? "bg-gray-800 text-gray-500"
-                        : isWeekComplete
-                        ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
-                        : isCurrentWeek
-                        ? "bg-neon-pink/10 text-neon-pink border border-neon-pink/30"
-                        : "bg-surface-dark text-gray-400"
-                    }`}
-                  >
-                    Week {week.weekNumber}
+            <section key={week.id}>
+              {/* Week header */}
+              <div className="flex items-center gap-3 mb-3">
+                <span
+                  className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                    isWeekComplete
+                      ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
+                      : isUnlocked
+                      ? "bg-surface-card text-gray-400 border border-surface-border"
+                      : "bg-surface-dark text-gray-600"
+                  }`}
+                >
+                  W{week.weekNumber}
+                </span>
+                <h2 className={`text-sm font-semibold ${isUnlocked ? "text-white" : "text-gray-600"}`}>
+                  {week.title}
+                </h2>
+                {isUnlocked && weekActions.length > 0 && (
+                  <span className="ml-auto text-xs text-gray-500">
+                    {weekCompletedCount}/{weekActions.length}
                   </span>
-                  <h2 className="font-medium text-sm text-white">{week.title}</h2>
-                </div>
-                <div className="flex items-center gap-2">
-                  {isUnlocked && weekActions.length > 0 && (
-                    <span className="text-xs text-gray-500">
-                      {weekCompletedCount}/{weekActions.length}
-                    </span>
-                  )}
-                  {isWeekComplete && (
-                    <span className="text-neon-cyan text-xs font-medium">
-                      &#10003; Complete
-                    </span>
-                  )}
-                </div>
+                )}
+                {isWeekComplete && (
+                  <svg className="w-4 h-4 text-neon-cyan ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
               </div>
 
               {/* Week progress bar */}
               {isUnlocked && weekActions.length > 0 && (
-                <div className="h-1 bg-surface-dark rounded-full overflow-hidden mb-4">
+                <div className="h-1 bg-surface-dark rounded-full overflow-hidden mb-3">
                   <div
                     className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all duration-500"
                     style={{ width: `${weekProgress}%` }}
@@ -355,203 +324,196 @@ export function LearnerTimeline({
 
               {/* Locked state */}
               {!isUnlocked && (
-                <div className="flex items-center justify-center py-8">
-                  <div className="text-center">
-                    <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-surface-dark border border-surface-border flex items-center justify-center">
-                      <svg
-                        className="w-6 h-6 text-gray-500"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-                        />
-                      </svg>
-                    </div>
-                    <p className="text-sm text-gray-400">
-                      {pacingMode === "UNLOCK_ON_COMPLETE" ? (
-                        <>
-                          Complete{" "}
-                          <span className="text-neon-yellow font-semibold">
-                            Week {week.weekNumber - 1}
-                          </span>{" "}
-                          to unlock
-                        </>
-                      ) : (
-                        <>
-                          Unlocks in{" "}
-                          <span className="text-neon-cyan font-semibold">
-                            {(() => {
-                              const enrolled = new Date(enrolledAt);
-                              const unlockDate = new Date(enrolled.getTime() + (week.weekNumber - 1) * 7 * 24 * 60 * 60 * 1000);
-                              const now = new Date();
-                              const daysUntil = Math.ceil((unlockDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-                              return daysUntil === 1 ? "1 day" : `${daysUntil} days`;
-                            })()}
-                          </span>
-                        </>
-                      )}
-                    </p>
-                  </div>
+                <div className="py-6 text-center rounded-xl bg-surface-dark/50 border border-surface-border mb-4">
+                  <svg className="w-8 h-8 text-gray-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                  <p className="text-xs text-gray-500">
+                    {pacingMode === "UNLOCK_ON_COMPLETE" ? (
+                      <>Complete Week {week.weekNumber - 1} to unlock</>
+                    ) : (
+                      <>
+                        Unlocks in{" "}
+                        {(() => {
+                          const enrolled = new Date(enrolledAt);
+                          const unlockDate = new Date(enrolled.getTime() + (week.weekNumber - 1) * 7 * 24 * 60 * 60 * 1000);
+                          const daysUntil = Math.max(1, Math.ceil((unlockDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+                          return daysUntil === 1 ? "1 day" : `${daysUntil} days`;
+                        })()}
+                      </>
+                    )}
+                  </p>
                 </div>
               )}
 
-              {/* Unlocked content with session grouping */}
-              {isUnlocked &&
-                week.sessions.map((session) => {
-                  const sessionActions = session.actions;
-                  const sessionCompleted = sessionActions.filter((a) =>
-                    completedActions.has(a.id)
-                  ).length;
+              {/* Sessions + actions */}
+              {isUnlocked && week.sessions.map((session) => {
+                const sessionActions = session.actions;
+                const sessionDone = sessionActions.filter((a) => completedActions.has(a.id)).length;
 
-                  return (
-                    <div key={session.id} className="mb-4 last:mb-0">
-                      {/* Session sub-header */}
-                      {week.sessions.length > 1 && (
-                        <div className="flex items-center justify-between mb-2 mt-3 first:mt-0">
-                          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                            {session.title}
-                          </h3>
-                          <span className="text-xs text-gray-600">
-                            {sessionCompleted}/{sessionActions.length}
-                          </span>
-                        </div>
-                      )}
+                return (
+                  <div key={session.id} className="mb-4">
+                    {/* Session sub-header */}
+                    {week.sessions.length > 1 && (
+                      <div className="flex items-center justify-between mb-2 px-1">
+                        <h3 className="text-xs font-medium text-gray-400">{session.title}</h3>
+                        <span className="text-[10px] text-gray-600">{sessionDone}/{sessionActions.length}</span>
+                      </div>
+                    )}
 
-                      <div className="space-y-3">
-                        {session.actions.map((action) => {
-                          const done = completedActions.has(action.id);
-                          const isNext = action.id === nextActionId;
-                          const actionTypeColor =
-                            ACTION_TYPE_COLORS[action.type] ?? "text-gray-400";
+                    <div className="space-y-2">
+                      {session.actions.map((action) => {
+                        const done = completedActions.has(action.id);
+                        const isNext = action.id === nextActionId;
+                        const isExpanded = expandedAction === action.id;
+                        const isCompleting = justCompleted === action.id;
+                        const isSaving = savingAction === action.id;
 
-                          return (
+                        return (
+                          <div
+                            key={action.id}
+                            ref={isNext ? nextActionRef : undefined}
+                            className={`rounded-xl border transition-all duration-300 overflow-hidden ${
+                              isNext && !isExpanded
+                                ? "border-neon-cyan/50 shadow-lg shadow-neon-cyan/10 pulse-ring-border"
+                                : isCompleting
+                                ? "border-neon-cyan/50 scale-[0.98]"
+                                : done
+                                ? "border-surface-border/50 opacity-70"
+                                : "border-surface-border"
+                            }`}
+                            style={{ backgroundColor: done ? "#0a0a0f" : "#111118" }}
+                          >
+                            {/* Compact action row */}
                             <div
-                              key={action.id}
-                              ref={isNext ? nextActionRef : undefined}
-                              className={`p-4 rounded-lg border transition-all ${
-                                isNext
-                                  ? "bg-surface-dark border-neon-cyan/50 shadow-md shadow-neon-cyan/10 pulse-ring-border"
-                                  : done
-                                  ? "bg-surface-dark/50 border-surface-border"
-                                  : "bg-surface-dark border-surface-border hover:border-neon-cyan/30"
-                              }`}
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => {
+                                if (!done) setExpandedAction(isExpanded ? null : action.id);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  if (!done) setExpandedAction(isExpanded ? null : action.id);
+                                }
+                              }}
+                              className="w-full flex items-center gap-3 p-3 text-left cursor-pointer"
                             >
-                              {/* UP NEXT badge */}
-                              {isNext && (
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30">
-                                    Up Next
-                                  </span>
-                                  <span className="text-xs text-gray-500">
-                                    {ACTION_TYPE_VERBS[action.type] ?? "Complete this"}
-                                  </span>
-                                </div>
+                              {/* Completion circle */}
+                              <button
+                                type="button"
+                                aria-label={done ? "Completed" : "Mark complete"}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (!done && !isSaving) {
+                                    completeAction(action.id, week.weekNumber, reflections[action.id]);
+                                  }
+                                }}
+                                className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all duration-300 ${
+                                  done
+                                    ? "bg-neon-cyan border-neon-cyan action-complete-check"
+                                    : isSaving
+                                    ? "border-neon-cyan animate-pulse"
+                                    : "border-gray-600 hover:border-neon-cyan"
+                                }`}
+                              >
+                                {isSaving ? (
+                                  <Spinner size="sm" />
+                                ) : done ? (
+                                  <svg className="w-3 h-3 text-surface-dark" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                ) : null}
+                              </button>
+
+                              {/* Action info */}
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm font-medium truncate ${done ? "line-through text-gray-500" : "text-white"}`}>
+                                  {action.title}
+                                </p>
+                                <span className={`text-[10px] uppercase tracking-wider font-semibold ${ACTION_TYPE_COLORS[action.type] ?? "text-gray-400"}`}>
+                                  {ACTION_TYPE_VERBS[action.type] || action.type}
+                                </span>
+                              </div>
+
+                              {/* Up Next badge */}
+                              {isNext && !isExpanded && (
+                                <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 flex-shrink-0">
+                                  Next
+                                </span>
                               )}
 
-                              <div className="flex items-start gap-3">
-                                <button
-                                  onClick={() => {
-                                    if (!done && savingAction !== action.id) {
-                                      completeAction(
-                                        action.id,
-                                        week.weekNumber,
-                                        reflections[action.id]
-                                      );
-                                    }
-                                  }}
-                                  disabled={done || savingAction === action.id}
-                                  className={`mt-0.5 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all ${
-                                    done
-                                      ? "bg-neon-cyan border-neon-cyan text-surface-dark"
-                                      : savingAction === action.id
-                                      ? "border-neon-cyan"
-                                      : "border-gray-600 hover:border-neon-cyan"
-                                  }`}
+                              {/* Expand chevron */}
+                              {!done && (
+                                <svg
+                                  className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                                  fill="none" stroke="currentColor" viewBox="0 0 24 24"
                                 >
-                                  {savingAction === action.id ? (
-                                    <Spinner size="sm" />
-                                  ) : done ? (
-                                    <svg
-                                      className="w-3 h-3"
-                                      fill="currentColor"
-                                      viewBox="0 0 20 20"
-                                    >
-                                      <path
-                                        fillRule="evenodd"
-                                        d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                        clipRule="evenodd"
-                                      />
-                                    </svg>
-                                  ) : null}
-                                </button>
-                                <div className="flex-1">
-                                  <p
-                                    className={`text-sm font-medium ${
-                                      done ? "line-through text-gray-500" : "text-white"
-                                    }`}
-                                  >
-                                    {action.title}
-                                  </p>
-                                  <span
-                                    className={`text-xs uppercase tracking-wider ${actionTypeColor}`}
-                                  >
-                                    {action.type}
-                                  </span>
-
-                                  {action.instructions && !done && (
-                                    <p className="text-xs text-gray-500 mt-2">
-                                      {action.instructions}
-                                    </p>
-                                  )}
-
-                                  {/* YouTube embed */}
-                                  {action.youtubeVideo && !done && (
-                                    <div className="mt-3 aspect-video rounded-lg overflow-hidden border border-surface-border">
-                                      <iframe
-                                        src={`https://www.youtube.com/embed/${action.youtubeVideo.videoId}`}
-                                        className="w-full h-full"
-                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                        allowFullScreen
-                                      />
-                                    </div>
-                                  )}
-
-                                  {/* Reflection prompt */}
-                                  {action.type === "REFLECT" &&
-                                    action.reflectionPrompt &&
-                                    !done && (
-                                      <div className="mt-3">
-                                        <p className="text-xs text-neon-pink/80 italic mb-2">
-                                          {action.reflectionPrompt}
-                                        </p>
-                                        <textarea
-                                          value={reflections[action.id] ?? ""}
-                                          onChange={(e) =>
-                                            setReflections((r) => ({
-                                              ...r,
-                                              [action.id]: e.target.value,
-                                            }))
-                                          }
-                                          placeholder="Write your reflection..."
-                                          rows={3}
-                                          className="w-full px-3 py-2 bg-surface-dark border border-surface-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-neon-pink focus:ring-1 focus:ring-neon-pink"
-                                        />
-                                      </div>
-                                    )}
-                                </div>
-                              </div>
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              )}
                             </div>
-                          );
-                        })}
-                      </div>
+
+                            {/* Expanded detail card */}
+                            {isExpanded && !done && (
+                              <div className="px-3 pb-4 pt-1 space-y-3 animate-fade-in">
+                                {/* Instructions */}
+                                {action.instructions && (
+                                  <p className="text-xs text-gray-400 leading-relaxed px-1">
+                                    {action.instructions}
+                                  </p>
+                                )}
+
+                                {/* YouTube embed */}
+                                {action.youtubeVideo && (
+                                  <div className="aspect-video rounded-lg overflow-hidden border border-surface-border">
+                                    <iframe
+                                      src={`https://www.youtube.com/embed/${action.youtubeVideo.videoId}`}
+                                      title={action.youtubeVideo.title || action.title}
+                                      className="w-full h-full"
+                                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                      allowFullScreen
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Reflection prompt */}
+                                {action.type === "REFLECT" && action.reflectionPrompt && (
+                                  <div>
+                                    <p className="text-xs text-neon-pink/80 italic mb-2 px-1">
+                                      {action.reflectionPrompt}
+                                    </p>
+                                    <textarea
+                                      value={reflections[action.id] ?? ""}
+                                      onChange={(e) =>
+                                        setReflections((r) => ({ ...r, [action.id]: e.target.value }))
+                                      }
+                                      placeholder="Write your reflection..."
+                                      rows={3}
+                                      className="w-full px-3 py-2 bg-surface-dark border border-surface-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-neon-pink focus:ring-1 focus:ring-neon-pink resize-none"
+                                    />
+                                  </div>
+                                )}
+
+                                {/* Complete action button */}
+                                <button
+                                  onClick={() => completeAction(action.id, week.weekNumber, reflections[action.id])}
+                                  disabled={isSaving}
+                                  className={`w-full py-2.5 rounded-lg text-sm font-semibold transition border ${
+                                    ACTION_TYPE_BG[action.type] || "bg-gray-600/10 border-gray-600/30"
+                                  } ${ACTION_TYPE_COLORS[action.type] || "text-gray-400"} hover:opacity-80 disabled:opacity-50`}
+                                >
+                                  {isSaving ? "Saving..." : "Mark Complete"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
             </section>
           );
         })}
@@ -576,7 +538,6 @@ export function LearnerTimeline({
       {celebration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="relative bg-surface-card border border-neon-cyan/40 rounded-2xl p-8 max-w-sm w-full text-center animate-slide-up shadow-2xl shadow-neon-cyan/10 overflow-hidden">
-            {/* Confetti particles */}
             <div className="confetti-burst" aria-hidden="true">
               <span className="confetti-dot" style={{ "--dot-color": "#00fff0", "--dot-angle": "0deg", "--dot-distance": "80px" } as React.CSSProperties} />
               <span className="confetti-dot" style={{ "--dot-color": "#ff2dff", "--dot-angle": "45deg", "--dot-distance": "70px" } as React.CSSProperties} />
@@ -597,12 +558,10 @@ export function LearnerTimeline({
               <p className="text-xs text-gray-500 mb-5">
                 You completed {celebration.actionCount} actions
               </p>
-
               <button
                 onClick={() => {
                   setCelebration(null);
                   if (!celebration.isLastWeek) {
-                    // Scroll to next action after dismissing
                     setTimeout(() => scrollToNextAction(), 200);
                   }
                 }}
@@ -616,24 +575,14 @@ export function LearnerTimeline({
       )}
 
       {/* Floating continue button (mobile) */}
-      {showFloatingContinue && nextActionDetails && !celebration && (
+      {nextActionId && !expandedAction && !celebration && !isProgramComplete && (
         <div className="fixed bottom-0 left-0 right-0 z-40 sm:hidden">
           <div className="bg-surface-card/95 backdrop-blur-sm border-t border-surface-border px-4 py-3">
             <button
               onClick={scrollToNextAction}
-              className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30 hover:bg-neon-cyan/20 transition"
+              className="w-full py-2.5 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30 hover:bg-neon-cyan/20 transition text-sm text-neon-cyan font-medium"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className={`text-xs uppercase font-bold ${ACTION_TYPE_COLORS[nextActionDetails.type] ?? "text-gray-400"}`}>
-                  {nextActionDetails.type}
-                </span>
-                <span className="text-sm text-white truncate">
-                  {nextActionDetails.title}
-                </span>
-              </div>
-              <span className="text-sm text-neon-cyan font-medium flex-shrink-0">
-                Continue &rarr;
-              </span>
+              Continue &rarr;
             </button>
           </div>
         </div>

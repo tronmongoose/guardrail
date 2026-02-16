@@ -7,7 +7,13 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
   const { slug } = await params;
   const program = await prisma.program.findUnique({
     where: { slug },
-    include: { creator: true, weeks: { include: { sessions: true }, orderBy: { weekNumber: "asc" } } },
+    include: {
+      creator: true,
+      weeks: {
+        include: { sessions: { include: { actions: true } } },
+        orderBy: { weekNumber: "asc" },
+      },
+    },
   });
 
   if (!program || !program.published) notFound();
@@ -20,39 +26,224 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
       ? "Free"
       : `$${(program.priceInCents / 100).toFixed(2)}`;
 
+  const totalSessions = program.weeks.reduce((sum, w) => sum + w.sessions.length, 0);
+  const totalActions = program.weeks.reduce(
+    (sum, w) => sum + w.sessions.reduce((s, sess) => s + sess.actions.length, 0),
+    0
+  );
+
+  const TYPE_LABELS: Record<string, string> = {
+    WATCH: "Watch",
+    READ: "Read",
+    DO: "Practice",
+    REFLECT: "Reflect",
+  };
+
+  const TYPE_COLORS: Record<string, string> = {
+    WATCH: "bg-cyan-400/20 text-cyan-300",
+    READ: "bg-gray-400/20 text-gray-300",
+    DO: "bg-yellow-400/20 text-yellow-300",
+    REFLECT: "bg-pink-400/20 text-pink-300",
+  };
+
   return (
-    <div className="min-h-screen bg-white" data-skin={program.skinId} style={skinCSSVars as React.CSSProperties}>
-      <main className="max-w-xl mx-auto px-6 py-12">
-        <div className="space-y-6">
-          <div>
-            <p className="text-sm text-brand-600 font-medium mb-1">
-              {program.durationWeeks}-week program
+    <div
+      className="min-h-screen"
+      data-skin={program.skinId}
+      style={{
+        ...(skinCSSVars as React.CSSProperties),
+        backgroundColor: "var(--skin-bg)",
+        color: "var(--skin-text)",
+      }}
+    >
+      {/* Hero */}
+      <header className="px-6 pt-16 pb-12 text-center max-w-2xl mx-auto">
+        {/* Duration badge */}
+        <span
+          className="inline-block text-xs font-medium px-3 py-1 rounded-full mb-6"
+          style={{
+            backgroundColor: "color-mix(in srgb, var(--skin-accent) 15%, transparent)",
+            color: "var(--skin-accent)",
+            border: "1px solid color-mix(in srgb, var(--skin-accent) 30%, transparent)",
+          }}
+        >
+          {program.durationWeeks}-week program
+        </span>
+
+        {/* Transformation headline */}
+        {program.targetTransformation ? (
+          <>
+            <h1 className="text-3xl sm:text-4xl font-bold leading-tight mb-4">
+              {program.targetTransformation}
+            </h1>
+            <p className="text-lg" style={{ color: "var(--skin-text-muted)" }}>
+              {program.title}
             </p>
-            <h1 className="text-3xl font-bold tracking-tight">{program.title}</h1>
-            {program.creator.name && (
-              <p className="text-gray-500 mt-1">by {program.creator.name}</p>
-            )}
-          </div>
+          </>
+        ) : (
+          <h1 className="text-3xl sm:text-4xl font-bold leading-tight mb-4">
+            {program.title}
+          </h1>
+        )}
 
-          {program.description && (
-            <p className="text-gray-600 leading-relaxed">{program.description}</p>
-          )}
+        {/* Creator */}
+        {program.creator.name && (
+          <p className="mt-4 text-sm" style={{ color: "var(--skin-text-muted)" }}>
+            by <span style={{ color: "var(--skin-text)" }}>{program.creator.name}</span>
+          </p>
+        )}
 
-          <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-            <p className="text-sm font-medium text-gray-700">What you&apos;ll get:</p>
-            {program.weeks.map((w) => (
-              <div key={w.id} className="flex items-start gap-2 text-sm text-gray-500">
-                <span className="text-brand-600 mt-0.5">•</span>
-                <span>
-                  Week {w.weekNumber}: {w.title} ({w.sessions.length} session
-                  {w.sessions.length !== 1 ? "s" : ""})
-                </span>
-              </div>
+        {/* Quick stats */}
+        <div className="flex items-center justify-center gap-6 mt-8 text-sm" style={{ color: "var(--skin-text-muted)" }}>
+          <span className="flex items-center gap-1.5">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {program.weeks.length} weeks
+          </span>
+          <span className="flex items-center gap-1.5">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            {totalSessions} sessions
+          </span>
+          <span className="flex items-center gap-1.5">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+            </svg>
+            {totalActions} actions
+          </span>
+        </div>
+      </header>
+
+      <main className="max-w-2xl mx-auto px-6 pb-32">
+        {/* Description */}
+        {program.description && (
+          <section className="mb-12">
+            <h2 className="text-lg font-semibold mb-3">About this program</h2>
+            <p className="leading-relaxed" style={{ color: "var(--skin-text-muted)" }}>
+              {program.description}
+            </p>
+          </section>
+        )}
+
+        {/* Outcome statement */}
+        {program.outcomeStatement && (
+          <section
+            className="mb-12 p-6 rounded-xl text-center"
+            style={{
+              backgroundColor: "var(--skin-bg-secondary)",
+              border: "1px solid var(--skin-border)",
+            }}
+          >
+            <p className="text-sm font-medium mb-2" style={{ color: "var(--skin-accent)" }}>
+              The Transformation
+            </p>
+            <p className="text-lg font-medium leading-relaxed">
+              {program.outcomeStatement}
+            </p>
+          </section>
+        )}
+
+        {/* Curriculum */}
+        <section className="mb-12">
+          <h2 className="text-lg font-semibold mb-4">What you&apos;ll learn</h2>
+          <div className="space-y-3">
+            {program.weeks.map((week) => (
+              <details
+                key={week.id}
+                className="group rounded-xl overflow-hidden"
+                style={{
+                  backgroundColor: "var(--skin-bg-secondary)",
+                  border: "1px solid var(--skin-border)",
+                }}
+              >
+                <summary className="flex items-center justify-between p-4 cursor-pointer list-none">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0"
+                      style={{
+                        backgroundColor: "color-mix(in srgb, var(--skin-accent) 15%, transparent)",
+                        color: "var(--skin-accent)",
+                      }}
+                    >
+                      {week.weekNumber}
+                    </span>
+                    <div>
+                      <p className="font-medium text-sm">{week.title}</p>
+                      <p className="text-xs mt-0.5" style={{ color: "var(--skin-text-muted)" }}>
+                        {week.sessions.length} session{week.sessions.length !== 1 ? "s" : ""}
+                        {" · "}
+                        {week.sessions.reduce((s, sess) => s + sess.actions.length, 0)} actions
+                      </p>
+                    </div>
+                  </div>
+                  <svg
+                    className="w-4 h-4 transition-transform group-open:rotate-180"
+                    style={{ color: "var(--skin-text-muted)" }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </summary>
+
+                <div className="px-4 pb-4 pt-1 space-y-3">
+                  {week.sessions.map((session) => (
+                    <div key={session.id}>
+                      <p className="text-sm font-medium mb-1.5">{session.title}</p>
+                      {session.summary && (
+                        <p className="text-xs mb-2" style={{ color: "var(--skin-text-muted)" }}>
+                          {session.summary}
+                        </p>
+                      )}
+                      <div className="flex flex-wrap gap-1.5">
+                        {session.actions.map((action) => (
+                          <span
+                            key={action.id}
+                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_COLORS[action.type] || "bg-gray-400/20 text-gray-300"}`}
+                          >
+                            {TYPE_LABELS[action.type] || action.type}: {action.title}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </details>
             ))}
           </div>
+        </section>
 
-          <div className="bg-white border border-gray-200 rounded-xl p-6 text-center space-y-4">
-            <p className="text-3xl font-bold">{priceDisplay}</p>
+        {/* Creator info */}
+        {program.creator.name && (
+          <section
+            className="mb-12 p-6 rounded-xl text-center"
+            style={{
+              backgroundColor: "var(--skin-bg-secondary)",
+              border: "1px solid var(--skin-border)",
+            }}
+          >
+            <p className="text-sm" style={{ color: "var(--skin-text-muted)" }}>Created by</p>
+            <p className="text-lg font-semibold mt-1">{program.creator.name}</p>
+          </section>
+        )}
+      </main>
+
+      {/* Sticky CTA */}
+      <div
+        className="fixed bottom-0 left-0 right-0 p-4 backdrop-blur-xl z-40"
+        style={{
+          backgroundColor: "color-mix(in srgb, var(--skin-bg) 90%, transparent)",
+          borderTop: "1px solid var(--skin-border)",
+        }}
+      >
+        <div className="max-w-md mx-auto flex items-center gap-4">
+          <div className="flex-shrink-0">
+            <p className="text-2xl font-bold">{priceDisplay}</p>
+          </div>
+          <div className="flex-1">
             <EnrollButton
               programId={program.id}
               isFree={program.priceInCents === 0}
@@ -60,7 +251,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
             />
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Spinner } from "@/components/ui/spinner";
+import { AiAssistButton } from "@/components/ui/AiAssistButton";
 import type { ActionData, YouTubeVideoData } from "./StructureBuilder";
 
 interface ActionItemProps {
@@ -193,7 +194,15 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
           </div>
 
           <div>
-            <label className="text-[10px] text-gray-500 uppercase">Instructions</label>
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] text-gray-500 uppercase">Instructions</label>
+              <AiAssistButton
+                value={instructions}
+                type="action_instructions"
+                context={`${action.type} action: ${title}`}
+                onEnhance={(enhanced) => setInstructions(enhanced)}
+              />
+            </div>
             <textarea
               value={instructions}
               onChange={(e) => setInstructions(e.target.value)}
@@ -205,7 +214,15 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
 
           {type === "REFLECT" && (
             <div>
-              <label className="text-[10px] text-gray-500 uppercase">Reflection Prompt</label>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] text-gray-500 uppercase">Reflection Prompt</label>
+                <AiAssistButton
+                  value={reflectionPrompt}
+                  type="reflection_prompt"
+                  context={`${title}`}
+                  onEnhance={(enhanced) => setReflectionPrompt(enhanced)}
+                />
+              </div>
               <textarea
                 value={reflectionPrompt}
                 onChange={(e) => setReflectionPrompt(e.target.value)}

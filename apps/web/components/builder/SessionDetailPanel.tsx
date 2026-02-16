@@ -18,6 +18,7 @@ import {
 import { ActionItem } from "./ActionItem";
 import { KeyTakeawaysEditor } from "./KeyTakeawaysEditor";
 import { Spinner } from "@/components/ui/spinner";
+import { AiAssistButton } from "@/components/ui/AiAssistButton";
 import type { SessionData, YouTubeVideoData, WeekData } from "./StructureBuilder";
 
 interface SessionDetailPanelProps {
@@ -249,9 +250,17 @@ export function SessionDetailPanel({
 
         {/* Summary */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            Description
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label className="text-sm font-medium text-gray-300">
+              Description
+            </label>
+            <AiAssistButton
+              value={summary}
+              type="session_summary"
+              context={`${week.title} — ${session.title}`}
+              onEnhance={(enhanced) => setSummary(enhanced)}
+            />
+          </div>
           <textarea
             value={summary}
             onChange={(e) => setSummary(e.target.value)}

@@ -2,11 +2,31 @@ import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { logger } from "@/lib/logger";
 
-type EnhanceType = "outcome" | "description" | "transformation";
+type EnhanceType =
+  | "outcome"
+  | "description"
+  | "transformation"
+  | "target_audience"
+  | "session_summary"
+  | "action_instructions"
+  | "reflection_prompt"
+  | "key_takeaway";
 
-const PROMPTS: Record<EnhanceType, string> = {
-  outcome: `You are a marketing expert helping course creators write compelling outcome statements.
+function sanitizeInput(text: string): string {
+  // Truncate to reasonable length and strip control characters
+  return text.slice(0, 2000).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
+}
 
+function buildPrompt(type: EnhanceType, input: string, context?: string): string {
+  const sanitizedInput = sanitizeInput(input);
+  const sanitizedContext = context ? sanitizeInput(context) : undefined;
+  const contextBlock = sanitizedContext
+    ? `\nProgram context: ${sanitizedContext}\n`
+    : "";
+
+  const prompts: Record<EnhanceType, string> = {
+    outcome: `You are a marketing expert helping course creators write compelling outcome statements.
+${contextBlock}
 Take the user's rough outcome statement and transform it into a specific, measurable, and compelling version.
 
 Guidelines:
@@ -15,12 +35,12 @@ Guidelines:
 - Use active, transformation-focused language
 - Focus on the end result, not the process
 
-Input: "{input}"
+Input: "${sanitizedInput}"
 
 Respond with ONLY the improved outcome statement, no quotes or explanation.`,
 
-  description: `You are a copywriting expert helping course creators write engaging program descriptions.
-
+    description: `You are a copywriting expert helping course creators write engaging program descriptions.
+${contextBlock}
 Take the user's rough description and transform it into compelling sales copy.
 
 Guidelines:
@@ -29,12 +49,12 @@ Guidelines:
 - Be specific about what learners will achieve
 - Create urgency or emotional connection
 
-Input: "{input}"
+Input: "${sanitizedInput}"
 
 Respond with ONLY the improved description, no quotes or explanation.`,
 
-  transformation: `You are a marketing expert helping course creators articulate their unique transformation.
-
+    transformation: `You are a marketing expert helping course creators articulate their unique transformation.
+${contextBlock}
 Take the user's rough transformation statement and make it specific and compelling.
 
 Guidelines:
@@ -43,10 +63,83 @@ Guidelines:
 - Make it measurable and believable
 - Keep it to 1-2 sentences
 
-Input: "{input}"
+Input: "${sanitizedInput}"
 
 Respond with ONLY the improved transformation statement, no quotes or explanation.`,
-};
+
+    target_audience: `You are a marketing expert helping course creators define their ideal audience.
+${contextBlock}
+Take the user's rough audience description and make it specific and vivid.
+
+Guidelines:
+- Be specific about demographics, skill level, and goals
+- Identify the pain point or aspiration
+- Keep it to 1-2 sentences
+- Make it feel like a real person, not an abstract segment
+
+Input: "${sanitizedInput}"
+
+Respond with ONLY the improved audience description, no quotes or explanation.`,
+
+    session_summary: `You are a curriculum designer helping course creators write clear session descriptions.
+${contextBlock}
+Take the user's rough session description and make it compelling and clear.
+
+Guidelines:
+- Start with what the learner will accomplish
+- Be specific about skills or knowledge gained
+- Keep it to 2-3 sentences
+- Use active, engaging language
+
+Input: "${sanitizedInput}"
+
+Respond with ONLY the improved session description, no quotes or explanation.`,
+
+    action_instructions: `You are a curriculum designer helping course creators write clear action instructions.
+${contextBlock}
+Take the user's rough instructions and make them actionable and easy to follow.
+
+Guidelines:
+- Be specific about what the learner should do
+- Break complex tasks into clear steps if needed
+- Use direct, encouraging language
+- Keep it concise but complete
+
+Input: "${sanitizedInput}"
+
+Respond with ONLY the improved instructions, no quotes or explanation.`,
+
+    reflection_prompt: `You are a learning designer helping course creators write thought-provoking reflection prompts.
+${contextBlock}
+Take the user's rough reflection prompt and make it more insightful and thought-provoking.
+
+Guidelines:
+- Ask one clear question that promotes deep thinking
+- Connect to personal experience or application
+- Avoid yes/no questions — encourage narrative responses
+- Keep it to 1-2 sentences
+
+Input: "${sanitizedInput}"
+
+Respond with ONLY the improved reflection prompt, no quotes or explanation.`,
+
+    key_takeaway: `You are a curriculum designer helping course creators write concise key takeaways.
+${contextBlock}
+Take the user's rough takeaway and make it punchy and memorable.
+
+Guidelines:
+- One clear, actionable point
+- Start with a verb or key concept
+- Keep under 100 characters if possible
+- Make it something a learner would remember
+
+Input: "${sanitizedInput}"
+
+Respond with ONLY the improved takeaway, no quotes or explanation.`,
+  };
+
+  return prompts[type];
+}
 
 export async function POST(req: NextRequest) {
   const user = await getOrCreateUser();
@@ -56,21 +149,23 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { text, type = "outcome" } = body as { text: string; type?: EnhanceType };
+    const { text, type = "outcome", context } = body as {
+      text: string;
+      type?: EnhanceType;
+      context?: string;
+    };
 
-    if (!text || text.trim().length < 10) {
+    if (!text || text.trim().length < 5) {
       return NextResponse.json(
-        { error: "Please provide at least 10 characters to enhance" },
+        { error: "Please provide at least 5 characters to enhance" },
         { status: 400 }
       );
     }
 
-    const promptTemplate = PROMPTS[type];
-    if (!promptTemplate) {
+    const prompt = buildPrompt(type, text.trim(), context);
+    if (!prompt) {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
-
-    const prompt = promptTemplate.replace("{input}", text.trim());
 
     // Try Anthropic first, then OpenAI
     const anthropicKey = process.env.ANTHROPIC_API_KEY;
@@ -99,7 +194,8 @@ export async function POST(req: NextRequest) {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data: any = await res.json();
-      enhanced = data.content[0].text.trim();
+      enhanced = data?.content?.[0]?.text?.trim();
+      if (!enhanced) throw new Error("Unexpected Anthropic response format");
     } else if (openaiKey) {
       const res = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -120,7 +216,8 @@ export async function POST(req: NextRequest) {
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data: any = await res.json();
-      enhanced = data.choices[0].message.content.trim();
+      enhanced = data?.choices?.[0]?.message?.content?.trim();
+      if (!enhanced) throw new Error("Unexpected OpenAI response format");
     } else {
       return NextResponse.json(
         { error: "AI service not configured" },

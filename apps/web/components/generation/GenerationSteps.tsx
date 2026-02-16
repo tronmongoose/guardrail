@@ -69,15 +69,15 @@ function FullSteps({ steps, activeStepIndex, displayProgress }: Omit<GenerationS
         {steps.map((step, i) => (
           <div key={step.key}>
             {/* Step row */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-start gap-3">
               {/* Icon circle */}
               <div
                 className={`
-                  w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-300
+                  w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 transition-all duration-500 mt-0.5
                   ${step.status === "completed"
                     ? "bg-neon-cyan/20 border border-neon-cyan/50 animate-step-complete"
                     : step.status === "active"
-                    ? "bg-neon-pink/20 border-2 border-neon-pink animate-step-pulse"
+                    ? "bg-neon-pink/20 border-2 border-neon-pink animate-step-pulse scale-110"
                     : "bg-surface-card border border-surface-border"
                   }
                 `}
@@ -94,25 +94,32 @@ function FullSteps({ steps, activeStepIndex, displayProgress }: Omit<GenerationS
                 )}
               </div>
 
-              {/* Label */}
-              <span
-                className={`text-sm font-medium transition-colors duration-300 ${
-                  step.status === "completed"
-                    ? "text-neon-cyan"
-                    : step.status === "active"
-                    ? "text-shimmer"
-                    : "text-gray-600"
-                }`}
-                aria-live={step.status === "active" ? "polite" : undefined}
-              >
-                {step.label}{step.status === "active" ? "..." : ""}
-              </span>
+              {/* Label + subtitle */}
+              <div className="min-w-0">
+                <span
+                  className={`block text-sm font-medium transition-all duration-500 ${
+                    step.status === "completed"
+                      ? "text-neon-cyan"
+                      : step.status === "active"
+                      ? "text-shimmer"
+                      : "text-gray-600"
+                  }`}
+                  aria-live={step.status === "active" ? "polite" : undefined}
+                >
+                  {step.label}{step.status === "active" ? "..." : ""}
+                </span>
+                {step.status === "active" && (
+                  <span className="block text-xs text-gray-500 mt-0.5 animate-fade-in">
+                    {step.subtitle}
+                  </span>
+                )}
+              </div>
             </div>
 
             {/* Connector line */}
             {i < steps.length - 1 && (
               <div
-                className={`w-0.5 h-3 ml-[15px] transition-colors duration-300 ${
+                className={`w-0.5 h-4 ml-[15px] transition-colors duration-500 ${
                   i < activeStepIndex ? "bg-neon-cyan/40" : "bg-surface-border"
                 }`}
               />
@@ -125,7 +132,7 @@ function FullSteps({ steps, activeStepIndex, displayProgress }: Omit<GenerationS
       <div className="max-w-sm mx-auto mt-6">
         <div className="h-2 bg-surface-dark rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all duration-500"
+            className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all duration-700 ease-out"
             style={{ width: `${displayProgress}%` }}
           />
         </div>
@@ -152,7 +159,7 @@ function CompactSteps({ steps, activeStepIndex, displayProgress }: Omit<Generati
       {/* Progress bar */}
       <div className="mt-2 h-1.5 bg-surface-dark rounded-full overflow-hidden">
         <div
-          className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all duration-500"
+          className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all duration-700 ease-out"
           style={{ width: `${displayProgress}%` }}
         />
       </div>

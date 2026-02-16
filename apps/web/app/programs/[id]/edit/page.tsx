@@ -41,19 +41,43 @@ interface Program {
   weeks: WeekData[];
 }
 
+const AMBIENT_HEADERS = [
+  "Great content deserves great structure",
+  "Your expertise is becoming a program",
+  "Turning knowledge into transformation",
+  "Every lesson is being crafted with intention",
+  "Building something your learners will love",
+];
+
 function GenerationProgress({ stage, progress }: { stage: string | null; progress: number }) {
   const stepsData = useGenerationSteps({ stage, progress, status: "PROCESSING" });
+  const [headerIndex, setHeaderIndex] = useState(0);
+
+  // Rotate ambient header every 8 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setHeaderIndex((prev) => (prev + 1) % AMBIENT_HEADERS.length);
+    }, 8000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="max-w-lg mx-auto mt-16 text-center">
-      <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-neon-pink/10 border border-neon-pink/30 flex items-center justify-center">
+      {/* Animated icon */}
+      <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-neon-pink/10 border border-neon-pink/30 flex items-center justify-center generation-icon-glow">
         <svg className="w-10 h-10 text-neon-pink animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       </div>
+
+      {/* Rotating ambient header */}
+      <p className="text-sm text-gray-500 mb-2 h-5 transition-opacity duration-700" key={headerIndex}>
+        {AMBIENT_HEADERS[headerIndex]}
+      </p>
+
       <h2 className="text-2xl font-bold text-white mb-3">Building your program...</h2>
       <p className="text-gray-400 mb-8">
-        AI is analyzing your content and crafting a structured curriculum
+        AI is carefully analyzing your content and crafting a structured curriculum
       </p>
 
       <GenerationSteps
@@ -64,7 +88,7 @@ function GenerationProgress({ stage, progress }: { stage: string | null; progres
       />
 
       <p className="text-xs text-gray-600 mt-4">
-        This usually takes 10-30 seconds
+        Sit back and relax — this usually takes 20-45 seconds
       </p>
     </div>
   );
@@ -88,6 +112,7 @@ export default function ProgramEditPage() {
   const [showPricePicker, setShowPricePicker] = useState(false);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
   const [publishErrors, setPublishErrors] = useState<{ field: string; message: string }[] | null>(null);
+  const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus | null>(null);
   const [showStripePrompt, setShowStripePrompt] = useState(false);
   const [connectingStripe, setConnectingStripe] = useState(false);
@@ -382,6 +407,83 @@ export default function ProgramEditPage() {
       onClose={() => setShowPreview(false)}
       program={program}
     />
+
+    {/* Publish Confirmation Modal */}
+    {showPublishConfirm && program && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="bg-surface-card border border-surface-border rounded-2xl p-8 max-w-md w-full mx-4">
+          <h2 className="text-xl font-bold text-white mb-4 text-center">Ready to publish?</h2>
+
+          {/* Program summary checklist */}
+          <div className="space-y-3 mb-6">
+            <div className="flex items-center gap-3 text-sm">
+              <svg className="w-4 h-4 text-neon-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-gray-300">
+                <span className="text-white font-medium">{program.weeks.length}</span> week{program.weeks.length !== 1 ? "s" : ""} with{" "}
+                <span className="text-white font-medium">{program.weeks.reduce((sum, w) => sum + w.sessions.length, 0)}</span> session{program.weeks.reduce((sum, w) => sum + w.sessions.length, 0) !== 1 ? "s" : ""}
+              </span>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <svg className="w-4 h-4 text-neon-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-gray-300">
+                <span className="text-white font-medium">
+                  {program.weeks.reduce((sum, w) => sum + w.sessions.reduce((s, sess) => s + sess.actions.length, 0), 0)}
+                </span> total actions
+              </span>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <svg className="w-4 h-4 text-neon-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-gray-300">
+                Price: <span className="text-white font-medium">{program.priceInCents > 0 ? `$${(program.priceInCents / 100).toFixed(2)}` : "Free"}</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-3 text-sm">
+              <svg className="w-4 h-4 text-neon-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+              <span className="text-gray-300">
+                URL: <code className="text-neon-cyan text-xs">/p/{program.slug}</code>
+              </span>
+            </div>
+          </div>
+
+          {/* What happens next */}
+          <div className="bg-surface-dark rounded-lg p-4 mb-6 text-sm space-y-2">
+            <p className="text-gray-400">
+              <span className="text-white font-medium">What happens next:</span>
+            </p>
+            <p className="text-gray-500">• Your program gets a public URL that anyone can visit</p>
+            <p className="text-gray-500">• Learners can enroll and start working through the content</p>
+            <p className="text-gray-500">• You can unpublish or edit anytime</p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowPublishConfirm(false)}
+              className="flex-1 px-4 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-gray-300 hover:border-gray-500 transition text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                setShowPublishConfirm(false);
+                publishProgram();
+              }}
+              disabled={publishing}
+              className="flex-1 px-4 py-2.5 bg-gradient-to-r from-neon-cyan to-neon-pink text-surface-dark font-semibold rounded-lg hover:opacity-90 transition text-sm disabled:opacity-50"
+            >
+              {publishing ? "Publishing..." : "Publish Now"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* Publish Success Modal */}
     {publishedUrl && (
@@ -691,7 +793,7 @@ export default function ProgramEditPage() {
           {/* Publish button */}
           {!program.published && program.weeks.length > 0 && (
             <button
-              onClick={publishProgram}
+              onClick={() => setShowPublishConfirm(true)}
               disabled={publishing}
               className="text-xs px-4 py-1.5 rounded-lg font-medium bg-gradient-to-r from-neon-cyan to-neon-pink text-surface-dark hover:opacity-90 transition disabled:opacity-50 flex items-center gap-2"
             >

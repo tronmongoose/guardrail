@@ -1,5 +1,7 @@
 "use client";
 
+import { AiAssistButton } from "@/components/ui/AiAssistButton";
+
 interface StepBasicsProps {
   value: {
     title: string;
@@ -12,6 +14,8 @@ interface StepBasicsProps {
 }
 
 export function StepBasics({ value, onChange }: StepBasicsProps) {
+  const aiContext = [value.title, value.targetTransformation].filter(Boolean).join(" — ");
+
   return (
     <div className="space-y-6">
       <div>
@@ -37,9 +41,17 @@ export function StepBasics({ value, onChange }: StepBasicsProps) {
 
       {/* Target Audience */}
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Who is this for?
-        </label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-sm font-medium text-gray-300">
+            Who is this for?
+          </label>
+          <AiAssistButton
+            value={value.targetAudience}
+            type="target_audience"
+            context={aiContext}
+            onEnhance={(enhanced) => onChange({ targetAudience: enhanced })}
+          />
+        </div>
         <p className="text-xs text-gray-500 mb-2">
           Describe your ideal learner - their background, skill level, and industry.
         </p>
@@ -54,9 +66,17 @@ export function StepBasics({ value, onChange }: StepBasicsProps) {
 
       {/* Target Transformation */}
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Target Transformation <span className="text-neon-pink">*</span>
-        </label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-sm font-medium text-gray-300">
+            Target Transformation <span className="text-neon-pink">*</span>
+          </label>
+          <AiAssistButton
+            value={value.targetTransformation}
+            type="transformation"
+            context={aiContext}
+            onEnhance={(enhanced) => onChange({ targetTransformation: enhanced })}
+          />
+        </div>
         <p className="text-xs text-gray-500 mb-2">
           What specific outcome will learners achieve? This drives your entire program.
         </p>
@@ -71,9 +91,17 @@ export function StepBasics({ value, onChange }: StepBasicsProps) {
 
       {/* Description */}
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Description
-        </label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-sm font-medium text-gray-300">
+            Description
+          </label>
+          <AiAssistButton
+            value={value.description}
+            type="description"
+            context={aiContext}
+            onEnhance={(enhanced) => onChange({ description: enhanced })}
+          />
+        </div>
         <textarea
           value={value.description}
           onChange={(e) => onChange({ description: e.target.value })}
@@ -85,9 +113,17 @@ export function StepBasics({ value, onChange }: StepBasicsProps) {
 
       {/* Outcome Statement (optional, for backwards compatibility) */}
       <div>
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Outcome Statement <span className="text-gray-500">(optional)</span>
-        </label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-sm font-medium text-gray-300">
+            Outcome Statement <span className="text-gray-500">(optional)</span>
+          </label>
+          <AiAssistButton
+            value={value.outcomeStatement}
+            type="outcome"
+            context={aiContext}
+            onEnhance={(enhanced) => onChange({ outcomeStatement: enhanced })}
+          />
+        </div>
         <textarea
           value={value.outcomeStatement}
           onChange={(e) => onChange({ outcomeStatement: e.target.value })}

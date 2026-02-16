@@ -25,18 +25,28 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { actionIds } = body as { actionIds: string[] };
+  const { items } = body as { items: { id: string; orderIndex: number }[] };
 
-  if (!Array.isArray(actionIds)) {
-    return NextResponse.json({ error: "actionIds must be an array" }, { status: 400 });
+  if (!Array.isArray(items)) {
+    return NextResponse.json({ error: "items must be an array" }, { status: 400 });
+  }
+
+  // Verify all action IDs belong to this session
+  const actionIds = items.map((item) => item.id);
+  const actions = await prisma.action.findMany({
+    where: { id: { in: actionIds }, sessionId },
+    select: { id: true },
+  });
+  if (actions.length !== actionIds.length) {
+    return NextResponse.json({ error: "One or more actions do not belong to this session" }, { status: 400 });
   }
 
   // Update action order indices
   await prisma.$transaction(
-    actionIds.map((actionId, index) =>
+    items.map((item) =>
       prisma.action.update({
-        where: { id: actionId },
-        data: { orderIndex: index },
+        where: { id: item.id },
+        data: { orderIndex: item.orderIndex },
       })
     )
   );

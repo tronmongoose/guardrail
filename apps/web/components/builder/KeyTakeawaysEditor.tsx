@@ -1,6 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { AiAssistButton } from "@/components/ui/AiAssistButton";
+
+interface TakeawayItem {
+  key: number;
+  value: string;
+}
 
 interface KeyTakeawaysEditorProps {
   takeaways: string[];
@@ -13,40 +19,42 @@ export function KeyTakeawaysEditor({
   onChange,
   maxItems = 5,
 }: KeyTakeawaysEditorProps) {
-  const [localTakeaways, setLocalTakeaways] = useState<string[]>(takeaways);
+  const nextKeyRef = useRef(takeaways.length);
+  const [localTakeaways, setLocalTakeaways] = useState<TakeawayItem[]>(() =>
+    takeaways.map((v, i) => ({ key: i, value: v }))
+  );
 
   // Sync with external changes
   useEffect(() => {
-    setLocalTakeaways(takeaways);
+    setLocalTakeaways(takeaways.map((v, i) => ({ key: i, value: v })));
+    nextKeyRef.current = takeaways.length;
   }, [takeaways]);
 
-  // Debounced save
-  const debouncedSave = useCallback((newTakeaways: string[]) => {
-    // Filter out empty strings before saving
-    const filtered = newTakeaways.filter((t) => t.trim().length > 0);
+  const saveTakeaways = useCallback((items: TakeawayItem[]) => {
+    const filtered = items.map((t) => t.value).filter((v) => v.trim().length > 0);
     onChange(filtered);
   }, [onChange]);
 
   function handleChange(index: number, value: string) {
     const updated = [...localTakeaways];
-    updated[index] = value;
+    updated[index] = { ...updated[index], value };
     setLocalTakeaways(updated);
   }
 
   function handleBlur() {
-    debouncedSave(localTakeaways);
+    saveTakeaways(localTakeaways);
   }
 
   function handleAdd() {
     if (localTakeaways.length >= maxItems) return;
-    const updated = [...localTakeaways, ""];
-    setLocalTakeaways(updated);
+    const newKey = nextKeyRef.current++;
+    setLocalTakeaways([...localTakeaways, { key: newKey, value: "" }]);
   }
 
   function handleRemove(index: number) {
     const updated = localTakeaways.filter((_, i) => i !== index);
     setLocalTakeaways(updated);
-    debouncedSave(updated);
+    saveTakeaways(updated);
   }
 
   function handleKeyDown(e: React.KeyboardEvent, index: number) {
@@ -54,17 +62,15 @@ export function KeyTakeawaysEditor({
       e.preventDefault();
       if (localTakeaways.length < maxItems) {
         handleAdd();
-        // Focus next input after render
         setTimeout(() => {
           const inputs = document.querySelectorAll('[data-takeaway-input]');
           const nextInput = inputs[index + 1] as HTMLInputElement;
           nextInput?.focus();
         }, 0);
       }
-    } else if (e.key === "Backspace" && localTakeaways[index] === "" && index > 0) {
+    } else if (e.key === "Backspace" && localTakeaways[index].value === "" && index > 0) {
       e.preventDefault();
       handleRemove(index);
-      // Focus previous input
       setTimeout(() => {
         const inputs = document.querySelectorAll('[data-takeaway-input]');
         const prevInput = inputs[index - 1] as HTMLInputElement;
@@ -78,18 +84,18 @@ export function KeyTakeawaysEditor({
       <div className="flex items-center justify-between">
         <label className="text-sm font-medium text-gray-300">Key Takeaways</label>
         <span className="text-xs text-gray-500">
-          {localTakeaways.filter((t) => t.trim()).length}/{maxItems}
+          {localTakeaways.filter((t) => t.value.trim()).length}/{maxItems}
         </span>
       </div>
 
       <div className="space-y-2">
         {localTakeaways.map((takeaway, index) => (
-          <div key={index} className="flex items-start gap-2 group">
+          <div key={takeaway.key} className="flex items-start gap-2 group">
             <span className="text-neon-cyan mt-2.5 text-sm">•</span>
             <input
               type="text"
               data-takeaway-input
-              value={takeaway}
+              value={takeaway.value}
               onChange={(e) => handleChange(index, e.target.value)}
               onBlur={handleBlur}
               onKeyDown={(e) => handleKeyDown(e, index)}
@@ -97,6 +103,16 @@ export function KeyTakeawaysEditor({
               maxLength={200}
               className="flex-1 px-3 py-2 bg-surface-dark border border-surface-border rounded-lg text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
             />
+            <span className="mt-1.5">
+              <AiAssistButton
+                value={takeaway.value}
+                type="key_takeaway"
+                onEnhance={(enhanced) => {
+                  handleChange(index, enhanced);
+                  saveTakeaways(localTakeaways.map((t, i) => i === index ? { ...t, value: enhanced } : t));
+                }}
+              />
+            </span>
             <button
               onClick={() => handleRemove(index)}
               className="mt-2 p-1 text-gray-600 hover:text-neon-pink transition opacity-0 group-hover:opacity-100"
