@@ -47,26 +47,60 @@ interface Props {
   skinCSSVars: Record<string, string>;
 }
 
-const ACTION_TYPE_COLORS: Record<string, string> = {
-  WATCH: "text-neon-cyan",
-  REFLECT: "text-neon-pink",
-  DO: "text-neon-yellow",
-  READ: "text-neon-cyan",
-};
-
-const ACTION_TYPE_BG: Record<string, string> = {
-  WATCH: "bg-neon-cyan/10 border-neon-cyan/30",
-  REFLECT: "bg-neon-pink/10 border-neon-pink/30",
-  DO: "bg-neon-yellow/10 border-neon-yellow/30",
-  READ: "bg-neon-cyan/10 border-neon-cyan/30",
-};
-
 const ACTION_TYPE_VERBS: Record<string, string> = {
   WATCH: "Watch",
   READ: "Read",
   DO: "Practice",
   REFLECT: "Reflect",
 };
+
+function getActionTypeStyle(type: string): React.CSSProperties {
+  switch (type) {
+    case "WATCH":
+    case "READ":
+      return { color: "var(--token-color-accent)" };
+    case "REFLECT":
+      return { color: "var(--token-color-semantic-action-reflect)" };
+    case "DO":
+      return { color: "var(--token-color-semantic-action-do)" };
+    default:
+      return { color: "var(--token-color-text-secondary)" };
+  }
+}
+
+function getActionTypeBgStyle(type: string): React.CSSProperties {
+  switch (type) {
+    case "WATCH":
+    case "READ":
+      return {
+        backgroundColor:
+          "color-mix(in srgb, var(--token-color-accent), transparent 90%)",
+        borderColor:
+          "color-mix(in srgb, var(--token-color-accent), transparent 70%)",
+      };
+    case "REFLECT":
+      return {
+        backgroundColor:
+          "color-mix(in srgb, var(--token-color-semantic-action-reflect), transparent 90%)",
+        borderColor:
+          "color-mix(in srgb, var(--token-color-semantic-action-reflect), transparent 70%)",
+      };
+    case "DO":
+      return {
+        backgroundColor:
+          "color-mix(in srgb, var(--token-color-semantic-action-do), transparent 90%)",
+        borderColor:
+          "color-mix(in srgb, var(--token-color-semantic-action-do), transparent 70%)",
+      };
+    default:
+      return {
+        backgroundColor:
+          "color-mix(in srgb, var(--token-color-text-secondary), transparent 90%)",
+        borderColor:
+          "color-mix(in srgb, var(--token-color-text-secondary), transparent 70%)",
+      };
+  }
+}
 
 export function LearnerTimeline({
   program,
@@ -75,8 +109,6 @@ export function LearnerTimeline({
   currentWeek,
   completedWeeks,
   pacingMode,
-  skinId,
-  skinCSSVars,
 }: Props) {
   const { showToast } = useToast();
 
@@ -231,18 +263,45 @@ export function LearnerTimeline({
   }, [progressPercent]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f]" data-skin={skinId} style={skinCSSVars as React.CSSProperties}>
+    <div
+      className="min-h-screen"
+      style={{ backgroundColor: "var(--token-color-bg-default)" }}
+    >
       {/* Fixed top bar */}
-      <nav className="sticky top-0 z-30 bg-surface-dark/95 backdrop-blur-sm border-b border-surface-border">
+      <nav
+        className="sticky top-0 z-30 backdrop-blur-sm"
+        style={{
+          backgroundColor: "color-mix(in srgb, var(--token-color-bg-default), transparent 5%)",
+          borderBottom: "1px solid var(--token-color-border-subtle)",
+        }}
+      >
         <div className="flex items-center justify-between px-4 py-3 max-w-xl mx-auto">
-          <Link href="/" className="text-neon-cyan text-sm font-bold">&larr;</Link>
+          <Link
+            href="/"
+            className="text-sm font-bold"
+            style={{ color: "var(--token-color-accent)" }}
+          >
+            &larr;
+          </Link>
           <div className="flex-1 text-center px-4">
-            <h1 className="text-sm font-semibold text-white truncate">{program.title}</h1>
+            <h1
+              className="text-sm font-semibold truncate"
+              style={{ color: "var(--token-color-text-primary)" }}
+            >
+              {program.title}
+            </h1>
           </div>
           {/* Progress circle */}
           <div className="relative w-10 h-10 flex-shrink-0">
             <svg className="w-10 h-10 -rotate-90" viewBox="0 0 40 40">
-              <circle cx="20" cy="20" r={progressArc.r} fill="none" stroke="#1f2937" strokeWidth="3" />
+              <circle
+                cx="20"
+                cy="20"
+                r={progressArc.r}
+                fill="none"
+                stroke="var(--token-color-border-subtle)"
+                strokeWidth="3"
+              />
               <circle
                 cx="20" cy="20" r={progressArc.r}
                 fill="none" stroke="url(#progressGrad)" strokeWidth="3"
@@ -253,12 +312,15 @@ export function LearnerTimeline({
               />
               <defs>
                 <linearGradient id="progressGrad">
-                  <stop offset="0%" stopColor="#00fff0" />
-                  <stop offset="100%" stopColor="#ff2dff" />
+                  <stop offset="0%" stopColor="var(--token-color-accent)" />
+                  <stop offset="100%" stopColor="var(--token-color-semantic-action-reflect)" />
                 </linearGradient>
               </defs>
             </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white">
+            <span
+              className="absolute inset-0 flex items-center justify-center text-[9px] font-bold"
+              style={{ color: "var(--token-color-text-primary)" }}
+            >
               {progressPercent}%
             </span>
           </div>
@@ -268,7 +330,10 @@ export function LearnerTimeline({
       <main className="max-w-xl mx-auto px-4 py-6 pb-24 space-y-4">
         {/* Progress summary */}
         <div className="text-center mb-2">
-          <p className="text-xs text-gray-500">
+          <p
+            className="text-xs"
+            style={{ color: "var(--token-color-text-secondary)" }}
+          >
             {completedCount} of {totalActions} actions complete
             {isProgramComplete && " — You did it!"}
           </p>
@@ -286,27 +351,33 @@ export function LearnerTimeline({
             <section key={week.id}>
               {/* Week header */}
               <div className="flex items-center gap-3 mb-3">
-                <span
-                  className={`text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full ${
-                    isWeekComplete
-                      ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
-                      : isUnlocked
-                      ? "bg-surface-card text-gray-400 border border-surface-border"
-                      : "bg-surface-dark text-gray-600"
-                  }`}
+                <WeekBadge
+                  weekNumber={week.weekNumber}
+                  isWeekComplete={isWeekComplete}
+                  isUnlocked={isUnlocked}
+                />
+                <h2
+                  className={`text-sm font-semibold ${!isUnlocked ? "text-gray-600" : ""}`}
+                  style={isUnlocked ? { color: "var(--token-color-text-primary)" } : undefined}
                 >
-                  W{week.weekNumber}
-                </span>
-                <h2 className={`text-sm font-semibold ${isUnlocked ? "text-white" : "text-gray-600"}`}>
                   {week.title}
                 </h2>
                 {isUnlocked && weekActions.length > 0 && (
-                  <span className="ml-auto text-xs text-gray-500">
+                  <span
+                    className="ml-auto text-xs"
+                    style={{ color: "var(--token-color-text-secondary)" }}
+                  >
                     {weekCompletedCount}/{weekActions.length}
                   </span>
                 )}
                 {isWeekComplete && (
-                  <svg className="w-4 h-4 text-neon-cyan ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg
+                    className="w-4 h-4 ml-1"
+                    style={{ color: "var(--token-color-accent)" }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                   </svg>
                 )}
@@ -314,21 +385,40 @@ export function LearnerTimeline({
 
               {/* Week progress bar */}
               {isUnlocked && weekActions.length > 0 && (
-                <div className="h-1 bg-surface-dark rounded-full overflow-hidden mb-3">
+                <div
+                  className="h-1 overflow-hidden mb-3"
+                  style={{
+                    backgroundColor: "var(--token-comp-progress-track)",
+                    borderRadius: "var(--token-comp-progress-radius)",
+                  }}
+                >
                   <div
-                    className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all duration-500"
-                    style={{ width: `${weekProgress}%` }}
+                    className="h-full transition-all duration-500"
+                    style={{
+                      width: `${weekProgress}%`,
+                      background: "var(--token-comp-progress-fill)",
+                      borderRadius: "var(--token-comp-progress-radius)",
+                    }}
                   />
                 </div>
               )}
 
               {/* Locked state */}
               {!isUnlocked && (
-                <div className="py-6 text-center rounded-xl bg-surface-dark/50 border border-surface-border mb-4">
+                <div
+                  className="py-6 text-center rounded-xl mb-4"
+                  style={{
+                    backgroundColor: "color-mix(in srgb, var(--token-color-bg-default), transparent 50%)",
+                    border: "1px solid var(--token-color-border-subtle)",
+                  }}
+                >
                   <svg className="w-8 h-8 text-gray-600 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
-                  <p className="text-xs text-gray-500">
+                  <p
+                    className="text-xs"
+                    style={{ color: "var(--token-color-text-secondary)" }}
+                  >
                     {pacingMode === "UNLOCK_ON_COMPLETE" ? (
                       <>Complete Week {week.weekNumber - 1} to unlock</>
                     ) : (
@@ -356,7 +446,12 @@ export function LearnerTimeline({
                     {/* Session sub-header */}
                     {week.sessions.length > 1 && (
                       <div className="flex items-center justify-between mb-2 px-1">
-                        <h3 className="text-xs font-medium text-gray-400">{session.title}</h3>
+                        <h3
+                          className="text-xs font-medium"
+                          style={{ color: "var(--token-color-text-secondary)" }}
+                        >
+                          {session.title}
+                        </h3>
                         <span className="text-[10px] text-gray-600">{sessionDone}/{sessionActions.length}</span>
                       </div>
                     )}
@@ -369,20 +464,47 @@ export function LearnerTimeline({
                         const isCompleting = justCompleted === action.id;
                         const isSaving = savingAction === action.id;
 
+                        const cardBorderStyle = (): React.CSSProperties => {
+                          if (isNext && !isExpanded) {
+                            return {
+                              borderColor: "color-mix(in srgb, var(--token-color-accent), transparent 50%)",
+                              boxShadow: "0 10px 15px -3px color-mix(in srgb, var(--token-color-accent), transparent 90%)",
+                            };
+                          }
+                          if (isCompleting) {
+                            return {
+                              borderColor: "color-mix(in srgb, var(--token-color-accent), transparent 50%)",
+                            };
+                          }
+                          if (done) {
+                            return {
+                              borderColor: "color-mix(in srgb, var(--token-color-border-subtle), transparent 50%)",
+                            };
+                          }
+                          return {
+                            borderColor: "var(--token-color-border-subtle)",
+                          };
+                        };
+
                         return (
                           <div
                             key={action.id}
                             ref={isNext ? nextActionRef : undefined}
                             className={`rounded-xl border transition-all duration-300 overflow-hidden ${
                               isNext && !isExpanded
-                                ? "border-neon-cyan/50 shadow-lg shadow-neon-cyan/10 pulse-ring-border"
+                                ? "pulse-ring-border"
                                 : isCompleting
-                                ? "border-neon-cyan/50 scale-[0.98]"
+                                ? "scale-[0.98]"
                                 : done
-                                ? "border-surface-border/50 opacity-70"
-                                : "border-surface-border"
+                                ? "opacity-70"
+                                : ""
                             }`}
-                            style={{ backgroundColor: done ? "#0a0a0f" : "#111118" }}
+                            style={{
+                              backgroundColor: done
+                                ? "var(--token-color-bg-default)"
+                                : "var(--token-color-bg-elevated)",
+                              ...cardBorderStyle(),
+                            }}
                           >
                             {/* Compact action row */}
                             <div
@@ -400,45 +522,47 @@ export function LearnerTimeline({
                               className="w-full flex items-center gap-3 p-3 text-left cursor-pointer"
                             >
                               {/* Completion circle */}
-                              <button
-                                type="button"
-                                aria-label={done ? "Completed" : "Mark complete"}
+                              <CompletionCircle
+                                done={done}
+                                isSaving={isSaving}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (!done && !isSaving) {
                                     completeAction(action.id, week.weekNumber, reflections[action.id]);
                                   }
                                 }}
-                                className={`w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all duration-300 ${
-                                  done
-                                    ? "bg-neon-cyan border-neon-cyan action-complete-check"
-                                    : isSaving
-                                    ? "border-neon-cyan animate-pulse"
-                                    : "border-gray-600 hover:border-neon-cyan"
-                                }`}
-                              >
-                                {isSaving ? (
-                                  <Spinner size="sm" />
-                                ) : done ? (
-                                  <svg className="w-3 h-3 text-surface-dark" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                  </svg>
-                                ) : null}
-                              </button>
+                              />
 
                               {/* Action info */}
                               <div className="flex-1 min-w-0">
-                                <p className={`text-sm font-medium truncate ${done ? "line-through text-gray-500" : "text-white"}`}>
+                                <p
+                                  className={`text-sm font-medium truncate ${done ? "line-through" : ""}`}
+                                  style={{
+                                    color: done
+                                      ? "var(--token-color-text-secondary)"
+                                      : "var(--token-color-text-primary)",
+                                  }}
+                                >
                                   {action.title}
                                 </p>
-                                <span className={`text-[10px] uppercase tracking-wider font-semibold ${ACTION_TYPE_COLORS[action.type] ?? "text-gray-400"}`}>
+                                <span
+                                  className="text-[10px] uppercase tracking-wider font-semibold"
+                                  style={getActionTypeStyle(action.type)}
+                                >
                                   {ACTION_TYPE_VERBS[action.type] || action.type}
                                 </span>
                               </div>
 
                               {/* Up Next badge */}
                               {isNext && !isExpanded && (
-                                <span className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-neon-cyan/15 text-neon-cyan border border-neon-cyan/30 flex-shrink-0">
+                                <span
+                                  className="text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full flex-shrink-0"
+                                  style={{
+                                    backgroundColor: "color-mix(in srgb, var(--token-color-accent), transparent 85%)",
+                                    color: "var(--token-color-accent)",
+                                    border: "1px solid color-mix(in srgb, var(--token-color-accent), transparent 70%)",
+                                  }}
+                                >
                                   Next
                                 </span>
                               )}
@@ -446,7 +570,8 @@ export function LearnerTimeline({
                               {/* Expand chevron */}
                               {!done && (
                                 <svg
-                                  className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                                  className={`w-4 h-4 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                                  style={{ color: "var(--token-color-text-secondary)" }}
                                   fill="none" stroke="currentColor" viewBox="0 0 24 24"
                                 >
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -459,14 +584,23 @@ export function LearnerTimeline({
                               <div className="px-3 pb-4 pt-1 space-y-3 animate-fade-in">
                                 {/* Instructions */}
                                 {action.instructions && (
-                                  <p className="text-xs text-gray-400 leading-relaxed px-1">
+                                  <p
+                                    className="text-xs leading-relaxed px-1"
+                                    style={{ color: "var(--token-color-text-secondary)" }}
+                                  >
                                     {action.instructions}
                                   </p>
                                 )}
 
                                 {/* YouTube embed */}
                                 {action.youtubeVideo && (
-                                  <div className="aspect-video rounded-lg overflow-hidden border border-surface-border">
+                                  <div
+                                    className="aspect-video overflow-hidden"
+                                    style={{
+                                      borderRadius: "var(--token-comp-video-radius)",
+                                      border: "var(--token-comp-video-border)",
+                                    }}
+                                  >
                                     <iframe
                                       src={`https://www.youtube.com/embed/${action.youtubeVideo.videoId}`}
                                       title={action.youtubeVideo.title || action.title}
@@ -479,8 +613,8 @@ export function LearnerTimeline({
 
                                 {/* Reflection prompt */}
                                 {action.type === "REFLECT" && action.reflectionPrompt && (
-                                  <div>
-                                    <p className="text-xs text-neon-pink/80 italic mb-2 px-1">
+                                  <div style={{ color: "var(--token-color-semantic-action-reflect)" }}>
+                                    <p className="text-xs opacity-80 italic mb-2 px-1">
                                       {action.reflectionPrompt}
                                     </p>
                                     <textarea
@@ -490,7 +624,12 @@ export function LearnerTimeline({
                                       }
                                       placeholder="Write your reflection..."
                                       rows={3}
-                                      className="w-full px-3 py-2 bg-surface-dark border border-surface-border rounded-lg text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-neon-pink focus:ring-1 focus:ring-neon-pink resize-none"
+                                      className="w-full px-3 py-2 rounded-lg text-sm placeholder:text-gray-500 focus:outline-none focus:border-current focus:ring-1 focus:ring-current resize-none"
+                                      style={{
+                                        backgroundColor: "var(--token-color-bg-default)",
+                                        border: "1px solid var(--token-color-border-subtle)",
+                                        color: "var(--token-color-text-primary)",
+                                      }}
                                     />
                                   </div>
                                 )}
@@ -499,9 +638,11 @@ export function LearnerTimeline({
                                 <button
                                   onClick={() => completeAction(action.id, week.weekNumber, reflections[action.id])}
                                   disabled={isSaving}
-                                  className={`w-full py-2.5 rounded-lg text-sm font-semibold transition border ${
-                                    ACTION_TYPE_BG[action.type] || "bg-gray-600/10 border-gray-600/30"
-                                  } ${ACTION_TYPE_COLORS[action.type] || "text-gray-400"} hover:opacity-80 disabled:opacity-50`}
+                                  className="w-full py-2.5 rounded-lg text-sm font-semibold transition border hover:opacity-80 disabled:opacity-50"
+                                  style={{
+                                    ...getActionTypeBgStyle(action.type),
+                                    ...getActionTypeStyle(action.type),
+                                  }}
                                 >
                                   {isSaving ? "Saving..." : "Mark Complete"}
                                 </button>
@@ -520,14 +661,40 @@ export function LearnerTimeline({
 
         {/* Program completion card */}
         {isProgramComplete && (
-          <div className="bg-surface-card border border-neon-cyan/40 rounded-xl p-6 text-center animate-slide-up">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center">
-              <svg className="w-8 h-8 text-neon-cyan" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div
+            className="rounded-xl p-6 text-center animate-slide-up"
+            style={{
+              backgroundColor: "var(--token-color-bg-elevated)",
+              border: "1px solid color-mix(in srgb, var(--token-color-accent), transparent 60%)",
+            }}
+          >
+            <div
+              className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--token-color-accent), transparent 90%)",
+                border: "1px solid color-mix(in srgb, var(--token-color-accent), transparent 70%)",
+              }}
+            >
+              <svg
+                className="w-8 h-8"
+                style={{ color: "var(--token-color-accent)" }}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
               </svg>
             </div>
-            <h3 className="text-lg font-bold text-white mb-1">Program Complete!</h3>
-            <p className="text-sm text-gray-400">
+            <h3
+              className="text-lg font-bold mb-1"
+              style={{ color: "var(--token-color-text-primary)" }}
+            >
+              Program Complete!
+            </h3>
+            <p
+              className="text-sm"
+              style={{ color: "var(--token-color-text-secondary)" }}
+            >
               You completed all {totalActions} actions across {program.weeks.length} weeks
             </p>
           </div>
@@ -537,25 +704,43 @@ export function LearnerTimeline({
       {/* Milestone celebration overlay */}
       {celebration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-          <div className="relative bg-surface-card border border-neon-cyan/40 rounded-2xl p-8 max-w-sm w-full text-center animate-slide-up shadow-2xl shadow-neon-cyan/10 overflow-hidden">
+          <div
+            className="relative rounded-2xl p-8 max-w-sm w-full text-center animate-slide-up overflow-hidden"
+            style={{
+              backgroundColor: "var(--token-color-bg-elevated)",
+              border: "1px solid color-mix(in srgb, var(--token-color-accent), transparent 60%)",
+              boxShadow: "0 25px 50px -12px color-mix(in srgb, var(--token-color-accent), transparent 90%)",
+            }}
+          >
             <div className="confetti-burst" aria-hidden="true">
-              <span className="confetti-dot" style={{ "--dot-color": "#00fff0", "--dot-angle": "0deg", "--dot-distance": "80px" } as React.CSSProperties} />
-              <span className="confetti-dot" style={{ "--dot-color": "#ff2dff", "--dot-angle": "45deg", "--dot-distance": "70px" } as React.CSSProperties} />
-              <span className="confetti-dot" style={{ "--dot-color": "#ffd600", "--dot-angle": "90deg", "--dot-distance": "85px" } as React.CSSProperties} />
-              <span className="confetti-dot" style={{ "--dot-color": "#00fff0", "--dot-angle": "135deg", "--dot-distance": "75px" } as React.CSSProperties} />
-              <span className="confetti-dot" style={{ "--dot-color": "#ff2dff", "--dot-angle": "180deg", "--dot-distance": "80px" } as React.CSSProperties} />
-              <span className="confetti-dot" style={{ "--dot-color": "#ffd600", "--dot-angle": "225deg", "--dot-distance": "70px" } as React.CSSProperties} />
-              <span className="confetti-dot" style={{ "--dot-color": "#00fff0", "--dot-angle": "270deg", "--dot-distance": "85px" } as React.CSSProperties} />
-              <span className="confetti-dot" style={{ "--dot-color": "#ff2dff", "--dot-angle": "315deg", "--dot-distance": "75px" } as React.CSSProperties} />
+              <span className="confetti-dot" style={{ "--dot-color": "var(--token-color-accent)", "--dot-angle": "0deg", "--dot-distance": "80px" } as React.CSSProperties} />
+              <span className="confetti-dot" style={{ "--dot-color": "var(--token-color-semantic-action-reflect)", "--dot-angle": "45deg", "--dot-distance": "70px" } as React.CSSProperties} />
+              <span className="confetti-dot" style={{ "--dot-color": "var(--token-color-semantic-action-do)", "--dot-angle": "90deg", "--dot-distance": "85px" } as React.CSSProperties} />
+              <span className="confetti-dot" style={{ "--dot-color": "var(--token-color-accent)", "--dot-angle": "135deg", "--dot-distance": "75px" } as React.CSSProperties} />
+              <span className="confetti-dot" style={{ "--dot-color": "var(--token-color-semantic-action-reflect)", "--dot-angle": "180deg", "--dot-distance": "80px" } as React.CSSProperties} />
+              <span className="confetti-dot" style={{ "--dot-color": "var(--token-color-semantic-action-do)", "--dot-angle": "225deg", "--dot-distance": "70px" } as React.CSSProperties} />
+              <span className="confetti-dot" style={{ "--dot-color": "var(--token-color-accent)", "--dot-angle": "270deg", "--dot-distance": "85px" } as React.CSSProperties} />
+              <span className="confetti-dot" style={{ "--dot-color": "var(--token-color-semantic-action-reflect)", "--dot-angle": "315deg", "--dot-distance": "75px" } as React.CSSProperties} />
             </div>
 
             <div className="relative z-10">
               <div className="text-4xl mb-3">&#127881;</div>
-              <h3 className="text-xl font-bold text-white mb-1">
+              <h3
+                className="text-xl font-bold mb-1"
+                style={{ color: "var(--token-color-text-primary)" }}
+              >
                 {celebration.isLastWeek ? "Program Complete!" : `Week ${celebration.weekNumber} Complete!`}
               </h3>
-              <p className="text-sm text-gray-400 mb-1">{celebration.weekTitle}</p>
-              <p className="text-xs text-gray-500 mb-5">
+              <p
+                className="text-sm mb-1"
+                style={{ color: "var(--token-color-text-secondary)" }}
+              >
+                {celebration.weekTitle}
+              </p>
+              <p
+                className="text-xs mb-5"
+                style={{ color: "var(--token-color-text-secondary)" }}
+              >
                 You completed {celebration.actionCount} actions
               </p>
               <button
@@ -565,7 +750,12 @@ export function LearnerTimeline({
                     setTimeout(() => scrollToNextAction(), 200);
                   }
                 }}
-                className="px-5 py-2.5 rounded-lg bg-neon-cyan/10 border border-neon-cyan/40 text-neon-cyan text-sm font-medium hover:bg-neon-cyan/20 transition"
+                className="px-5 py-2.5 rounded-lg text-sm font-medium transition"
+                style={{
+                  backgroundColor: "color-mix(in srgb, var(--token-color-accent), transparent 90%)",
+                  border: "1px solid color-mix(in srgb, var(--token-color-accent), transparent 60%)",
+                  color: "var(--token-color-accent)",
+                }}
               >
                 {celebration.isLastWeek ? "View Your Journey" : `Continue to Week ${celebration.weekNumber + 1} \u2192`}
               </button>
@@ -577,10 +767,21 @@ export function LearnerTimeline({
       {/* Floating continue button (mobile) */}
       {nextActionId && !expandedAction && !celebration && !isProgramComplete && (
         <div className="fixed bottom-0 left-0 right-0 z-40 sm:hidden">
-          <div className="bg-surface-card/95 backdrop-blur-sm border-t border-surface-border px-4 py-3">
+          <div
+            className="backdrop-blur-sm px-4 py-3"
+            style={{
+              backgroundColor: "color-mix(in srgb, var(--token-color-bg-elevated), transparent 5%)",
+              borderTop: "1px solid var(--token-color-border-subtle)",
+            }}
+          >
             <button
               onClick={scrollToNextAction}
-              className="w-full py-2.5 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30 hover:bg-neon-cyan/20 transition text-sm text-neon-cyan font-medium"
+              className="w-full py-2.5 rounded-lg text-sm font-medium transition"
+              style={{
+                backgroundColor: "color-mix(in srgb, var(--token-color-accent), transparent 90%)",
+                border: "1px solid color-mix(in srgb, var(--token-color-accent), transparent 70%)",
+                color: "var(--token-color-accent)",
+              }}
             >
               Continue &rarr;
             </button>
@@ -588,5 +789,113 @@ export function LearnerTimeline({
         </div>
       )}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Small extracted sub-components for clarity                        */
+/* ------------------------------------------------------------------ */
+
+interface WeekBadgeProps {
+  weekNumber: number;
+  isWeekComplete: boolean;
+  isUnlocked: boolean;
+}
+
+function WeekBadge({ weekNumber, isWeekComplete, isUnlocked }: WeekBadgeProps): React.ReactElement {
+  if (isWeekComplete) {
+    return (
+      <span
+        className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
+        style={{
+          backgroundColor: "color-mix(in srgb, var(--token-color-accent), transparent 90%)",
+          color: "var(--token-color-accent)",
+          border: "1px solid color-mix(in srgb, var(--token-color-accent), transparent 70%)",
+        }}
+      >
+        W{weekNumber}
+      </span>
+    );
+  }
+
+  if (isUnlocked) {
+    return (
+      <span
+        className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
+        style={{
+          backgroundColor: "var(--token-color-bg-elevated)",
+          color: "var(--token-color-text-secondary)",
+          border: "1px solid var(--token-color-border-subtle)",
+        }}
+      >
+        W{weekNumber}
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full text-gray-600"
+      style={{ backgroundColor: "var(--token-color-bg-default)" }}
+    >
+      W{weekNumber}
+    </span>
+  );
+}
+
+interface CompletionCircleProps {
+  done: boolean;
+  isSaving: boolean;
+  onClick: (e: React.MouseEvent) => void;
+}
+
+function CompletionCircle({ done, isSaving, onClick }: CompletionCircleProps): React.ReactElement {
+  const baseClasses = "w-6 h-6 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-all duration-300";
+
+  if (done) {
+    return (
+      <button
+        type="button"
+        aria-label="Completed"
+        onClick={onClick}
+        className={`${baseClasses} action-complete-check`}
+        style={{
+          backgroundColor: "var(--token-color-accent)",
+          borderColor: "var(--token-color-accent)",
+        }}
+      >
+        <svg
+          className="w-3 h-3"
+          style={{ color: "var(--token-color-bg-default)" }}
+          fill="currentColor"
+          viewBox="0 0 20 20"
+        >
+          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+        </svg>
+      </button>
+    );
+  }
+
+  if (isSaving) {
+    return (
+      <button
+        type="button"
+        aria-label="Saving..."
+        onClick={onClick}
+        className={`${baseClasses} animate-pulse`}
+        style={{ borderColor: "var(--token-color-accent)" }}
+      >
+        <Spinner size="sm" />
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label="Mark complete"
+      onClick={onClick}
+      className={`${baseClasses} border-gray-600 hover:border-[var(--token-color-accent)]`}
+    />
   );
 }

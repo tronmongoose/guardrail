@@ -99,12 +99,17 @@ export const SKINS: Record<SkinId, Skin> = {
 
 export const SKIN_IDS = Object.keys(SKINS) as (keyof typeof SKINS)[];
 
+/**
+ * @deprecated Use `getSkinTokens()` from `lib/skin-bundles/registry` instead.
+ * This returns the legacy Skin interface. Kept for builder preview components.
+ */
 export function getSkin(skinId: string): Skin {
   return SKINS[skinId as SkinId] || SKINS.default;
 }
 
 /**
- * Generate CSS custom properties for a skin
+ * @deprecated Use `getTokenCSSVars()` from `lib/skin-bridge` instead,
+ * which emits both legacy --skin-* and new --token-* CSS vars.
  */
 export function getSkinCSSVars(skin: Skin): Record<string, string> {
   return {

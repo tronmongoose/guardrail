@@ -173,39 +173,70 @@ The bridge utility (`apps/web/lib/skin-bridge.ts`) converts between the legacy `
 - `tokensToSkin(tokens)` — tokens → legacy (for existing preview components)
 - `getTokenCSSVars(tokens)` — generates both `--skin-*` and `--token-*` CSS custom properties
 
-## SkinThemeProvider Contract (future)
+## SkinThemeProvider
 
-When implemented, the `SkinThemeProvider` will:
+The `SkinThemeProvider` (in `apps/web/components/skins/SkinThemeProvider.tsx`) wraps consumer-facing pages and provides both CSS custom properties and typed React Context access.
 
-1. Accept a `SkinTokens` bundle (or a `SkinId` to look up)
-2. Set CSS custom properties on a root `<div>` via `style` attribute
-3. Provide a `useSkinTokens()` hook for typed access to the current tokens
-4. Wrap learner-facing pages (`/learn/[programId]`, `/p/[slug]`)
+**Usage in server components:**
+```typescript
+import { getSkinTokens } from "@/lib/skin-bundles/registry";
+import { SkinThemeProvider } from "@/components/skins/SkinThemeProvider";
+
+const tokens = getSkinTokens(program.skinId);
+
+<SkinThemeProvider tokens={tokens}>
+  <LearnerTimeline ... />
+</SkinThemeProvider>
+```
+
+**Usage in client components (typed access):**
+```typescript
+import { useSkinTokens } from "@/components/skins/SkinThemeProvider";
+
+const tokens = useSkinTokens();
+// tokens.color.accent, tokens.component.button.primary.variant, etc.
+```
+
+**Currently wraps:**
+- `/learn/[programId]` — learner timeline (fully migrated to CSS vars)
+- `/p/[slug]` — sales page (uses token registry + `getTokenCSSVars()`)
+
+## Bundle Registry
+
+The registry (`apps/web/lib/skin-bundles/registry.ts`) is the single entry point for looking up complete `SkinTokens` bundles:
 
 ```typescript
-// Future API shape:
-<SkinThemeProvider tokens={minimalTokens}>
-  <LearnerTimeline ... />
-</SkinThemeProvider>
+import { getSkinTokens } from "@/lib/skin-bundles/registry";
 
-// Or by ID:
-<SkinThemeProvider skinId={program.skinId}>
-  <LearnerTimeline ... />
-</SkinThemeProvider>
-
-// In components:
-const tokens = useSkinTokens();
-// tokens.color.accent, tokens.text.heading.xl.size, etc.
+const tokens = getSkinTokens(program.skinId); // Falls back to "default"
 ```
+
+Available bundles: `default.ts`, `professional.ts`, `warm.ts`, `minimal.ts`
+
+## CSS Variable Naming
+
+`getTokenCSSVars()` emits both legacy `--skin-*` vars (backward compat) and new `--token-*` vars:
+
+| Category | CSS Variables |
+|---|---|
+| **Colors** | `--token-color-bg-default`, `--token-color-bg-elevated`, `--token-color-border-subtle`, `--token-color-text-primary`, `--token-color-text-secondary`, `--token-color-accent`, `--token-color-accent-hover`, `--token-color-semantic-*` |
+| **Typography** | `--token-text-heading-xl-{font,size,weight,line-height}`, `--token-text-heading-lg-*`, `--token-text-heading-md-*`, `--token-text-body-md-*`, `--token-text-body-sm-*`, `--token-text-label-sm-*` |
+| **Radius** | `--token-radius-sm`, `--token-radius-md`, `--token-radius-lg` |
+| **Shadow** | `--token-shadow-sm`, `--token-shadow-md`, `--token-shadow-lg` |
+| **Components** | `--token-comp-btn-primary-{variant,radius}`, `--token-comp-btn-secondary-*`, `--token-comp-chip-{bg,text,radius}`, `--token-comp-badge-info-{bg,text}`, `--token-comp-progress-{track,fill,radius}`, `--token-comp-video-{radius,border}` |
+| **Legacy** | `--skin-bg`, `--skin-bg-secondary`, `--skin-text`, `--skin-text-muted`, `--skin-accent`, `--skin-accent-hover`, `--skin-border` |
+
+For opacity variants, use `color-mix(in srgb, var(--token-color-accent), transparent 80%)`.
 
 ## Adding a New Skin
 
 1. Add the skin ID to the `SkinId` const in `packages/shared/src/skin-tokens.ts`
 2. Add it to the `SkinIdSchema` Zod enum in the same file
 3. Create a token bundle file: `apps/web/lib/skin-bundles/<name>.ts`
-4. Add the legacy `Skin` entry to `SKINS` in `apps/web/lib/skins.ts`
-5. Validate: `SkinTokensSchema.parse(yourBundle)` must succeed
-6. The SkinPicker will automatically show the new skin
+4. Register it in `apps/web/lib/skin-bundles/registry.ts` (import + add to `SKIN_TOKENS`)
+5. Add the legacy `Skin` entry to `SKINS` in `apps/web/lib/skins.ts` (for builder preview compat)
+6. Validate: `SkinTokensSchema.parse(yourBundle)` must succeed
+7. The SkinPicker will automatically show the new skin
 
 ## Validation Rules
 
@@ -220,4 +251,13 @@ All token bundles must pass `SkinTokensSchema.parse()`. Additionally:
 
 ## Reference Implementation
 
-See `apps/web/lib/skin-bundles/minimal.ts` for a complete example bundle.
+See `apps/web/lib/skin-bundles/minimal.ts` for a complete example bundle. All four bundles (`default.ts`, `professional.ts`, `warm.ts`, `minimal.ts`) follow the same pattern.
+
+## Migration Status
+
+| Page | Status | Notes |
+|---|---|---|
+| `/learn/[programId]` (LearnerTimeline) | Fully migrated | Uses `--token-*` CSS vars via `SkinThemeProvider` |
+| `/p/[slug]` (Sales page) | Fully migrated | Uses `getSkinTokens()` + `getTokenCSSVars()`, action badges use semantic tokens |
+| Builder preview (`ProgramOverviewPreview`) | Legacy | Uses `skin.colors.*` inline styles (not in scope — builder-only) |
+| Builder (`SkinPicker`) | Legacy | Uses `SKINS` record directly (not in scope — builder-only) |

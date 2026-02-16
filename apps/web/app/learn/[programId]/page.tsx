@@ -2,7 +2,9 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getEntitlement } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { LearnerTimeline } from "./timeline";
-import { getSkin, getSkinCSSVars } from "@/lib/skins";
+import { getSkinTokens } from "@/lib/skin-bundles/registry";
+import { getTokenCSSVars } from "@/lib/skin-bridge";
+import { SkinThemeProvider } from "@/components/skins/SkinThemeProvider";
 
 export default async function LearnPage({ params }: { params: Promise<{ programId: string }> }) {
   const { programId } = await params;
@@ -43,8 +45,8 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
 
   if (!program || !program.published) notFound();
 
-  const skin = getSkin(program.skinId);
-  const skinCSSVars = getSkinCSSVars(skin);
+  const tokens = getSkinTokens(program.skinId);
+  const skinCSSVars = getTokenCSSVars(tokens);
 
   // Calculate which week the learner currently has access to based on pacing mode
   const completedWeeks = entitlement.weekCompletions.map((wc) => wc.weekNumber);
@@ -68,15 +70,17 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
   }
 
   return (
-    <LearnerTimeline
-      program={program}
-      userId={user.id}
-      enrolledAt={entitlement.createdAt.toISOString()}
-      currentWeek={currentWeek}
-      completedWeeks={completedWeeks}
-      pacingMode={program.pacingMode}
-      skinId={program.skinId}
-      skinCSSVars={skinCSSVars}
-    />
+    <SkinThemeProvider tokens={tokens}>
+      <LearnerTimeline
+        program={program}
+        userId={user.id}
+        enrolledAt={entitlement.createdAt.toISOString()}
+        currentWeek={currentWeek}
+        completedWeeks={completedWeeks}
+        pacingMode={program.pacingMode}
+        skinId={program.skinId}
+        skinCSSVars={skinCSSVars}
+      />
+    </SkinThemeProvider>
   );
 }

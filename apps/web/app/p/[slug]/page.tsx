@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { EnrollButton } from "./enroll-button";
-import { getSkin, getSkinCSSVars } from "@/lib/skins";
+import { getSkinTokens } from "@/lib/skin-bundles/registry";
+import { getTokenCSSVars } from "@/lib/skin-bridge";
 
 export default async function SalesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -18,8 +19,8 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
 
   if (!program || !program.published) notFound();
 
-  const skin = getSkin(program.skinId);
-  const skinCSSVars = getSkinCSSVars(skin);
+  const tokens = getSkinTokens(program.skinId);
+  const skinCSSVars = getTokenCSSVars(tokens);
 
   const priceDisplay =
     program.priceInCents === 0
@@ -39,12 +40,31 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
     REFLECT: "Reflect",
   };
 
-  const TYPE_COLORS: Record<string, string> = {
-    WATCH: "bg-cyan-400/20 text-cyan-300",
-    READ: "bg-gray-400/20 text-gray-300",
-    DO: "bg-yellow-400/20 text-yellow-300",
-    REFLECT: "bg-pink-400/20 text-pink-300",
-  };
+  function getTypeStyle(type: string): React.CSSProperties {
+    switch (type) {
+      case "WATCH":
+      case "READ":
+        return {
+          backgroundColor: "color-mix(in srgb, var(--token-color-accent), transparent 80%)",
+          color: "var(--token-color-accent)",
+        };
+      case "REFLECT":
+        return {
+          backgroundColor: "color-mix(in srgb, var(--token-color-semantic-action-reflect), transparent 80%)",
+          color: "var(--token-color-semantic-action-reflect)",
+        };
+      case "DO":
+        return {
+          backgroundColor: "color-mix(in srgb, var(--token-color-semantic-action-do), transparent 80%)",
+          color: "var(--token-color-semantic-action-do)",
+        };
+      default:
+        return {
+          backgroundColor: "color-mix(in srgb, var(--token-color-text-secondary), transparent 80%)",
+          color: "var(--token-color-text-secondary)",
+        };
+    }
+  }
 
   return (
     <div
@@ -202,7 +222,8 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
                         {session.actions.map((action) => (
                           <span
                             key={action.id}
-                            className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${TYPE_COLORS[action.type] || "bg-gray-400/20 text-gray-300"}`}
+                            className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                            style={getTypeStyle(action.type)}
                           >
                             {TYPE_LABELS[action.type] || action.type}: {action.title}
                           </span>
