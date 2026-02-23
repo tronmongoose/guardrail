@@ -106,6 +106,24 @@ export function skinToTokens(skin: Skin): SkinTokens {
           border: `1px solid ${skin.colors.border}`,
         },
       },
+      viewer: {
+        chapterRail: {
+          background: skin.colors.bgSecondary,
+          activeChapter: skin.colors.accent + "15",
+          divider: skin.colors.border,
+        },
+        overlay: {
+          titleCard: {
+            background: skin.colors.bg + "dd",
+            text: skin.colors.text,
+          },
+          transition: {
+            style: "FADE",
+            durationMs: 500,
+          },
+        },
+        controlsTint: skin.colors.accent,
+      },
     },
   };
 }
@@ -215,5 +233,13 @@ export function getTokenCSSVars(tokens: SkinTokens): Record<string, string> {
     "--token-comp-progress-radius": tokens.component.progress.radius,
     "--token-comp-video-radius": tokens.component.video.frame.radius,
     "--token-comp-video-border": tokens.component.video.frame.border,
+
+    // --- Viewer tokens ---
+    "--token-comp-viewer-rail-bg": tokens.component.viewer.chapterRail.background,
+    "--token-comp-viewer-rail-active": tokens.component.viewer.chapterRail.activeChapter,
+    "--token-comp-viewer-rail-divider": tokens.component.viewer.chapterRail.divider,
+    "--token-comp-viewer-overlay-bg": tokens.component.viewer.overlay.titleCard.background,
+    "--token-comp-viewer-overlay-text": tokens.component.viewer.overlay.titleCard.text,
+    "--token-comp-viewer-controls-tint": tokens.component.viewer.controlsTint,
   };
 }

@@ -110,3 +110,58 @@ export const ProgramListItemSchema = z.object({
 });
 
 export const ProgramListResponseSchema = z.array(ProgramListItemSchema);
+
+// --- Composite Session (multi-clip playlist) ---
+
+export const TransitionTypeSchema = z.enum(["NONE", "FADE", "CROSSFADE", "SLIDE_LEFT"]);
+export type TransitionType = z.infer<typeof TransitionTypeSchema>;
+
+export const OverlayTypeSchema = z.enum([
+  "TITLE_CARD",
+  "CHAPTER_TITLE",
+  "KEY_POINTS",
+  "LOWER_THIRD",
+  "CTA",
+  "OUTRO",
+]);
+export type OverlayType = z.infer<typeof OverlayTypeSchema>;
+
+export const OverlayPositionSchema = z.enum(["CENTER", "BOTTOM", "TOP", "LOWER_THIRD"]);
+export type OverlayPosition = z.infer<typeof OverlayPositionSchema>;
+
+export const SessionClipSchema = z.object({
+  id: z.string().optional(),
+  youtubeVideoId: z.string(),
+  startSeconds: z.number().min(0).optional(),
+  endSeconds: z.number().min(0).optional(),
+  orderIndex: z.number().int().min(0),
+  transitionType: TransitionTypeSchema.default("NONE"),
+  transitionDurationMs: z.number().int().min(0).max(5000).default(500),
+  chapterTitle: z.string().max(200).optional(),
+  chapterDescription: z.string().max(500).optional(),
+});
+export type SessionClipInput = z.infer<typeof SessionClipSchema>;
+
+export const SessionOverlaySchema = z.object({
+  id: z.string().optional(),
+  type: OverlayTypeSchema,
+  content: z.record(z.unknown()),
+  clipOrderIndex: z.number().int().min(0).optional(),
+  triggerAtSeconds: z.number().min(0).optional(),
+  durationMs: z.number().int().min(0).max(60000).default(5000),
+  position: OverlayPositionSchema.default("CENTER"),
+  orderIndex: z.number().int().min(0),
+});
+export type SessionOverlayInput = z.infer<typeof SessionOverlaySchema>;
+
+export const CompositeSessionSchema = z.object({
+  id: z.string().optional(),
+  sessionId: z.string(),
+  title: z.string().max(200).optional(),
+  description: z.string().max(1000).optional(),
+  thumbnailUrl: z.string().url().optional(),
+  autoAdvance: z.boolean().default(true),
+  clips: z.array(SessionClipSchema).min(1),
+  overlays: z.array(SessionOverlaySchema).default([]),
+});
+export type CompositeSessionInput = z.infer<typeof CompositeSessionSchema>;

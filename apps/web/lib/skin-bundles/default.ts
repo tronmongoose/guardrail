@@ -98,5 +98,23 @@ export const defaultTokens: SkinTokens = {
         border: "1px solid #1f2937",
       },
     },
+    viewer: {
+      chapterRail: {
+        background: "#111118",
+        activeChapter: "#00fff020",
+        divider: "#1f2937",
+      },
+      overlay: {
+        titleCard: {
+          background: "#0a0a0fdd",
+          text: "#ffffff",
+        },
+        transition: {
+          style: "FADE",
+          durationMs: 500,
+        },
+      },
+      controlsTint: "#00fff0",
+    },
   },
 };

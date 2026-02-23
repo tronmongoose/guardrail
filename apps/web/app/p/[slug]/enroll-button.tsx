@@ -38,9 +38,10 @@ export function EnrollButton({ programId, isFree, priceDisplay }: EnrollButtonPr
         throw new Error(data.error || "Failed to enroll");
       }
 
-      if (data.enrolled && data.message) {
-        setSuccess(data.message);
-        setShowEmailForm(false);
+      if (data.redirectUrl) {
+        // Free enrollment or already enrolled — redirect directly
+        window.location.href = data.redirectUrl;
+        return;
       } else if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
       } else {

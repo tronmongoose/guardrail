@@ -144,6 +144,37 @@ export interface VideoFrameTokens {
   border: string;
 }
 
+export interface ViewerChapterRailTokens {
+  /** Chapter rail background */
+  background: string;
+  /** Active chapter highlight */
+  activeChapter: string;
+  /** Divider between chapters */
+  divider: string;
+}
+
+export interface ViewerOverlayTokens {
+  titleCard: {
+    /** Title card background (hex with alpha) */
+    background: string;
+    /** Title card text color */
+    text: string;
+  };
+  transition: {
+    /** Default transition style for viewer */
+    style: "NONE" | "FADE" | "CROSSFADE" | "SLIDE_LEFT";
+    /** Default transition duration in ms */
+    durationMs: number;
+  };
+}
+
+export interface ViewerTokens {
+  chapterRail: ViewerChapterRailTokens;
+  overlay: ViewerOverlayTokens;
+  /** Tint color for player controls overlay */
+  controlsTint: string;
+}
+
 export interface ComponentTokens {
   button: {
     primary: ButtonTokens;
@@ -155,6 +186,7 @@ export interface ComponentTokens {
   video: {
     frame: VideoFrameTokens;
   };
+  viewer: ViewerTokens;
 }
 
 // ---------------------------------------------------------------------------
@@ -280,6 +312,24 @@ export const SkinTokensSchema = z.object({
         radius: z.string(),
         border: z.string(),
       }),
+    }),
+    viewer: z.object({
+      chapterRail: z.object({
+        background: z.string(),
+        activeChapter: z.string(),
+        divider: z.string(),
+      }),
+      overlay: z.object({
+        titleCard: z.object({
+          background: z.string(),
+          text: z.string(),
+        }),
+        transition: z.object({
+          style: z.enum(["NONE", "FADE", "CROSSFADE", "SLIDE_LEFT"]),
+          durationMs: z.number().int().min(0).max(5000),
+        }),
+      }),
+      controlsTint: z.string(),
     }),
   }),
 });

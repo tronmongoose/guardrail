@@ -3,7 +3,6 @@ import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { createMagicLink, getMagicLinkUrl } from "@/lib/magic-link";
-import { sendMagicLinkEmail } from "@/lib/email";
 import { logger } from "@/lib/logger";
 import Stripe from "stripe";
 
@@ -88,22 +87,20 @@ export async function POST(
   });
 
   if (existing?.status === "ACTIVE") {
-    // Already enrolled - send magic link to access
+    // Already enrolled - redirect directly (no email needed)
     const { token } = await createMagicLink({
       email: user.email,
       programId,
     });
     const magicLinkUrl = getMagicLinkUrl(token, programId);
 
-    await sendMagicLinkEmail(user.email, magicLinkUrl, program.title);
-
     return NextResponse.json({
       enrolled: true,
-      message: "You already have access. Check your email for the access link.",
+      redirectUrl: magicLinkUrl,
     });
   }
 
-  // Free program - grant access and send magic link
+  // Free program - grant access and redirect directly
   if (program.priceInCents === 0) {
     await prisma.entitlement.upsert({
       where: { userId_programId: { userId: user.id, programId } },
@@ -111,14 +108,11 @@ export async function POST(
       update: { status: "ACTIVE" },
     });
 
-    // Send magic link
     const { token } = await createMagicLink({
       email: user.email,
       programId,
     });
     const magicLinkUrl = getMagicLinkUrl(token, programId);
-
-    await sendMagicLinkEmail(user.email, magicLinkUrl, program.title);
 
     logger.info({
       operation: "checkout.free_enrollment",
@@ -128,7 +122,7 @@ export async function POST(
 
     return NextResponse.json({
       enrolled: true,
-      message: "You're enrolled! Check your email for the access link.",
+      redirectUrl: magicLinkUrl,
     });
   }
 

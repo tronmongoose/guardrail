@@ -98,5 +98,23 @@ export const professionalTokens: SkinTokens = {
         border: "1px solid #e5e7eb",
       },
     },
+    viewer: {
+      chapterRail: {
+        background: "#f9fafb",
+        activeChapter: "#2563eb15",
+        divider: "#e5e7eb",
+      },
+      overlay: {
+        titleCard: {
+          background: "#ffffffee",
+          text: "#1a1a1a",
+        },
+        transition: {
+          style: "CROSSFADE",
+          durationMs: 400,
+        },
+      },
+      controlsTint: "#2563eb",
+    },
   },
 };

@@ -184,3 +184,50 @@ body {
 .action-complete-check {
   animation: check-pop 0.3s ease-out forwards;
 }
+
+/* --- Viewer transition animations --- */
+
+@keyframes viewer-fade-in-kf {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes viewer-fade-out-kf {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes viewer-slide-in-kf {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes viewer-slide-out-kf {
+  from { transform: translateX(0); }
+  to { transform: translateX(-100%); }
+}
+
+.viewer-fade-in {
+  animation: viewer-fade-in-kf ease-in-out forwards;
+}
+
+.viewer-fade-out {
+  animation: viewer-fade-out-kf ease-in-out forwards;
+}
+
+.viewer-slide-in {
+  animation: viewer-slide-in-kf ease-in-out forwards;
+}
+
+.viewer-slide-out {
+  animation: viewer-slide-out-kf ease-in-out forwards;
+}
+
+/* Hide scrollbar for horizontal chapter rail */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}

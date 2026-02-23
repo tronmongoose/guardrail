@@ -138,6 +138,8 @@ model Session {
   week         Week     @relation(fields: [weekId], references: [id], onDelete: Cascade)
   actions      Action[]
   keyTakeaways String[] // 2-3 key takeaway bullets per session
+
+  compositeSession CompositeSession?
 }
 
 model Action {
@@ -163,6 +165,76 @@ enum ActionType {
   REFLECT
 }
 
+// --- Composite Session (multi-clip playlist for a session) ---
+
+enum TransitionType {
+  NONE
+  FADE
+  CROSSFADE
+  SLIDE_LEFT
+}
+
+enum OverlayType {
+  TITLE_CARD
+  CHAPTER_TITLE
+  KEY_POINTS
+  LOWER_THIRD
+  CTA
+  OUTRO
+}
+
+enum OverlayPosition {
+  CENTER
+  BOTTOM
+  TOP
+  LOWER_THIRD
+}
+
+model CompositeSession {
+  id            String   @id @default(cuid())
+  sessionId     String   @unique
+  session       Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  title         String?
+  description   String?
+  thumbnailUrl  String?
+  autoAdvance   Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  clips    SessionClip[]
+  overlays SessionOverlay[]
+}
+
+model SessionClip {
+  id                   String         @id @default(cuid())
+  compositeSessionId   String
+  compositeSession     CompositeSession @relation(fields: [compositeSessionId], references: [id], onDelete: Cascade)
+  youtubeVideoId       String
+  youtubeVideo         YouTubeVideo   @relation(fields: [youtubeVideoId], references: [id])
+  startSeconds         Float?
+  endSeconds           Float?
+  orderIndex           Int
+  transitionType       TransitionType @default(NONE)
+  transitionDurationMs Int            @default(500)
+  chapterTitle         String?
+  chapterDescription   String?
+
+  @@unique([compositeSessionId, orderIndex])
+}
+
+model SessionOverlay {
+  id                 String          @id @default(cuid())
+  compositeSessionId String
+  compositeSession   CompositeSession @relation(fields: [compositeSessionId], references: [id], onDelete: Cascade)
+  type               OverlayType
+  content            Json
+  clipOrderIndex     Int?
+  triggerAtSeconds   Float?
+  durationMs         Int             @default(5000)
+  position           OverlayPosition @default(CENTER)
+  orderIndex         Int
+}
+
 // --- YouTube Video ---
 
 model YouTubeVideo {
@@ -181,6 +253,7 @@ model YouTubeVideo {
 
   actions       Action[]
   embeddings    Embedding[]
+  clips         SessionClip[]
 
   @@unique([programId, videoId])
 }
