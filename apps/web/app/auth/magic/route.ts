@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { validateMagicLink } from "@/lib/magic-link";
 import { logger } from "@/lib/logger";
 
@@ -31,16 +30,6 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Create session cookie
-  const cookieStore = await cookies();
-  cookieStore.set(LEARNER_SESSION_COOKIE, result.userId!, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: SESSION_MAX_AGE,
-    path: "/",
-  });
-
   logger.info({
     operation: "magic_link.session_created",
     userId: result.userId,
@@ -52,5 +41,16 @@ export async function GET(req: NextRequest) {
     ? `/learn/${result.programId || programId}`
     : "/";
 
-  return NextResponse.redirect(new URL(redirectTo, req.url));
+  const response = NextResponse.redirect(new URL(redirectTo, req.url));
+
+  // Set session cookie on the response object (not via cookies() API)
+  response.cookies.set(LEARNER_SESSION_COOKIE, result.userId!, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: SESSION_MAX_AGE,
+    path: "/",
+  });
+
+  return response;
 }
