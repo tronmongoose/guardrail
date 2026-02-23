@@ -43,7 +43,7 @@ export async function getEmbeddings(
 
   // Stub mode: generate deterministic embeddings without API
   if (!token) {
-    console.log("[embeddings] No HF token, using stub embeddings");
+    console.info("[embeddings] No HF token, using stub embeddings");
     return inputs.map((input) => ({
       contentId: input.contentId,
       text: input.text,

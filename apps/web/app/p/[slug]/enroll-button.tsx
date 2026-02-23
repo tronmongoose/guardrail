@@ -14,12 +14,9 @@ export function EnrollButton({ programId, isFree, priceDisplay }: EnrollButtonPr
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [success, setSuccess] = useState<string | null>(null);
-
   const handleEnroll = async () => {
     setLoading(true);
     setError(null);
-    setSuccess(null);
 
     try {
       const res = await fetch(`/api/checkout/${programId}`, {
@@ -53,30 +50,6 @@ export function EnrollButton({ programId, isFree, priceDisplay }: EnrollButtonPr
       setLoading(false);
     }
   };
-
-  // Success state
-  if (success) {
-    return (
-      <div
-        className="rounded-xl p-4 text-center"
-        style={{
-          backgroundColor: "color-mix(in srgb, var(--skin-accent) 10%, transparent)",
-          border: "1px solid color-mix(in srgb, var(--skin-accent) 30%, transparent)",
-        }}
-      >
-        <div
-          className="w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-3"
-          style={{ backgroundColor: "color-mix(in srgb, var(--skin-accent) 20%, transparent)" }}
-        >
-          <svg className="w-5 h-5" style={{ color: "var(--skin-accent)" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <p className="text-sm font-medium">{success}</p>
-        <p className="text-xs mt-1" style={{ color: "var(--skin-text-muted)" }}>Check your inbox for the access link</p>
-      </div>
-    );
-  }
 
   // Email form
   if (showEmailForm) {

@@ -46,13 +46,13 @@ export async function sendEmail({ to, subject, text, html }: SendEmailOptions): 
     }
   }
 
-  // Development mode: log email to console
-  console.log("\n========== EMAIL ==========");
-  console.log(`To: ${to}`);
-  console.log(`Subject: ${subject}`);
-  console.log("----------------------------");
-  console.log(text);
-  console.log("============================\n");
+  // Development mode: log email contents
+  logger.info({
+    operation: "email.dev_preview",
+    to,
+    subject,
+    body: text,
+  });
 
   logger.info({ operation: "email.logged_dev", to, subject });
   return true;

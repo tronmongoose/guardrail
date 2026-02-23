@@ -234,25 +234,25 @@ export async function generateProgramDraft(
     hasContentDigests: !!input.contentDigests?.length,
     digestCount: input.contentDigests?.length ?? 0,
   };
-  console.log(`[LLM] Generation request:`, JSON.stringify(inputSummary));
-  console.log(`[LLM] Using provider: ${provider}`);
+  console.info(`[LLM] Generation request:`, JSON.stringify(inputSummary));
+  console.info(`[LLM] Using provider: ${provider}`);
 
   let raw: string;
 
   if (provider === "stub") {
-    console.log("[LLM] Generating with stub (no API call)");
+    console.info("[LLM] Generating with stub (no API call)");
     return generateWithStub(input);
   } else if (provider === "anthropic") {
-    console.log("[LLM] Calling Anthropic API");
+    console.info("[LLM] Calling Anthropic API");
     raw = await callAnthropic(input);
   } else if (provider === "openai") {
-    console.log("[LLM] Calling OpenAI API");
+    console.info("[LLM] Calling OpenAI API");
     raw = await callOpenAI(input);
   } else {
     throw new Error(`Unknown LLM_PROVIDER: ${provider}`);
   }
 
-  console.log(`[LLM] Raw response length: ${raw.length} chars`);
+  console.info(`[LLM] Raw response length: ${raw.length} chars`);
 
   // Parse + validate + repair loop
   for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
@@ -262,7 +262,7 @@ export async function generateProgramDraft(
       const validated = ProgramDraftSchema.parse(parsed);
 
       // Log output summary
-      console.log(`[LLM] Generated draft: ${validated.weeks.length} weeks, ${
+      console.info(`[LLM] Generated draft: ${validated.weeks.length} weeks, ${
         validated.weeks.reduce((sum, w) => sum + w.sessions.length, 0)
       } sessions, ${
         validated.weeks.reduce((sum, w) =>
@@ -278,7 +278,7 @@ export async function generateProgramDraft(
         );
       }
       // Attempt repair by re-calling with error context
-      console.log(`[LLM] Attempting repair...`);
+      console.info(`[LLM] Attempting repair...`);
       raw = await repairJSON(raw, String(err), provider, input);
     }
   }

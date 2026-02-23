@@ -50,7 +50,6 @@ export interface VideoPlayerProps {
   onReady?: () => void;
   onError?: (errorCode: number) => void;
   onPause?: () => void;
-  onResume?: () => void;
   className?: string;
 }
 
