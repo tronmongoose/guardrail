@@ -66,7 +66,7 @@ export async function PATCH(
   // Verify ownership before allowing update
   const existing = await prisma.program.findUnique({
     where: { id },
-    select: { creatorId: true }
+    select: { creatorId: true, published: true }
   });
   if (!existing) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -79,7 +79,10 @@ export async function PATCH(
   const data: Record<string, unknown> = {};
   if (body.title) {
     data.title = body.title;
-    data.slug = slugify(body.title) + "-" + id.slice(0, 6);
+    // Only update slug for unpublished programs — don't break live URLs
+    if (!existing.published) {
+      data.slug = slugify(body.title) + "-" + id.slice(0, 6);
+    }
   }
   if (body.description !== undefined) data.description = body.description;
   if (body.outcomeStatement !== undefined) data.outcomeStatement = body.outcomeStatement;
