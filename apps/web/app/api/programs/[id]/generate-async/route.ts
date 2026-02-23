@@ -337,7 +337,7 @@ async function processGenerationJob(jobId: string, programId: string) {
           }
         }
       }
-    });
+    }, { timeout: 30000 });
 
     aiLogger.generationSuccess(programId, timer.elapsed(), {
       weekCount: validated.data.weeks.length,
