@@ -6,6 +6,7 @@ import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { Spinner } from "@/components/ui/spinner";
 import { useGeneration } from "@/components/generation";
+import { ContentLegalNotice } from "@/components/wizard/ContentLegalNotice";
 
 /**
  * First Program Creation Flow
@@ -476,6 +477,8 @@ export default function NewProgramPage() {
               <p className="text-xs text-gray-500">
                 {videos.length} video{videos.length !== 1 ? "s" : ""} added
               </p>
+
+              <ContentLegalNotice />
             </div>
           </div>
         )}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { parseYouTubeVideoId } from "@guide-rail/shared";
 import { extractAudioChunks, isAudioVideoFile, MAX_AUDIO_DURATION_SECONDS } from "@/lib/audio-extract";
+import { ContentLegalNotice } from "../ContentLegalNotice";
 
 interface Video {
   id: string;
@@ -694,6 +695,9 @@ export function StepContent({
           </div>
         </div>
       )}
+
+      {/* Legal notice */}
+      <ContentLegalNotice />
     </div>
   );
 }
