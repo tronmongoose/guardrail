@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
+import { ACTION_TYPE_LABELS, getActionTypeColor, getActionTypeBgWithBorder } from "@/lib/action-type-styles";
 
 interface ActionProgress {
   id: string;
@@ -45,61 +46,6 @@ interface Props {
   pacingMode: PacingMode;
   skinId: string;
   skinCSSVars: Record<string, string>;
-}
-
-const ACTION_TYPE_VERBS: Record<string, string> = {
-  WATCH: "Watch",
-  READ: "Read",
-  DO: "Practice",
-  REFLECT: "Reflect",
-};
-
-function getActionTypeStyle(type: string): React.CSSProperties {
-  switch (type) {
-    case "WATCH":
-    case "READ":
-      return { color: "var(--token-color-accent)" };
-    case "REFLECT":
-      return { color: "var(--token-color-semantic-action-reflect)" };
-    case "DO":
-      return { color: "var(--token-color-semantic-action-do)" };
-    default:
-      return { color: "var(--token-color-text-secondary)" };
-  }
-}
-
-function getActionTypeBgStyle(type: string): React.CSSProperties {
-  switch (type) {
-    case "WATCH":
-    case "READ":
-      return {
-        backgroundColor:
-          "color-mix(in srgb, var(--token-color-accent), transparent 90%)",
-        borderColor:
-          "color-mix(in srgb, var(--token-color-accent), transparent 70%)",
-      };
-    case "REFLECT":
-      return {
-        backgroundColor:
-          "color-mix(in srgb, var(--token-color-semantic-action-reflect), transparent 90%)",
-        borderColor:
-          "color-mix(in srgb, var(--token-color-semantic-action-reflect), transparent 70%)",
-      };
-    case "DO":
-      return {
-        backgroundColor:
-          "color-mix(in srgb, var(--token-color-semantic-action-do), transparent 90%)",
-        borderColor:
-          "color-mix(in srgb, var(--token-color-semantic-action-do), transparent 70%)",
-      };
-    default:
-      return {
-        backgroundColor:
-          "color-mix(in srgb, var(--token-color-text-secondary), transparent 90%)",
-        borderColor:
-          "color-mix(in srgb, var(--token-color-text-secondary), transparent 70%)",
-      };
-  }
 }
 
 export function LearnerTimeline({
@@ -549,9 +495,9 @@ export function LearnerTimeline({
                                 </p>
                                 <span
                                   className="text-[10px] uppercase tracking-wider font-semibold"
-                                  style={getActionTypeStyle(action.type)}
+                                  style={getActionTypeColor(action.type)}
                                 >
-                                  {ACTION_TYPE_VERBS[action.type] || action.type}
+                                  {ACTION_TYPE_LABELS[action.type] || action.type}
                                 </span>
                               </div>
 
@@ -645,8 +591,8 @@ export function LearnerTimeline({
                                   className="w-full py-2.5 text-sm font-semibold transition border hover:opacity-80 disabled:opacity-50"
                                   style={{
                                     borderRadius: "var(--token-comp-btn-primary-radius)",
-                                    ...getActionTypeBgStyle(action.type),
-                                    ...getActionTypeStyle(action.type),
+                                    ...getActionTypeBgWithBorder(action.type),
+                                    ...getActionTypeColor(action.type),
                                   }}
                                 >
                                   {isSaving ? "Saving..." : "Mark Complete"}
@@ -812,42 +758,28 @@ interface WeekBadgeProps {
 }
 
 function WeekBadge({ weekNumber, isWeekComplete, isUnlocked }: WeekBadgeProps): React.ReactElement {
-  if (isWeekComplete) {
-    return (
-      <span
-        className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5"
-        style={{
-          borderRadius: "var(--token-comp-chip-radius)",
-          backgroundColor: "color-mix(in srgb, var(--token-color-accent), transparent 90%)",
-          color: "var(--token-color-accent)",
-          border: "1px solid color-mix(in srgb, var(--token-color-accent), transparent 70%)",
-        }}
-      >
-        W{weekNumber}
-      </span>
-    );
-  }
-
-  if (isUnlocked) {
-    return (
-      <span
-        className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5"
-        style={{
-          borderRadius: "var(--token-comp-chip-radius)",
-          backgroundColor: "var(--token-color-bg-elevated)",
-          color: "var(--token-color-text-secondary)",
-          border: "1px solid var(--token-color-border-subtle)",
-        }}
-      >
-        W{weekNumber}
-      </span>
-    );
-  }
+  const stateStyle: React.CSSProperties = isWeekComplete
+    ? {
+        backgroundColor: "color-mix(in srgb, var(--token-color-accent), transparent 90%)",
+        color: "var(--token-color-accent)",
+        border: "1px solid color-mix(in srgb, var(--token-color-accent), transparent 70%)",
+      }
+    : isUnlocked
+    ? {
+        backgroundColor: "var(--token-color-bg-elevated)",
+        color: "var(--token-color-text-secondary)",
+        border: "1px solid var(--token-color-border-subtle)",
+      }
+    : {
+        backgroundColor: "var(--token-color-bg-default)",
+        color: "var(--token-color-text-secondary)",
+        opacity: 0.5,
+      };
 
   return (
     <span
       className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5"
-      style={{ borderRadius: "var(--token-comp-chip-radius)", backgroundColor: "var(--token-color-bg-default)", color: "var(--token-color-text-secondary)", opacity: 0.5 }}
+      style={{ borderRadius: "var(--token-comp-chip-radius)", ...stateStyle }}
     >
       W{weekNumber}
     </span>

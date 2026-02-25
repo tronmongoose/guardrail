@@ -1,5 +1,14 @@
 import type { CSSProperties, ElementType, ReactNode } from "react";
 
+function tokenTextStyle(prefix: string): CSSProperties {
+  return {
+    fontFamily: `var(${prefix}-font)`,
+    fontSize: `var(${prefix}-size)`,
+    fontWeight: `var(${prefix}-weight)`,
+    lineHeight: `var(${prefix}-line-height)`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Heading
 // ---------------------------------------------------------------------------
@@ -27,10 +36,7 @@ export function Heading({ size = "lg", as, className, style, children }: Heading
     <Tag
       className={className}
       style={{
-        fontFamily: `var(${prefix}-font)`,
-        fontSize: `var(${prefix}-size)`,
-        fontWeight: `var(${prefix}-weight)`,
-        lineHeight: `var(${prefix}-line-height)`,
+        ...tokenTextStyle(prefix),
         color: "var(--token-color-text-primary)",
         ...style,
       }}
@@ -56,15 +62,11 @@ interface BodyProps {
 
 export function Body({ size = "md", as = "p", className, style, children }: BodyProps) {
   const Tag = as;
-  const prefix = `--token-text-body-${size}`;
   return (
     <Tag
       className={className}
       style={{
-        fontFamily: `var(${prefix}-font)`,
-        fontSize: `var(${prefix}-size)`,
-        fontWeight: `var(${prefix}-weight)`,
-        lineHeight: `var(${prefix}-line-height)`,
+        ...tokenTextStyle(`--token-text-body-${size}`),
         color: "var(--token-color-text-secondary)",
         ...style,
       }}
@@ -91,10 +93,7 @@ export function Label({ as = "span", className, style, children }: LabelProps) {
     <Tag
       className={className}
       style={{
-        fontFamily: "var(--token-text-label-sm-font)",
-        fontSize: "var(--token-text-label-sm-size)",
-        fontWeight: "var(--token-text-label-sm-weight)",
-        lineHeight: "var(--token-text-label-sm-line-height)",
+        ...tokenTextStyle("--token-text-label-sm"),
         color: "var(--token-color-text-secondary)",
         ...style,
       }}

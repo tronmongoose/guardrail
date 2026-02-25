@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { ACTION_TYPE_LABELS, getActionTypeColor, getActionTypeBgWithBorder } from "@/lib/action-type-styles";
 
 export interface ViewerAction {
   id: string;
@@ -16,53 +17,6 @@ export interface ActionsPanelProps {
   actions: ViewerAction[];
   userId: string;
   onActionComplete?: (actionId: string) => void;
-}
-
-const ACTION_TYPE_VERBS: Record<string, string> = {
-  WATCH: "Watch",
-  READ: "Read",
-  DO: "Practice",
-  REFLECT: "Reflect",
-};
-
-function getActionTypeStyle(type: string): React.CSSProperties {
-  switch (type) {
-    case "WATCH":
-    case "READ":
-      return { color: "var(--token-color-accent)" };
-    case "REFLECT":
-      return { color: "var(--token-color-semantic-action-reflect)" };
-    case "DO":
-      return { color: "var(--token-color-semantic-action-do)" };
-    default:
-      return { color: "var(--token-color-text-secondary)" };
-  }
-}
-
-function getActionTypeBgStyle(type: string): React.CSSProperties {
-  switch (type) {
-    case "WATCH":
-    case "READ":
-      return {
-        backgroundColor: "color-mix(in srgb, var(--token-color-accent), transparent 90%)",
-        borderColor: "color-mix(in srgb, var(--token-color-accent), transparent 70%)",
-      };
-    case "REFLECT":
-      return {
-        backgroundColor: "color-mix(in srgb, var(--token-color-semantic-action-reflect), transparent 90%)",
-        borderColor: "color-mix(in srgb, var(--token-color-semantic-action-reflect), transparent 70%)",
-      };
-    case "DO":
-      return {
-        backgroundColor: "color-mix(in srgb, var(--token-color-semantic-action-do), transparent 90%)",
-        borderColor: "color-mix(in srgb, var(--token-color-semantic-action-do), transparent 70%)",
-      };
-    default:
-      return {
-        backgroundColor: "color-mix(in srgb, var(--token-color-text-secondary), transparent 90%)",
-        borderColor: "color-mix(in srgb, var(--token-color-text-secondary), transparent 70%)",
-      };
-  }
 }
 
 export function ActionsPanel({ actions, userId, onActionComplete }: ActionsPanelProps) {
@@ -125,7 +79,7 @@ export function ActionsPanel({ actions, userId, onActionComplete }: ActionsPanel
               key={action.id}
               className="rounded-lg border p-3 transition-colors"
               style={{
-                ...getActionTypeBgStyle(action.type),
+                ...getActionTypeBgWithBorder(action.type),
                 opacity: isComplete ? 0.6 : 1,
               }}
             >
@@ -156,9 +110,9 @@ export function ActionsPanel({ actions, userId, onActionComplete }: ActionsPanel
                   <div className="flex items-center gap-2">
                     <span
                       className="text-[10px] font-bold uppercase"
-                      style={getActionTypeStyle(action.type)}
+                      style={getActionTypeColor(action.type)}
                     >
-                      {ACTION_TYPE_VERBS[action.type] || action.type}
+                      {ACTION_TYPE_LABELS[action.type] || action.type}
                     </span>
                     <span
                       className="text-sm font-medium truncate"

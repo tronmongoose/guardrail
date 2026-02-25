@@ -4,6 +4,7 @@ import { EnrollButton } from "./enroll-button";
 import { getSkinTokens } from "@/lib/skin-bundles/registry";
 import { getTokenCSSVars } from "@/lib/skin-bridge";
 import { Heading, Body, Label } from "@/components/skins/Typography";
+import { ACTION_TYPE_LABELS, getActionTypeBg } from "@/lib/action-type-styles";
 
 export default async function SalesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -40,39 +41,6 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
     (sum, w) => sum + w.sessions.reduce((s, sess) => s + sess.actions.length, 0),
     0
   );
-
-  const TYPE_LABELS: Record<string, string> = {
-    WATCH: "Watch",
-    READ: "Read",
-    DO: "Practice",
-    REFLECT: "Reflect",
-  };
-
-  function getTypeStyle(type: string): React.CSSProperties {
-    switch (type) {
-      case "WATCH":
-      case "READ":
-        return {
-          backgroundColor: "color-mix(in srgb, var(--token-color-accent), transparent 80%)",
-          color: "var(--token-color-accent)",
-        };
-      case "REFLECT":
-        return {
-          backgroundColor: "color-mix(in srgb, var(--token-color-semantic-action-reflect), transparent 80%)",
-          color: "var(--token-color-semantic-action-reflect)",
-        };
-      case "DO":
-        return {
-          backgroundColor: "color-mix(in srgb, var(--token-color-semantic-action-do), transparent 80%)",
-          color: "var(--token-color-semantic-action-do)",
-        };
-      default:
-        return {
-          backgroundColor: "color-mix(in srgb, var(--token-color-text-secondary), transparent 80%)",
-          color: "var(--token-color-text-secondary)",
-        };
-    }
-  }
 
   return (
     <div
@@ -259,10 +227,10 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
                             style={{
                               borderRadius: "var(--token-comp-chip-radius)",
                               fontWeight: "500",
-                              ...getTypeStyle(action.type),
+                              ...getActionTypeBg(action.type, 80),
                             }}
                           >
-                            {TYPE_LABELS[action.type] || action.type}: {action.title}
+                            {ACTION_TYPE_LABELS[action.type] || action.type}: {action.title}
                           </span>
                         ))}
                       </div>

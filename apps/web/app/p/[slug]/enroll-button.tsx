@@ -9,6 +9,29 @@ interface EnrollButtonProps {
   priceDisplay: string;
 }
 
+const labelStyle: React.CSSProperties = {
+  fontSize: "var(--token-text-label-sm-size)",
+  fontWeight: "var(--token-text-label-sm-weight)",
+  color: "var(--token-color-text-primary)",
+};
+
+const inputStyle: React.CSSProperties = {
+  borderRadius: "var(--token-radius-md)",
+  backgroundColor: "var(--token-color-bg-elevated)",
+  border: "1px solid var(--token-color-border-subtle)",
+  color: "var(--token-color-text-primary)",
+  fontSize: "var(--token-text-body-sm-size)",
+};
+
+function ErrorMessage({ message }: { message: string | null }) {
+  if (!message) return null;
+  return (
+    <p className="text-sm" style={{ color: "var(--token-color-semantic-error)" }}>
+      {message}
+    </p>
+  );
+}
+
 export function EnrollButton({ programId, isFree, priceDisplay }: EnrollButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,12 +59,9 @@ export function EnrollButton({ programId, isFree, priceDisplay }: EnrollButtonPr
         throw new Error(data.error || "Failed to enroll");
       }
 
-      if (data.redirectUrl) {
-        // Free enrollment or already enrolled — redirect directly
-        window.location.href = data.redirectUrl;
-        return;
-      } else if (data.checkoutUrl) {
-        window.location.href = data.checkoutUrl;
+      const destination = data.redirectUrl || data.checkoutUrl;
+      if (destination) {
+        window.location.href = destination;
       } else {
         throw new Error("Unexpected response from server");
       }
@@ -57,15 +77,7 @@ export function EnrollButton({ programId, isFree, priceDisplay }: EnrollButtonPr
     return (
       <div className="space-y-3">
         <div>
-          <label
-            htmlFor="email"
-            className="block mb-1"
-            style={{
-              fontSize: "var(--token-text-label-sm-size)",
-              fontWeight: "var(--token-text-label-sm-weight)",
-              color: "var(--token-color-text-primary)",
-            }}
-          >
+          <label htmlFor="email" className="block mb-1" style={labelStyle}>
             Email address
           </label>
           <input
@@ -75,26 +87,12 @@ export function EnrollButton({ programId, isFree, priceDisplay }: EnrollButtonPr
             onChange={(e) => setEmail(e.target.value)}
             placeholder="you@example.com"
             className="w-full px-4 py-2 focus:outline-none"
-            style={{
-              borderRadius: "var(--token-radius-md)",
-              backgroundColor: "var(--token-color-bg-elevated)",
-              border: "1px solid var(--token-color-border-subtle)",
-              color: "var(--token-color-text-primary)",
-              fontSize: "var(--token-text-body-sm-size)",
-            }}
+            style={inputStyle}
             required
           />
         </div>
         <div>
-          <label
-            htmlFor="name"
-            className="block mb-1"
-            style={{
-              fontSize: "var(--token-text-label-sm-size)",
-              fontWeight: "var(--token-text-label-sm-weight)",
-              color: "var(--token-color-text-primary)",
-            }}
-          >
+          <label htmlFor="name" className="block mb-1" style={labelStyle}>
             Name <span style={{ color: "var(--token-color-text-secondary)" }}>(optional)</span>
           </label>
           <input
@@ -104,13 +102,7 @@ export function EnrollButton({ programId, isFree, priceDisplay }: EnrollButtonPr
             onChange={(e) => setName(e.target.value)}
             placeholder="Your name"
             className="w-full px-4 py-2 focus:outline-none"
-            style={{
-              borderRadius: "var(--token-radius-md)",
-              backgroundColor: "var(--token-color-bg-elevated)",
-              border: "1px solid var(--token-color-border-subtle)",
-              color: "var(--token-color-text-primary)",
-              fontSize: "var(--token-text-body-sm-size)",
-            }}
+            style={inputStyle}
           />
         </div>
         <SkinButton
@@ -131,14 +123,7 @@ export function EnrollButton({ programId, isFree, priceDisplay }: EnrollButtonPr
         >
           Cancel
         </button>
-        {error && (
-          <p
-            className="text-sm"
-            style={{ color: "var(--token-color-semantic-error)" }}
-          >
-            {error}
-          </p>
-        )}
+        <ErrorMessage message={error} />
       </div>
     );
   }
@@ -154,14 +139,7 @@ export function EnrollButton({ programId, isFree, priceDisplay }: EnrollButtonPr
       >
         {loading ? "Processing..." : isFree ? "Enroll free" : `Buy for ${priceDisplay}`}
       </SkinButton>
-      {error && (
-        <p
-          className="text-sm"
-          style={{ color: "var(--token-color-semantic-error)" }}
-        >
-          {error}
-        </p>
-      )}
+      <ErrorMessage message={error} />
     </div>
   );
 }
