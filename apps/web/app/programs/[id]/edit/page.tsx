@@ -415,56 +415,51 @@ export default function ProgramEditPage() {
     {/* Publish Confirmation Modal */}
     {showPublishConfirm && program && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-        <div className="bg-surface-card border border-surface-border rounded-2xl p-8 max-w-md w-full mx-4">
-          <h2 className="text-xl font-bold text-white mb-4 text-center">Ready to publish?</h2>
+        <div className="bg-surface-card border border-surface-border rounded-2xl p-8 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <h2 className="text-xl font-bold text-white mb-1 text-center">
+            You&apos;re about to publish your Journeyline!
+          </h2>
+          <p className="text-sm text-gray-400 mb-6 text-center">{program.title}</p>
 
-          {/* Program summary checklist */}
-          <div className="space-y-3 mb-6">
-            <div className="flex items-center gap-3 text-sm">
-              <svg className="w-4 h-4 text-neon-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="text-gray-300">
-                <span className="text-white font-medium">{program.weeks.length}</span> week{program.weeks.length !== 1 ? "s" : ""} with{" "}
-                <span className="text-white font-medium">{program.weeks.reduce((sum, w) => sum + w.sessions.length, 0)}</span> session{program.weeks.reduce((sum, w) => sum + w.sessions.length, 0) !== 1 ? "s" : ""}
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <svg className="w-4 h-4 text-neon-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="text-gray-300">
-                <span className="text-white font-medium">
-                  {program.weeks.reduce((sum, w) => sum + w.sessions.reduce((s, sess) => s + sess.actions.length, 0), 0)}
-                </span> total actions
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <svg className="w-4 h-4 text-neon-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="text-gray-300">
-                Price: <span className="text-white font-medium">{program.priceInCents > 0 ? `$${(program.priceInCents / 100).toFixed(2)}` : "Free"}</span>
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <svg className="w-4 h-4 text-neon-cyan flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              <span className="text-gray-300">
-                URL: <code className="text-neon-cyan text-xs">/p/{program.slug}</code>
-              </span>
+          {/* Program summary */}
+          <div className="flex items-center gap-4 text-sm text-gray-300 mb-6 justify-center flex-wrap">
+            <span><span className="text-white font-medium">{program.weeks.length}</span> week{program.weeks.length !== 1 ? "s" : ""}</span>
+            <span className="text-surface-border">|</span>
+            <span><span className="text-white font-medium">{program.weeks.reduce((sum, w) => sum + w.sessions.length, 0)}</span> sessions</span>
+            <span className="text-surface-border">|</span>
+            <span><span className="text-white font-medium">{program.priceInCents > 0 ? `$${(program.priceInCents / 100).toFixed(2)}` : "Free"}</span></span>
+            <span className="text-surface-border">|</span>
+            <code className="text-neon-cyan text-xs">/p/{program.slug}</code>
+          </div>
+
+          {/* How learners will experience it */}
+          <div className="bg-surface-dark rounded-lg p-4 mb-4 text-sm">
+            <p className="text-white font-medium mb-3">How your learners will experience it</p>
+            <div className="space-y-2.5">
+              <div className="flex items-start gap-3">
+                <span className="w-5 h-5 rounded-full bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center text-[10px] font-bold text-neon-cyan flex-shrink-0 mt-0.5">1</span>
+                <p className="text-gray-400">They visit your public link and see your sales page</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="w-5 h-5 rounded-full bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center text-[10px] font-bold text-neon-cyan flex-shrink-0 mt-0.5">2</span>
+                <p className="text-gray-400">{program.priceInCents > 0 ? "They complete payment via Stripe checkout" : "They enroll for free with their email"}</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="w-5 h-5 rounded-full bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center text-[10px] font-bold text-neon-cyan flex-shrink-0 mt-0.5">3</span>
+                <p className="text-gray-400">They receive an access link by email</p>
+              </div>
+              <div className="flex items-start gap-3">
+                <span className="w-5 h-5 rounded-full bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center text-[10px] font-bold text-neon-cyan flex-shrink-0 mt-0.5">4</span>
+                <p className="text-gray-400">They log in with an email code and start their journey</p>
+              </div>
             </div>
           </div>
 
-          {/* What happens next */}
-          <div className="bg-surface-dark rounded-lg p-4 mb-6 text-sm space-y-2">
-            <p className="text-gray-400">
-              <span className="text-white font-medium">What happens next:</span>
-            </p>
-            <p className="text-gray-500">• Your program gets a public URL that anyone can visit</p>
-            <p className="text-gray-500">• Learners can enroll and start working through the content</p>
-            <p className="text-gray-500">• You can unpublish or edit anytime</p>
+          {/* After publishing */}
+          <div className="bg-surface-dark rounded-lg p-4 mb-6 text-sm">
+            <p className="text-white font-medium mb-2">After publishing</p>
+            <p className="text-gray-400 mb-2">Your program remains fully editable. You can update titles, descriptions, instructions, and add new content at any time.</p>
+            <p className="text-gray-500 text-xs">Just be careful removing weeks or sessions that learners may have already started.</p>
           </div>
 
           <div className="flex gap-3">
@@ -472,7 +467,7 @@ export default function ProgramEditPage() {
               onClick={() => setShowPublishConfirm(false)}
               className="flex-1 px-4 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-gray-300 hover:border-gray-500 transition text-sm"
             >
-              Cancel
+              Go Back
             </button>
             <button
               onClick={() => {
@@ -498,8 +493,8 @@ export default function ProgramEditPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Program Published!</h2>
-          <p className="text-gray-400 mb-6">Your program is now live and ready to share.</p>
+          <h2 className="text-2xl font-bold text-white mb-2">Your Journeyline is Live!</h2>
+          <p className="text-gray-400 mb-6">Congrats! Share the link below so learners can find your program.</p>
 
           <div className="bg-surface-dark rounded-lg p-3 mb-6">
             <p className="text-xs text-gray-500 mb-1">Share URL</p>
