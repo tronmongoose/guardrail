@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { Spinner } from "@/components/ui/spinner";
+import { SaveStatusIndicator } from "@/components/ui/SaveStatusIndicator";
 import { useGeneration } from "@/components/generation";
+import { useAutosave } from "@/hooks/useAutosave";
+import { useBeforeUnload } from "@/hooks/useBeforeUnload";
 import { ContentLegalNotice } from "@/components/wizard/ContentLegalNotice";
 
 /**
@@ -30,6 +33,18 @@ interface Video {
 }
 
 type Step = "welcome" | "program" | "videos" | "structure" | "generate";
+
+interface AutosaveData {
+  step: Step;
+  programTitle: string;
+  targetAudience: string;
+  targetTransformation: string;
+  durationWeeks: number;
+  pacingMode: "unlock_on_complete" | "drip_by_week";
+  vibePrompt: string;
+}
+
+const STORAGE_KEY_PREFIX = "new-program-";
 
 const STEPS: { key: Step; label: string }[] = [
   { key: "welcome", label: "You" },
@@ -63,6 +78,95 @@ export default function NewProgramPage() {
   const [pacingMode, setPacingMode] = useState<"unlock_on_complete" | "drip_by_week">("unlock_on_complete");
   const [vibePrompt, setVibePrompt] = useState("");
 
+  // Autosave: persist form state to localStorage + debounced DB save
+  const autosaveData = useMemo<AutosaveData>(() => ({
+    step, programTitle, targetAudience, targetTransformation,
+    durationWeeks, pacingMode, vibePrompt,
+  }), [step, programTitle, targetAudience, targetTransformation,
+       durationWeeks, pacingMode, vibePrompt]);
+
+  const { saveStatus, flush, clear, hasUnsavedChanges } = useAutosave<AutosaveData>({
+    storageKey: programId ? `${STORAGE_KEY_PREFIX}${programId}` : "",
+    data: autosaveData,
+    enabled: !!programId && step !== "welcome",
+    debounceMs: 2000,
+    onSave: async (data) => {
+      const res = await fetch(`/api/programs/${programId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: data.programTitle,
+          targetAudience: data.targetAudience,
+          targetTransformation: data.targetTransformation,
+          durationWeeks: data.durationWeeks,
+          pacingMode: data.pacingMode,
+          vibePrompt: data.vibePrompt,
+        }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+    },
+  });
+
+  useBeforeUnload(hasUnsavedChanges);
+
+  // Restore an in-progress draft when returning to the /new page
+  async function restoreDraftState(draftProgramId: string) {
+    // 1. Try localStorage first (has step position + all fields)
+    const stored = localStorage.getItem(`${STORAGE_KEY_PREFIX}${draftProgramId}`);
+    let restoredFromStorage = false;
+
+    if (stored) {
+      try {
+        const parsed: Partial<AutosaveData> = JSON.parse(stored);
+        if (parsed.programTitle) setProgramTitle(parsed.programTitle);
+        if (parsed.targetAudience) setTargetAudience(parsed.targetAudience);
+        if (parsed.targetTransformation) setTargetTransformation(parsed.targetTransformation);
+        if (parsed.durationWeeks) setDurationWeeks(parsed.durationWeeks);
+        if (parsed.pacingMode) setPacingMode(parsed.pacingMode);
+        if (parsed.vibePrompt) setVibePrompt(parsed.vibePrompt);
+        if (parsed.step && parsed.step !== "welcome") setStep(parsed.step);
+        restoredFromStorage = true;
+      } catch {
+        // Corrupt data — fall through to DB restore
+      }
+    }
+
+    // 2. Load program from DB (for cross-device recovery + videos)
+    try {
+      const res = await fetch(`/api/programs/${draftProgramId}`);
+      if (res.ok) {
+        const program = await res.json();
+        // Use DB values as fallback if localStorage was empty
+        if (!restoredFromStorage) {
+          if (program.title && program.title !== "Untitled Program") setProgramTitle(program.title);
+          if (program.targetAudience) setTargetAudience(program.targetAudience);
+          if (program.targetTransformation) setTargetTransformation(program.targetTransformation);
+          if (program.durationWeeks) setDurationWeeks(program.durationWeeks);
+          if (program.pacingMode) setPacingMode(program.pacingMode);
+          if (program.vibePrompt) setVibePrompt(program.vibePrompt);
+          // Infer step from available data
+          if (program.videos?.length > 0) setStep("structure");
+          else if (program.targetTransformation) setStep("videos");
+          else setStep("program");
+        }
+        // Videos always come from DB (they're persisted immediately)
+        if (program.videos?.length > 0) {
+          setVideos(program.videos.map((v: { id: string; videoId: string; title: string | null; thumbnailUrl: string | null }) => ({
+            id: v.id,
+            videoId: v.videoId,
+            title: v.title,
+            thumbnailUrl: v.thumbnailUrl,
+          })));
+        }
+      }
+    } catch {
+      // Graceful: just let user start from the program step
+      if (!restoredFromStorage) setStep("program");
+    }
+
+    setLoading(false);
+  }
+
   useEffect(() => {
     if (!isLoaded) return;
     if (!clerkUser) {
@@ -78,8 +182,21 @@ export default function NewProgramPage() {
       // Pre-fill name from Clerk or existing user data
       setName(userData.name || clerkUser.fullName || "");
 
-      // If they have programs, send to dashboard
       if (Array.isArray(programs) && programs.length > 0) {
+        // Check for an in-progress draft (created at step 1 but never generated)
+        const inProgressDraft = programs.find(
+          (p: { published: boolean; _count?: { weeks: number } }) =>
+            !p.published && p._count?.weeks === 0
+        );
+
+        if (inProgressDraft) {
+          // Resume the draft instead of redirecting
+          setProgramId(inProgressDraft.id);
+          restoreDraftState(inProgressDraft.id);
+          return;
+        }
+
+        // Otherwise, they have real programs — go to dashboard
         router.push("/dashboard");
         return;
       }
@@ -223,6 +340,9 @@ export default function NewProgramPage() {
     setSaving(true);
     setError(null);
 
+    // Settle any pending autosave before the explicit save
+    await flush();
+
     try {
       // Save program details
       const patchRes = await fetch(`/api/programs/${programId}`, {
@@ -263,6 +383,9 @@ export default function NewProgramPage() {
       // Track generation
       startGeneration(programId);
 
+      // Clear autosave data — draft is now generating
+      clear();
+
       // Go directly to edit page so user sees their program being built
       router.push(`/programs/${programId}/edit`);
     } catch (err) {
@@ -287,6 +410,7 @@ export default function NewProgramPage() {
           GuideRail
         </Link>
         <div className="flex items-center gap-2">
+          <SaveStatusIndicator status={saveStatus} />
           {STEPS.map((s, i) => (
             <div
               key={s.key}
