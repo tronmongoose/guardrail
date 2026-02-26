@@ -7,6 +7,7 @@ interface EnrollButtonProps {
   programId: string;
   isFree: boolean;
   priceDisplay: string;
+  isEnrolled?: boolean;
 }
 
 const labelStyle: React.CSSProperties = {
@@ -32,12 +33,25 @@ function ErrorMessage({ message }: { message: string | null }) {
   );
 }
 
-export function EnrollButton({ programId, isFree, priceDisplay }: EnrollButtonProps) {
+export function EnrollButton({ programId, isFree, priceDisplay, isEnrolled }: EnrollButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showEmailForm, setShowEmailForm] = useState(false);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+
+  if (isEnrolled) {
+    return (
+      <SkinButton
+        variant="primary"
+        onClick={() => { window.location.href = `/learn/${programId}`; }}
+        className="w-full py-3"
+      >
+        Continue learning →
+      </SkinButton>
+    );
+  }
+
   const handleEnroll = async () => {
     setLoading(true);
     setError(null);

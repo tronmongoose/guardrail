@@ -5,6 +5,49 @@ import { getSkinTokens } from "@/lib/skin-bundles/registry";
 import { getTokenCSSVars } from "@/lib/skin-bridge";
 import { Heading, Body, Label } from "@/components/skins/Typography";
 import { ACTION_TYPE_LABELS, getActionTypeBg } from "@/lib/action-type-styles";
+import type { Metadata } from "next";
+import { logger } from "@/lib/logger";
+import { getCurrentUser, hasEntitlement } from "@/lib/auth";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const program = await prisma.program.findUnique({
+    where: { slug },
+    select: {
+      title: true,
+      description: true,
+      targetTransformation: true,
+      published: true,
+      creator: { select: { name: true } },
+    },
+  });
+
+  if (!program || !program.published) {
+    return { title: "Program Not Found" };
+  }
+
+  const title = program.title;
+  const description =
+    program.description ||
+    program.targetTransformation ||
+    `A guided learning program by ${program.creator.name || "GuideRail"}`;
+
+  return {
+    title: `${title} | GuideRail`,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      siteName: "GuideRail",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+    },
+  };
+}
 
 export default async function SalesPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -20,12 +63,23 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
   });
 
   if (!program) {
-    console.error(`[sales-page] No program found for slug: "${slug}"`);
+    logger.warn({ operation: "sales_page.not_found", slug });
     notFound();
   }
   if (!program.published) {
-    console.error(`[sales-page] Program found but not published — slug: "${slug}", id: ${program.id}, published: ${program.published}`);
+    logger.warn({ operation: "sales_page.not_published", slug, programId: program.id });
     notFound();
+  }
+
+  // Check if current user is already enrolled
+  let isEnrolled = false;
+  try {
+    const user = await getCurrentUser();
+    if (user) {
+      isEnrolled = await hasEntitlement(user.id, program.id);
+    }
+  } catch {
+    // Not logged in — that's fine
   }
 
   const tokens = getSkinTokens(program.skinId);
@@ -268,13 +322,14 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
       >
         <div className="max-w-md mx-auto flex items-center gap-4">
           <div className="flex-shrink-0">
-            <Heading size="lg" as="p">{priceDisplay}</Heading>
+            <Heading size="lg" as="p">{isEnrolled ? "Enrolled" : priceDisplay}</Heading>
           </div>
           <div className="flex-1">
             <EnrollButton
               programId={program.id}
               isFree={program.priceInCents === 0}
               priceDisplay={priceDisplay}
+              isEnrolled={isEnrolled}
             />
           </div>
         </div>

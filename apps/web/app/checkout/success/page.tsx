@@ -1,12 +1,36 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
 
 function SuccessContent() {
   const searchParams = useSearchParams();
   const programId = searchParams.get("programId");
+  const [resendEmail, setResendEmail] = useState("");
+  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [resendError, setResendError] = useState<string | null>(null);
+
+  async function handleResend() {
+    if (!resendEmail) return;
+    setResendStatus("sending");
+    setResendError(null);
+    try {
+      const res = await fetch("/api/auth/resend-magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: resendEmail, programId }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to resend");
+      }
+      setResendStatus("sent");
+    } catch (err) {
+      setResendError(err instanceof Error ? err.message : "Failed to resend");
+      setResendStatus("error");
+    }
+  }
 
   return (
     <div className="min-h-screen gradient-bg-radial grid-bg flex items-center justify-center px-6">
@@ -43,6 +67,36 @@ function SuccessContent() {
               email for an access link to your program. The link is valid for 24
               hours.
             </p>
+          </div>
+
+          {/* Resend magic link */}
+          <div className="bg-surface-dark rounded-lg p-4 mb-6 text-left">
+            <p className="text-xs text-gray-400 mb-2">
+              Didn&apos;t get the email? Enter your address to resend:
+            </p>
+            {resendStatus === "sent" ? (
+              <p className="text-sm text-neon-cyan">Link sent! Check your inbox.</p>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={resendEmail}
+                  onChange={(e) => setResendEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  className="flex-1 px-3 py-2 bg-surface-card border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan"
+                />
+                <button
+                  onClick={handleResend}
+                  disabled={!resendEmail || resendStatus === "sending"}
+                  className="px-4 py-2 bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan rounded-lg text-sm font-medium hover:bg-neon-cyan/20 transition disabled:opacity-50"
+                >
+                  {resendStatus === "sending" ? "Sending..." : "Resend"}
+                </button>
+              </div>
+            )}
+            {resendError && (
+              <p className="text-xs text-neon-pink mt-2">{resendError}</p>
+            )}
           </div>
 
           <div className="flex gap-3 justify-center">

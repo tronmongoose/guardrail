@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { UserButton, useUser } from "@clerk/nextjs";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useToast } from "@/components/ui/toast";
 import type { ProgramListItem } from "@guide-rail/shared";
 
 interface GenerationJob {
@@ -39,12 +40,37 @@ function formatPrice(cents: number): string {
 }
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen gradient-bg-radial grid-bg flex items-center justify-center">
+        <div className="text-gray-400">Loading...</div>
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
+  );
+}
+
+function DashboardContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user: clerkUser, isLoaded } = useUser();
+  const { showToast } = useToast();
   const [programs, setPrograms] = useState<ProgramWithGeneration[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Acknowledge Stripe Connect return
+  useEffect(() => {
+    if (searchParams.get("stripe") === "success") {
+      showToast("Stripe connected! You can now set prices for your programs.", "success");
+      // Clean up the URL param
+      const url = new URL(window.location.href);
+      url.searchParams.delete("stripe");
+      window.history.replaceState({}, "", url.pathname);
+    }
+  }, [searchParams, showToast]);
 
   useEffect(() => {
     if (!isLoaded) return;

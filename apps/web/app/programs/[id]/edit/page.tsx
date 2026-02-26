@@ -115,6 +115,7 @@ export default function ProgramEditPage() {
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
   const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus | null>(null);
   const [showStripePrompt, setShowStripePrompt] = useState(false);
+  const [showMetaEditor, setShowMetaEditor] = useState(false);
   const [connectingStripe, setConnectingStripe] = useState(false);
 
   // Async generation tracking
@@ -644,6 +645,108 @@ export default function ProgramEditPage() {
       </div>
     )}
 
+    {/* Program Metadata Editor Modal */}
+    {showMetaEditor && program && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+        <div className="bg-surface-card border border-surface-border rounded-2xl p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+          <h2 className="text-lg font-bold text-white mb-4">Edit Program Details</h2>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const form = e.currentTarget;
+              const formData = new FormData(form);
+              try {
+                const res = await fetch(`/api/programs/${id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    title: formData.get("title"),
+                    description: formData.get("description") || null,
+                    targetAudience: formData.get("targetAudience") || null,
+                    targetTransformation: formData.get("targetTransformation") || null,
+                    vibePrompt: formData.get("vibePrompt") || null,
+                  }),
+                });
+                if (!res.ok) throw new Error("Failed to save");
+                await load();
+                setShowMetaEditor(false);
+                showToast("Program details updated", "success");
+              } catch {
+                showToast("Failed to update details", "error");
+              }
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Title</label>
+              <input
+                name="title"
+                defaultValue={program.title}
+                className="w-full px-3 py-2 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Description</label>
+              <textarea
+                name="description"
+                defaultValue={program.description || ""}
+                rows={3}
+                className="w-full px-3 py-2 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan resize-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Target Audience</label>
+              <input
+                name="targetAudience"
+                defaultValue={program.targetAudience || ""}
+                placeholder="Who is this program for?"
+                className="w-full px-3 py-2 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Target Transformation</label>
+              <input
+                name="targetTransformation"
+                defaultValue={program.targetTransformation || ""}
+                placeholder="What will learners achieve?"
+                className="w-full px-3 py-2 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">AI Vibe Prompt</label>
+              <textarea
+                name="vibePrompt"
+                defaultValue={program.vibePrompt || ""}
+                rows={2}
+                placeholder="How should the AI write? (only affects re-generation)"
+                className="w-full px-3 py-2 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan resize-none"
+              />
+            </div>
+            {program.published && (
+              <p className="text-xs text-gray-500">
+                Slug: <code className="text-neon-cyan">/p/{program.slug}</code> — frozen after publish
+              </p>
+            )}
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowMetaEditor(false)}
+                className="flex-1 px-4 py-2 bg-surface-dark border border-surface-border rounded-lg text-gray-300 hover:border-gray-500 transition text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2 bg-gradient-to-r from-neon-cyan to-neon-pink text-surface-dark font-semibold rounded-lg hover:opacity-90 transition text-sm"
+              >
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    )}
+
     <div className="min-h-screen gradient-bg-radial grid-bg">
       {/* Header */}
       <nav className="flex items-center justify-between px-6 py-3 border-b border-surface-border/50 backdrop-blur-sm">
@@ -655,9 +758,13 @@ export default function ProgramEditPage() {
             ← GuideRail
           </button>
           <div className="h-6 w-px bg-surface-border" />
-          <h1 className="text-lg font-semibold text-white truncate max-w-[300px]">
+          <button
+            onClick={() => setShowMetaEditor(true)}
+            className="text-lg font-semibold text-white truncate max-w-[300px] hover:text-neon-cyan transition cursor-pointer text-left"
+            title="Click to edit program details"
+          >
             {program.title}
-          </h1>
+          </button>
           <span
             className={`text-xs px-2 py-1 rounded font-medium ${
               program.published
@@ -821,14 +928,32 @@ export default function ProgramEditPage() {
           )}
 
           {program.published && (
-            <a
-              href={`/p/${program.slug}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs px-3 py-1.5 rounded-lg font-medium bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 transition"
-            >
-              View Live →
-            </a>
+            <>
+              <button
+                onClick={async () => {
+                  if (!confirm("Unpublish this program? Learners will no longer be able to access it via the public link.")) return;
+                  try {
+                    const res = await fetch(`/api/programs/${id}/unpublish`, { method: "POST" });
+                    if (!res.ok) throw new Error("Failed to unpublish");
+                    await load();
+                    showToast("Program unpublished", "success");
+                  } catch {
+                    showToast("Failed to unpublish", "error");
+                  }
+                }}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium bg-surface-card text-gray-400 border border-surface-border hover:border-neon-pink hover:text-neon-pink transition"
+              >
+                Unpublish
+              </button>
+              <a
+                href={`/p/${program.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs px-3 py-1.5 rounded-lg font-medium bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/20 transition"
+              >
+                View Live →
+              </a>
+            </>
           )}
         </div>
       </nav>

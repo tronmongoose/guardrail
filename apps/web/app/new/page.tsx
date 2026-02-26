@@ -37,6 +37,7 @@ type Step = "welcome" | "program" | "videos" | "structure" | "generate";
 interface AutosaveData {
   step: Step;
   programTitle: string;
+  programDescription: string;
   targetAudience: string;
   targetTransformation: string;
   durationWeeks: number;
@@ -68,6 +69,7 @@ export default function NewProgramPage() {
   // Form state
   const [name, setName] = useState("");
   const [programTitle, setProgramTitle] = useState("");
+  const [programDescription, setProgramDescription] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
   const [targetTransformation, setTargetTransformation] = useState("");
   const [videos, setVideos] = useState<Video[]>([]);
@@ -80,9 +82,9 @@ export default function NewProgramPage() {
 
   // Autosave: persist form state to localStorage + debounced DB save
   const autosaveData = useMemo<AutosaveData>(() => ({
-    step, programTitle, targetAudience, targetTransformation,
+    step, programTitle, programDescription, targetAudience, targetTransformation,
     durationWeeks, pacingMode, vibePrompt,
-  }), [step, programTitle, targetAudience, targetTransformation,
+  }), [step, programTitle, programDescription, targetAudience, targetTransformation,
        durationWeeks, pacingMode, vibePrompt]);
 
   const { saveStatus, flush, clear, hasUnsavedChanges } = useAutosave<AutosaveData>({
@@ -96,6 +98,7 @@ export default function NewProgramPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: data.programTitle,
+          description: data.programDescription || null,
           targetAudience: data.targetAudience,
           targetTransformation: data.targetTransformation,
           durationWeeks: data.durationWeeks,
@@ -119,6 +122,7 @@ export default function NewProgramPage() {
       try {
         const parsed: Partial<AutosaveData> = JSON.parse(stored);
         if (parsed.programTitle) setProgramTitle(parsed.programTitle);
+        if (parsed.programDescription) setProgramDescription(parsed.programDescription);
         if (parsed.targetAudience) setTargetAudience(parsed.targetAudience);
         if (parsed.targetTransformation) setTargetTransformation(parsed.targetTransformation);
         if (parsed.durationWeeks) setDurationWeeks(parsed.durationWeeks);
@@ -139,6 +143,7 @@ export default function NewProgramPage() {
         // Use DB values as fallback if localStorage was empty
         if (!restoredFromStorage) {
           if (program.title && program.title !== "Untitled Program") setProgramTitle(program.title);
+          if (program.description) setProgramDescription(program.description);
           if (program.targetAudience) setTargetAudience(program.targetAudience);
           if (program.targetTransformation) setTargetTransformation(program.targetTransformation);
           if (program.durationWeeks) setDurationWeeks(program.durationWeeks);
@@ -491,6 +496,17 @@ export default function NewProgramPage() {
                   placeholder="e.g., 'Master Video Editing in 8 Weeks'"
                   className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
                   autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="text-sm text-gray-400">Description <span className="text-gray-600">(optional)</span></label>
+                <textarea
+                  value={programDescription}
+                  onChange={(e) => setProgramDescription(e.target.value)}
+                  placeholder="A brief overview of what your program covers"
+                  rows={2}
+                  className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan resize-none"
                 />
               </div>
 

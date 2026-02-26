@@ -10,12 +10,6 @@ export function AuthNav() {
   return (
     <div className="flex items-center gap-3 sm:gap-4">
       <SignedOut>
-        <Link
-          href="/dashboard"
-          className="hidden sm:block text-sm text-gray-300 hover:text-neon-cyan transition-all font-medium"
-        >
-          Dashboard
-        </Link>
         <SignInButton mode="modal">
           <button className="px-3 sm:px-4 py-2 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan text-sm font-medium hover:bg-neon-cyan/20 transition-all">
             Sign in
