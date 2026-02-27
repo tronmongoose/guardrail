@@ -49,7 +49,7 @@ const AMBIENT_HEADERS = [
   "Building something your learners will love",
 ];
 
-function GenerationProgress({ stage, progress }: { stage: string | null; progress: number }) {
+function GenerationProgress({ stage, progress, onCancel }: { stage: string | null; progress: number; onCancel?: () => void }) {
   const stepsData = useGenerationSteps({ stage, progress, status: "PROCESSING" });
   const [headerIndex, setHeaderIndex] = useState(0);
 
@@ -90,6 +90,14 @@ function GenerationProgress({ stage, progress }: { stage: string | null; progres
       <p className="text-xs text-gray-600 mt-4">
         Sit back and relax — this usually takes 20-45 seconds
       </p>
+      {onCancel && (
+        <button
+          onClick={onCancel}
+          className="text-xs text-gray-500 hover:text-red-400 underline transition mt-2"
+        >
+          Cancel generation
+        </button>
+      )}
     </div>
   );
 }
@@ -208,6 +216,10 @@ export default function ProgramEditPage() {
         setAsyncStage(data.stage);
         setAsyncProgress(data.progress || 0);
 
+        if (data.isStale) {
+          setLastGenError("Generation appears to be stuck. You can cancel and retry.");
+        }
+
         if (data.status === "COMPLETED") {
           setAsyncGenerating(false);
           await load();
@@ -224,6 +236,19 @@ export default function ProgramEditPage() {
 
     return () => clearInterval(interval);
   }, [asyncGenerating, id, load, showToast]);
+
+  async function cancelGeneration() {
+    try {
+      const res = await fetch(`/api/programs/${id}/generate-async/cancel`, { method: "POST" });
+      if (res.ok) {
+        setAsyncGenerating(false);
+        setLastGenError("Generation was cancelled. You can try again.");
+        showToast("Generation cancelled", "info");
+      }
+    } catch {
+      showToast("Failed to cancel generation", "error");
+    }
+  }
 
   async function generateStructure() {
     setGenerating(true);
@@ -981,7 +1006,7 @@ export default function ProgramEditPage() {
           </div>
         ) : program.weeks.length === 0 && asyncGenerating ? (
           // Async generation in progress - show rich staged progress
-          <GenerationProgress stage={asyncStage} progress={asyncProgress} />
+          <GenerationProgress stage={asyncStage} progress={asyncProgress} onCancel={cancelGeneration} />
         ) : program.weeks.length === 0 ? (
           // Has videos but no structure yet (and no async generation running)
           <div className="max-w-lg mx-auto mt-16 text-center">

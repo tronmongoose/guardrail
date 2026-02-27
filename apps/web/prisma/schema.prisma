@@ -445,6 +445,7 @@ model GenerationJob {
   startedAt     DateTime?
   completedAt   DateTime?
   createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
 
   @@index([programId])
   @@index([status])

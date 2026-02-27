@@ -11,6 +11,16 @@ import { InferenceClient } from "@huggingface/inference";
 
 const DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2";
 const EMBEDDING_DIM = 384;
+const HF_TIMEOUT_MS = 30_000; // 30s per batch
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`HF API timeout after ${ms}ms (${label})`)), ms)
+    ),
+  ]);
+}
 
 interface EmbeddingResult {
   contentId: string;
@@ -64,11 +74,15 @@ export async function getEmbeddings(
 
     // Use featureExtraction which correctly routes the task
     // even for models tagged as sentence-similarity
-    const embeddings = await client.featureExtraction({
-      model,
-      inputs: texts,
-      provider: "hf-inference",
-    });
+    const embeddings = await withTimeout(
+      client.featureExtraction({
+        model,
+        inputs: texts,
+        provider: "hf-inference",
+      }),
+      HF_TIMEOUT_MS,
+      `batch ${Math.floor(i / batchSize) + 1}`,
+    );
 
     // Response is number[][] (one embedding per input text)
     const embeddingArrays = embeddings as unknown as number[][];

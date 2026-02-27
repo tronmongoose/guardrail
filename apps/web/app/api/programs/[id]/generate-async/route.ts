@@ -36,6 +36,8 @@ export async function POST(
   }
 
   // Check for existing pending/processing job
+  const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes without progress = stale
+
   const existingJob = await prisma.generationJob.findFirst({
     where: {
       programId,
@@ -44,13 +46,30 @@ export async function POST(
   });
 
   if (existingJob) {
-    return NextResponse.json({
-      jobId: existingJob.id,
-      status: existingJob.status,
-      stage: existingJob.stage,
-      progress: existingJob.progress,
-      message: "Generation already in progress",
-    });
+    const lastActivity = existingJob.updatedAt ?? existingJob.createdAt;
+    const isStale = Date.now() - lastActivity.getTime() > STALE_THRESHOLD_MS;
+
+    if (isStale) {
+      // Auto-cancel stale job so user can retry
+      await prisma.generationJob.update({
+        where: { id: existingJob.id },
+        data: {
+          status: "FAILED",
+          error: `Automatically cancelled: no progress for ${Math.round(STALE_THRESHOLD_MS / 60000)} minutes (stuck at ${existingJob.progress}% / ${existingJob.stage})`,
+          completedAt: new Date(),
+        },
+      });
+      console.warn(`[generate-async] Auto-cancelled stale job ${existingJob.id} for program ${programId}`);
+      // Fall through to create a new job
+    } else {
+      return NextResponse.json({
+        jobId: existingJob.id,
+        status: existingJob.status,
+        stage: existingJob.stage,
+        progress: existingJob.progress,
+        message: "Generation already in progress",
+      });
+    }
   }
 
   // Create new job
@@ -82,8 +101,17 @@ export async function POST(
  * Updates job status/progress as it runs.
  * Processes both YouTube videos and uploaded artifacts (PDFs, DOCXs, etc.).
  */
+const JOB_TIMEOUT_MS = 8 * 60 * 1000; // 8 minutes (headroom before frontend 10-min timeout)
+
 async function processGenerationJob(jobId: string, programId: string) {
   const timer = createTimer();
+  const deadline = Date.now() + JOB_TIMEOUT_MS;
+
+  function checkDeadline(stage: string) {
+    if (Date.now() > deadline) {
+      throw new Error(`Job timed out after ${Math.round(JOB_TIMEOUT_MS / 60000)} minutes during ${stage} stage`);
+    }
+  }
 
   try {
     // Mark as processing
@@ -109,6 +137,7 @@ async function processGenerationJob(jobId: string, programId: string) {
     const videoIdSet = new Set(program.videos.map((v) => v.id));
 
     // Step 1: Embeddings (5-25%)
+    checkDeadline("embedding");
     const videoEmbeddingInputs = program.videos.map((v) => ({
       contentId: v.id,
       text: v.transcript
@@ -149,6 +178,7 @@ async function processGenerationJob(jobId: string, programId: string) {
     });
 
     // Step 2: Clustering (25-35%)
+    checkDeadline("clustering");
     const clusterInputs = embeddingResults.map((r) => ({
       contentId: r.contentId,
       embedding: r.embedding,
@@ -177,6 +207,7 @@ async function processGenerationJob(jobId: string, programId: string) {
     }
 
     // Step 2.5: Content Extraction / Analysis (35-60%)
+    checkDeadline("analyzing");
     await prisma.generationJob.update({
       where: { id: jobId },
       data: { stage: "analyzing", progress: 35 },
@@ -215,6 +246,7 @@ async function processGenerationJob(jobId: string, programId: string) {
     aiLogger.extractionSuccess(programId, extractionTimer.elapsed(), contentDigests.length);
 
     // Step 3: LLM Generation (60-85%)
+    checkDeadline("generating");
     await prisma.generationJob.update({
       where: { id: jobId },
       data: { stage: "generating", progress: 60 },
@@ -284,6 +316,7 @@ async function processGenerationJob(jobId: string, programId: string) {
     });
 
     // Step 4: Persist (90-100%)
+    checkDeadline("persisting");
     await prisma.programDraft.create({
       data: {
         programId,

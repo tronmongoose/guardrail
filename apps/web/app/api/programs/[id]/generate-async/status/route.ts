@@ -35,6 +35,15 @@ export async function GET(
     return NextResponse.json({ error: "No generation job found" }, { status: 404 });
   }
 
+  // Detect stuck jobs
+  const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+  let isStale = false;
+
+  if (job.status === "PENDING" || job.status === "PROCESSING") {
+    const lastActivity = job.updatedAt ?? job.createdAt;
+    isStale = Date.now() - lastActivity.getTime() > STALE_THRESHOLD_MS;
+  }
+
   return NextResponse.json({
     jobId: job.id,
     status: job.status,
@@ -44,5 +53,6 @@ export async function GET(
     startedAt: job.startedAt,
     completedAt: job.completedAt,
     createdAt: job.createdAt,
+    isStale,
   });
 }

@@ -15,6 +15,15 @@ import { generateWithStub, generateStubContentDigest } from "./llm-stub";
 
 export type LLMProvider = "anthropic" | "openai" | "stub";
 
+const LLM_TIMEOUT_MS = 60_000; // 60s for content extraction
+const GENERATION_TIMEOUT_MS = 120_000; // 120s for curriculum generation
+
+function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 export interface ContentDigest {
   contentId: string;
   contentTitle: string;
@@ -89,7 +98,7 @@ async function extractSingleDigest(
   if (provider === "anthropic") {
     const key = process.env.ANTHROPIC_API_KEY;
     if (!key) throw new Error("ANTHROPIC_API_KEY not set");
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "x-api-key": key,
@@ -101,7 +110,7 @@ async function extractSingleDigest(
         max_tokens: 1024,
         messages: [{ role: "user", content: prompt }],
       }),
-    });
+    }, LLM_TIMEOUT_MS);
     if (!res.ok) throw new Error(`Anthropic API error: ${res.status}`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any = await res.json();
@@ -109,7 +118,7 @@ async function extractSingleDigest(
   } else {
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new Error("OPENAI_API_KEY not set");
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${key}`,
@@ -120,7 +129,7 @@ async function extractSingleDigest(
         messages: [{ role: "user", content: prompt }],
         max_tokens: 1024,
       }),
-    });
+    }, LLM_TIMEOUT_MS);
     if (!res.ok) throw new Error(`OpenAI API error: ${res.status}`);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any = await res.json();
@@ -198,8 +207,12 @@ export async function extractContentDigests(
       if (result.status === "fulfilled") {
         digests.push(result.value);
       } else {
-        console.error("[LLM] Content extraction failed:", result.reason);
-        digests.push(fallbackDigest(batch[j].contentId, batch[j].contentTitle, batch[j].contentType ?? "video"));
+        const item = batch[j];
+        console.error(
+          `[LLM] Content extraction failed for "${item.contentTitle}" (${item.contentId}, type=${item.contentType ?? "video"}):`,
+          result.reason instanceof Error ? result.reason.message : result.reason,
+        );
+        digests.push(fallbackDigest(item.contentId, item.contentTitle, item.contentType ?? "video"));
       }
     }
 
@@ -499,7 +512,7 @@ async function callAnthropic(input: GenerateInput): Promise<string> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("ANTHROPIC_API_KEY not set");
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
+  const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "x-api-key": key,
@@ -511,7 +524,7 @@ async function callAnthropic(input: GenerateInput): Promise<string> {
       max_tokens: 8192,
       messages: [{ role: "user", content: buildPrompt(input) }],
     }),
-  });
+  }, GENERATION_TIMEOUT_MS);
 
   if (!res.ok) throw new Error(`Anthropic API error: ${res.status}`);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -526,7 +539,7 @@ async function callOpenAI(input: GenerateInput): Promise<string> {
   const model = process.env.OPENAI_MODEL || "gpt-4o";
   const prompt = buildPrompt(input);
 
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${key}`,
@@ -537,7 +550,7 @@ async function callOpenAI(input: GenerateInput): Promise<string> {
       messages: [{ role: "user", content: prompt }],
       max_tokens: 8192,
     }),
-  });
+  }, GENERATION_TIMEOUT_MS);
 
   if (!res.ok) {
     const errorBody = await res.text().catch(() => "");
@@ -558,7 +571,7 @@ async function repairJSON(
 
   if (provider === "anthropic") {
     const key = process.env.ANTHROPIC_API_KEY!;
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "x-api-key": key,
@@ -570,7 +583,7 @@ async function repairJSON(
         max_tokens: 8192,
         messages: [{ role: "user", content: repairPrompt }],
       }),
-    });
+    }, LLM_TIMEOUT_MS);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any = await res.json();
     return data.content[0].text;
@@ -578,7 +591,7 @@ async function repairJSON(
 
   // OpenAI
   const key = process.env.OPENAI_API_KEY!;
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+  const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${key}`,
@@ -589,7 +602,7 @@ async function repairJSON(
       messages: [{ role: "user", content: repairPrompt }],
       max_tokens: 8192,
     }),
-  });
+  }, LLM_TIMEOUT_MS);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data: any = await res.json();
   return data.choices[0].message.content;
