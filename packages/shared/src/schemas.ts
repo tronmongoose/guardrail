@@ -30,6 +30,9 @@ export const SessionSchema = z.object({
   keyTakeaways: z.array(z.string().max(200)).max(5).optional(), // 2-3 key takeaway bullets
   orderIndex: z.number().int().min(0),
   actions: z.array(ActionSchema).min(1),
+  // Optional scene-based lesson data (populated when VideoAnalysis is available)
+  clips: z.array(z.lazy(() => SessionClipSchema)).optional(),
+  overlays: z.array(z.lazy(() => SessionOverlaySchema)).optional(),
 });
 
 // --- Week ---
@@ -165,3 +168,47 @@ export const CompositeSessionSchema = z.object({
   overlays: z.array(SessionOverlaySchema).default([]),
 });
 export type CompositeSessionInput = z.infer<typeof CompositeSessionSchema>;
+
+// --- Video Analysis (Gemini-generated structured analysis) ---
+
+export const TimestampedSegmentSchema = z.object({
+  startSeconds: z.number().min(0),
+  endSeconds: z.number().min(0),
+  text: z.string(),
+  topic: z.string().optional(),
+  speakerName: z.string().optional(),
+});
+export type TimestampedSegment = z.infer<typeof TimestampedSegmentSchema>;
+
+export const VideoTopicSchema = z.object({
+  label: z.string(),
+  startSeconds: z.number().min(0),
+  endSeconds: z.number().min(0),
+  subtopics: z.array(z.string()).optional(),
+});
+export type VideoTopic = z.infer<typeof VideoTopicSchema>;
+
+export const VideoKeyMomentSchema = z.object({
+  timestampSeconds: z.number().min(0),
+  description: z.string(),
+  significance: z.enum(["high", "medium", "low"]).optional(),
+  type: z.enum(["insight", "example", "exercise", "transition", "summary"]).optional(),
+});
+export type VideoKeyMoment = z.infer<typeof VideoKeyMomentSchema>;
+
+export const VideoPersonSchema = z.object({
+  name: z.string(),
+  role: z.string().optional(),
+});
+export type VideoPerson = z.infer<typeof VideoPersonSchema>;
+
+export const VideoAnalysisOutputSchema = z.object({
+  summary: z.string(),
+  fullTranscript: z.string().optional(),
+  segments: z.array(TimestampedSegmentSchema),
+  topics: z.array(VideoTopicSchema),
+  keyMoments: z.array(VideoKeyMomentSchema).optional(),
+  people: z.array(VideoPersonSchema).optional(),
+  durationSeconds: z.number().optional(),
+});
+export type VideoAnalysisOutput = z.infer<typeof VideoAnalysisOutputSchema>;

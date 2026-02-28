@@ -10,12 +10,12 @@ export interface GenerationStep {
 }
 
 const STEP_DEFINITIONS = [
-  { key: "analyzing", label: "Reading through your content", subtitle: "Carefully reviewing every piece of material you've shared" },
-  { key: "topics", label: "Discovering your key themes", subtitle: "Finding the concepts that make your expertise unique" },
-  { key: "progression", label: "Mapping the learning journey", subtitle: "Designing the path from beginner to mastery" },
+  { key: "watching", label: "Watching your videos", subtitle: "AI is analyzing every frame and word of your content" },
+  { key: "analyzing", label: "Understanding your expertise", subtitle: "Identifying the concepts that make your teaching unique" },
   { key: "clustering", label: "Finding the natural structure", subtitle: "Organizing ideas into a sequence that clicks" },
-  { key: "digesting", label: "Understanding your teaching style", subtitle: "Capturing the voice and approach that makes you, you" },
-  { key: "weeks", label: "Designing your weekly rhythm", subtitle: "Building a pace that keeps learners engaged without overwhelm" },
+  { key: "digesting", label: "Extracting key insights", subtitle: "Pulling out the moments that matter most" },
+  { key: "mapping", label: "Mapping the learning journey", subtitle: "Designing the path from beginner to mastery" },
+  { key: "scenes", label: "Building scene-based lessons", subtitle: "Curating video clips, transitions, and overlays" },
   { key: "sessions", label: "Writing each lesson with care", subtitle: "Crafting sessions that transform knowledge into action" },
   { key: "actions", label: "Adding the finishing touches", subtitle: "Polishing every detail so your program shines" },
 ] as const;
@@ -35,9 +35,9 @@ interface UseGenerationStepsResult {
 /**
  * Maps backend generation {stage, progress} to 8 rich frontend steps.
  *
- * Backend stages: embedding(5-25) → clustering(25-35) → analyzing(35-60) → generating(60-85) → validating → persisting
+ * Backend stages: video_analysis(0-10) → embedding(10-25) → clustering(25-35) → analyzing(35-55) → generating(55-85) → validating → persisting
  *
- * The "generating" stage (60-85%) is a single long LLM call with no intermediate
+ * The "generating" stage (55-85%) is a single long LLM call with no intermediate
  * updates. This hook simulates smooth sub-step progression client-side using a
  * logarithmic timer, so steps 6-8 animate naturally.
  *
@@ -68,9 +68,9 @@ export function useGenerationSteps(input: UseGenerationStepsInput): UseGeneratio
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - (generatingStartRef.current || Date.now());
-      // Ease from 60 toward 84 over ~45 seconds (slower for more theatrical feel)
+      // Ease from 55 toward 84 over ~45 seconds (slower for more theatrical feel)
       const t = Math.min(elapsed / 45000, 1);
-      const simulated = 60 + 24 * (1 - Math.pow(1 - t, 2));
+      const simulated = 55 + 29 * (1 - Math.pow(1 - t, 2));
       setSimulatedProgress(Math.min(simulated, 84));
     }, 800);
 
@@ -135,50 +135,49 @@ function computeStepStatus(
   if (stage === "complete") return "completed";
 
   // Helper: stage ordering for "is past" checks
-  const stageOrder = ["embedding", "clustering", "analyzing", "generating", "validating", "persisting"];
+  const stageOrder = ["video_analysis", "embedding", "clustering", "analyzing", "generating", "validating", "persisting"];
   const currentStageIdx = stageOrder.indexOf(stage ?? "");
   const isPast = (s: string) => currentStageIdx > stageOrder.indexOf(s);
 
   switch (index) {
-    case 0: // Reading through your content — embedding < 20
-      if (stage === "embedding" && displayProgress < 20) return "active";
-      if ((stage === "embedding" && displayProgress >= 20) || isPast("embedding")) return "completed";
+    case 0: // Watching your videos — video_analysis (0-10)
+      if (stage === "video_analysis") return "active";
+      if (isPast("video_analysis")) return "completed";
       return "pending";
 
-    case 1: // Discovering your key themes — embedding >= 20 or clustering < 30
-      if (stage === "embedding" && displayProgress >= 20) return "active";
-      if (stage === "clustering" && displayProgress < 30) return "active";
-      if ((stage === "clustering" && displayProgress >= 30) || isPast("clustering")) return "completed";
+    case 1: // Understanding your expertise — embedding (10-25)
+      if (stage === "embedding") return "active";
+      if (isPast("embedding")) return "completed";
       return "pending";
 
-    case 2: // Mapping the learning journey — clustering 30-33
-      if (stage === "clustering" && displayProgress >= 30 && displayProgress < 33) return "active";
-      if ((stage === "clustering" && displayProgress >= 33) || isPast("clustering")) return "completed";
+    case 2: // Finding the natural structure — clustering (25-35)
+      if (stage === "clustering") return "active";
+      if (isPast("clustering")) return "completed";
       return "pending";
 
-    case 3: // Finding the natural structure — clustering >= 33 or early analyzing
-      if (stage === "clustering" && displayProgress >= 33) return "active";
-      if (stage === "analyzing" && displayProgress < 40) return "active";
-      if ((stage === "analyzing" && displayProgress >= 40) || isPast("analyzing")) return "completed";
+    case 3: // Extracting key insights — analyzing < 48
+      if (stage === "analyzing" && displayProgress < 48) return "active";
+      if ((stage === "analyzing" && displayProgress >= 48) || isPast("analyzing")) return "completed";
       return "pending";
 
-    case 4: // Understanding your teaching style — analyzing >= 40
-      if (stage === "analyzing" && displayProgress >= 40) return "active";
-      if (isPast("analyzing")) return "completed";
+    case 4: // Mapping the learning journey — analyzing >= 48 or early generating
+      if (stage === "analyzing" && displayProgress >= 48) return "active";
+      if (stage === "generating" && displayProgress < 65) return "active";
+      if ((stage === "generating" && displayProgress >= 65) || isPast("generating")) return "completed";
       return "pending";
 
-    case 5: // Designing your weekly rhythm — generating < 72
-      if (stage === "generating" && displayProgress < 72) return "active";
-      if ((stage === "generating" && displayProgress >= 72) || isPast("generating")) return "completed";
+    case 5: // Building scene-based lessons — generating 65-75
+      if (stage === "generating" && displayProgress >= 65 && displayProgress < 75) return "active";
+      if ((stage === "generating" && displayProgress >= 75) || isPast("generating")) return "completed";
       return "pending";
 
-    case 6: // Writing each lesson with care — generating 72-80
-      if (stage === "generating" && displayProgress >= 72 && displayProgress < 80) return "active";
-      if ((stage === "generating" && displayProgress >= 80) || isPast("generating")) return "completed";
+    case 6: // Writing each lesson with care — generating 75-82
+      if (stage === "generating" && displayProgress >= 75 && displayProgress < 82) return "active";
+      if ((stage === "generating" && displayProgress >= 82) || isPast("generating")) return "completed";
       return "pending";
 
-    case 7: // Adding the finishing touches — generating >= 80 or validating/persisting
-      if (stage === "generating" && displayProgress >= 80) return "active";
+    case 7: // Adding the finishing touches — generating >= 82 or validating/persisting
+      if (stage === "generating" && displayProgress >= 82) return "active";
       if (stage === "validating" || stage === "persisting") return "active";
       return "pending";
 

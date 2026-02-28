@@ -260,8 +260,28 @@ model YouTubeVideo {
   actions       Action[]
   embeddings    Embedding[]
   clips         SessionClip[]
+  analysis      VideoAnalysis?
 
   @@unique([programId, videoId])
+}
+
+// --- Video Analysis (Gemini-generated structured analysis) ---
+
+model VideoAnalysis {
+  id               String       @id @default(cuid())
+  youtubeVideoId   String       @unique
+  youtubeVideo     YouTubeVideo @relation(fields: [youtubeVideoId], references: [id], onDelete: Cascade)
+  summary          String       @db.Text
+  fullTranscript   String?      @db.Text
+  segments         Json         // TimestampedSegment[]
+  topics           Json         // VideoTopic[]
+  keyMoments       Json?        // VideoKeyMoment[]
+  people           Json?        // VideoPerson[]
+  durationSeconds  Int?
+  model            String       @default("gemini-2.5-flash-preview-05-20")
+  analyzedAt       DateTime     @default(now())
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 }
 
 // --- Program Draft (AI-generated, pending approval) ---

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { parseYouTubeVideoId, fetchYouTubeOEmbed, fetchYouTubeTranscript } from "@guide-rail/shared";
+import { analyzeVideoWithGemini } from "@guide-rail/ai";
 import { videoLogger, createTimer } from "@/lib/logger";
 
 export async function POST(
@@ -82,6 +84,38 @@ export async function POST(
       hasMetadata,
       source: "single",
     });
+
+    // Fire-and-forget Gemini video analysis (runs in background)
+    analyzeVideoWithGemini(videoId, meta.title, undefined)
+      .then(async (analysis) => {
+        await prisma.videoAnalysis.upsert({
+          where: { youtubeVideoId: video.id },
+          create: {
+            youtubeVideoId: video.id,
+            summary: analysis.summary,
+            fullTranscript: analysis.fullTranscript ?? null,
+            segments: analysis.segments as unknown as Prisma.InputJsonValue,
+            topics: analysis.topics as unknown as Prisma.InputJsonValue,
+            keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
+            people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
+            durationSeconds: analysis.durationSeconds ?? null,
+          },
+          update: {
+            summary: analysis.summary,
+            fullTranscript: analysis.fullTranscript ?? null,
+            segments: analysis.segments as unknown as Prisma.InputJsonValue,
+            topics: analysis.topics as unknown as Prisma.InputJsonValue,
+            keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
+            people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
+            durationSeconds: analysis.durationSeconds ?? null,
+            analyzedAt: new Date(),
+          },
+        });
+        console.log(`[gemini] Video analysis saved for ${videoId} (record ${video.id})`);
+      })
+      .catch((err) => {
+        console.error(`[gemini] Video analysis failed for ${videoId}:`, err);
+      });
 
     return NextResponse.json(video);
   } catch (err) {

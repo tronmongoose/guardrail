@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEmbeddings, clusterEmbeddings, generateProgramDraft, extractContentDigests } from "@guide-rail/ai";
+import { getEmbeddings, clusterEmbeddings, generateProgramDraft, extractContentDigests, analyzeVideoWithGemini } from "@guide-rail/ai";
+import type { ContentDigest, EnrichedContentDigest } from "@guide-rail/ai";
 import { ProgramDraftSchema } from "@guide-rail/shared";
+import type { VideoAnalysisOutput } from "@guide-rail/shared";
+import { Prisma } from "@prisma/client";
 import { aiLogger, createTimer } from "@/lib/logger";
 
 const HF_MODEL = process.env.HF_EMBEDDING_MODEL || "sentence-transformers/all-MiniLM-L6-v2";
@@ -114,16 +117,21 @@ async function processGenerationJob(jobId: string, programId: string) {
   }
 
   try {
-    // Mark as processing
+    // Mark as processing — start with video_analysis stage
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { status: "PROCESSING", stage: "embedding", progress: 5, startedAt: new Date() },
+      data: { status: "PROCESSING", stage: "video_analysis", progress: 0, startedAt: new Date() },
     });
 
-    // Fetch program with videos and artifacts
+    // Fetch program with videos, artifacts, and existing analyses
     const program = await prisma.program.findUnique({
       where: { id: programId },
-      include: { videos: true, artifacts: true },
+      include: {
+        videos: {
+          include: { analysis: true },
+        },
+        artifacts: true,
+      },
     });
 
     if (!program) throw new Error("Program not found");
@@ -136,14 +144,112 @@ async function processGenerationJob(jobId: string, programId: string) {
     // Build ID sets for later lookups
     const videoIdSet = new Set(program.videos.map((v) => v.id));
 
-    // Step 1: Embeddings (5-25%)
+    // ── Step 0: Video Analysis (0-10%) ──
+    // Check/run Gemini analysis for videos missing it
+    checkDeadline("video_analysis");
+    const videosNeedingAnalysis = program.videos.filter((v) => !v.analysis);
+    let analysisCount = 0;
+
+    if (videosNeedingAnalysis.length > 0 && process.env.GOOGLE_AI_API_KEY) {
+      console.info(`[generate-async] Running Gemini analysis for ${videosNeedingAnalysis.length} video(s)`);
+      const ANALYSIS_CONCURRENCY = 2;
+
+      for (let i = 0; i < videosNeedingAnalysis.length; i += ANALYSIS_CONCURRENCY) {
+        checkDeadline("video_analysis");
+        const batch = videosNeedingAnalysis.slice(i, i + ANALYSIS_CONCURRENCY);
+        const results = await Promise.allSettled(
+          batch.map(async (v) => {
+            const analysis = await analyzeVideoWithGemini(v.videoId, v.title ?? "Untitled", v.durationSeconds ?? undefined);
+            await prisma.videoAnalysis.upsert({
+              where: { youtubeVideoId: v.id },
+              create: {
+                youtubeVideoId: v.id,
+                summary: analysis.summary,
+                fullTranscript: analysis.fullTranscript ?? null,
+                segments: analysis.segments as unknown as Prisma.InputJsonValue,
+                topics: analysis.topics as unknown as Prisma.InputJsonValue,
+                keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
+                people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
+                durationSeconds: analysis.durationSeconds ?? null,
+              },
+              update: {
+                summary: analysis.summary,
+                fullTranscript: analysis.fullTranscript ?? null,
+                segments: analysis.segments as unknown as Prisma.InputJsonValue,
+                topics: analysis.topics as unknown as Prisma.InputJsonValue,
+                keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
+                people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
+                durationSeconds: analysis.durationSeconds ?? null,
+                analyzedAt: new Date(),
+              },
+            });
+            return analysis;
+          }),
+        );
+
+        for (const r of results) {
+          if (r.status === "fulfilled") analysisCount++;
+          else console.warn(`[generate-async] Gemini analysis failed for a video:`, r.reason);
+        }
+
+        const analysisProgress = Math.round(((i + batch.length) / videosNeedingAnalysis.length) * 10);
+        await prisma.generationJob.update({
+          where: { id: jobId },
+          data: { progress: analysisProgress },
+        });
+      }
+    }
+
+    // Re-fetch videos with analyses after running new ones
+    const videosWithAnalysis = await prisma.youTubeVideo.findMany({
+      where: { programId },
+      include: { analysis: true },
+    });
+
+    // Build analysis lookup: video record ID → VideoAnalysis data
+    const analysisMap = new Map<string, VideoAnalysisOutput>();
+    for (const v of videosWithAnalysis) {
+      if (v.analysis) {
+        analysisMap.set(v.id, {
+          summary: v.analysis.summary,
+          fullTranscript: v.analysis.fullTranscript ?? undefined,
+          segments: v.analysis.segments as unknown as VideoAnalysisOutput["segments"],
+          topics: v.analysis.topics as unknown as VideoAnalysisOutput["topics"],
+          keyMoments: v.analysis.keyMoments as unknown as VideoAnalysisOutput["keyMoments"],
+          people: v.analysis.people as unknown as VideoAnalysisOutput["people"],
+          durationSeconds: v.analysis.durationSeconds ?? undefined,
+        });
+      }
+    }
+
+    const hasVideoAnalysis = analysisMap.size > 0;
+    console.info(`[generate-async] Video analysis: ${analysisMap.size}/${program.videos.length} videos analyzed (${analysisCount} new)`);
+
+    // ── Step 1: Embeddings (10-25%) ──
     checkDeadline("embedding");
-    const videoEmbeddingInputs = program.videos.map((v) => ({
-      contentId: v.id,
-      text: v.transcript
-        ? `${v.title ?? ""}: ${v.transcript}`.slice(0, 4000)
-        : `${v.title ?? ""} ${v.description ?? ""}`.trim() || v.videoId,
-    }));
+    await prisma.generationJob.update({
+      where: { id: jobId },
+      data: { stage: "embedding", progress: 10 },
+    });
+
+    // Use analysis summaries for richer embeddings when available
+    const videoEmbeddingInputs = program.videos.map((v) => {
+      const analysis = analysisMap.get(v.id);
+      if (analysis) {
+        // Richer embedding text from analysis
+        const topicLabels = analysis.topics.map((t) => t.label).join(". ");
+        return {
+          contentId: v.id,
+          text: `${v.title ?? ""}: ${analysis.summary}. Topics: ${topicLabels}`.slice(0, 4000),
+        };
+      }
+      return {
+        contentId: v.id,
+        text: v.transcript
+          ? `${v.title ?? ""}: ${v.transcript}`.slice(0, 4000)
+          : `${v.title ?? ""} ${v.description ?? ""}`.trim() || v.videoId,
+      };
+    });
 
     const artifactEmbeddingInputs = usableArtifacts.map((a) => ({
       contentId: a.id,
@@ -169,7 +275,6 @@ async function processGenerationJob(jobId: string, programId: string) {
           update: { vector: result.embedding },
         });
       }
-      // Artifact embeddings used in-memory only (no FK in Embedding table)
     }
 
     await prisma.generationJob.update({
@@ -177,7 +282,7 @@ async function processGenerationJob(jobId: string, programId: string) {
       data: { stage: "clustering", progress: 25 },
     });
 
-    // Step 2: Clustering (25-35%)
+    // ── Step 2: Clustering (25-35%) ──
     checkDeadline("clustering");
     const clusterInputs = embeddingResults.map((r) => ({
       contentId: r.contentId,
@@ -193,7 +298,7 @@ async function processGenerationJob(jobId: string, programId: string) {
       clusterCount: clusters.length,
     });
 
-    // Store cluster assignments for videos only (ClusterAssignment has FK to YouTubeVideo)
+    // Store cluster assignments for videos only
     for (const cluster of clusters) {
       for (const contentId of cluster.contentIds) {
         if (videoIdSet.has(contentId)) {
@@ -206,20 +311,53 @@ async function processGenerationJob(jobId: string, programId: string) {
       }
     }
 
-    // Step 2.5: Content Extraction / Analysis (35-60%)
+    // ── Step 2.5: Content Extraction / Enriched Digests (35-55%) ──
     checkDeadline("analyzing");
     await prisma.generationJob.update({
       where: { id: jobId },
       data: { stage: "analyzing", progress: 35 },
     });
 
-    const videosForExtraction = program.videos.map((v) => ({
-      contentId: v.id,
-      contentTitle: v.title ?? "Untitled",
-      text: v.transcript,
-      contentType: "video" as const,
-    }));
+    // Build enriched digests from analysis (skip LLM for these)
+    const enrichedDigests: (ContentDigest | EnrichedContentDigest)[] = [];
+    const videosNeedingLLMExtraction: { contentId: string; contentTitle: string; text: string | null; contentType: "video" }[] = [];
 
+    for (const v of program.videos) {
+      const analysis = analysisMap.get(v.id);
+      if (analysis && analysis.topics.length > 0) {
+        // Build enriched digest directly from Gemini analysis — no LLM call needed
+        const enriched: EnrichedContentDigest = {
+          contentId: v.id,
+          contentTitle: v.title ?? "Untitled",
+          contentType: "video",
+          keyConcepts: analysis.topics.map((t) => t.label),
+          skillsIntroduced: analysis.topics
+            .flatMap((t) => t.subtopics ?? [])
+            .slice(0, 5),
+          memorableExamples: (analysis.keyMoments ?? [])
+            .filter((m) => m.significance === "high")
+            .map((m) => m.description)
+            .slice(0, 3),
+          difficultyLevel: "intermediate",
+          summary: analysis.summary,
+          segments: analysis.segments,
+          topics: analysis.topics,
+          keyMoments: analysis.keyMoments ?? [],
+          durationSeconds: analysis.durationSeconds,
+        };
+        enrichedDigests.push(enriched);
+      } else {
+        // No analysis — needs LLM extraction
+        videosNeedingLLMExtraction.push({
+          contentId: v.id,
+          contentTitle: v.title ?? "Untitled",
+          text: v.transcript,
+          contentType: "video",
+        });
+      }
+    }
+
+    // Artifacts always go through LLM extraction
     const artifactsForExtraction = usableArtifacts.map((a) => ({
       contentId: a.id,
       contentTitle: a.originalFilename,
@@ -227,29 +365,38 @@ async function processGenerationJob(jobId: string, programId: string) {
       contentType: "document" as const,
     }));
 
-    const allForExtraction = [...videosForExtraction, ...artifactsForExtraction];
+    const allForExtraction = [...videosNeedingLLMExtraction, ...artifactsForExtraction];
 
-    aiLogger.extractionStart(programId, allForExtraction.length);
-    const extractionTimer = createTimer();
+    if (allForExtraction.length > 0) {
+      aiLogger.extractionStart(programId, allForExtraction.length);
+      const extractionTimer = createTimer();
 
-    const contentDigests = await extractContentDigests(
-      allForExtraction,
-      async (completed, total) => {
-        const extractionProgress = 35 + Math.round((completed / total) * 25);
-        await prisma.generationJob.update({
-          where: { id: jobId },
-          data: { progress: extractionProgress },
-        });
-      },
-    );
+      const llmDigests = await extractContentDigests(
+        allForExtraction,
+        async (completed, total) => {
+          const extractionProgress = 35 + Math.round((completed / total) * 20);
+          await prisma.generationJob.update({
+            where: { id: jobId },
+            data: { progress: extractionProgress },
+          });
+        },
+      );
+      enrichedDigests.push(...llmDigests);
+      aiLogger.extractionSuccess(programId, extractionTimer.elapsed(), llmDigests.length);
+    } else {
+      console.info(`[generate-async] All videos have Gemini analysis — skipping LLM extraction`);
+    }
 
-    aiLogger.extractionSuccess(programId, extractionTimer.elapsed(), contentDigests.length);
+    await prisma.generationJob.update({
+      where: { id: jobId },
+      data: { progress: 55 },
+    });
 
-    // Step 3: LLM Generation (60-85%)
+    // ── Step 3: LLM Generation (55-85%) ──
     checkDeadline("generating");
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { stage: "generating", progress: 60 },
+      data: { stage: "generating", progress: 55 },
     });
 
     // Build lookup maps
@@ -295,7 +442,8 @@ async function processGenerationJob(jobId: string, programId: string) {
       vibePrompt: program.vibePrompt ?? undefined,
       durationWeeks: program.durationWeeks,
       clusters: clusterData,
-      contentDigests,
+      contentDigests: enrichedDigests,
+      hasVideoAnalysis,
     });
 
     await prisma.generationJob.update({
@@ -315,7 +463,7 @@ async function processGenerationJob(jobId: string, programId: string) {
       data: { stage: "persisting", progress: 90 },
     });
 
-    // Step 4: Persist (90-100%)
+    // ── Step 4: Persist (90-100%) ──
     checkDeadline("persisting");
     await prisma.programDraft.create({
       data: {
@@ -325,9 +473,10 @@ async function processGenerationJob(jobId: string, programId: string) {
       },
     });
 
-    // Delete existing structure and create new (atomic — if anything fails, old weeks are preserved)
+    // Delete existing structure and create new
     let sessionCount = 0;
     let actionCount = 0;
+    let compositeCount = 0;
 
     await prisma.$transaction(async (tx) => {
       await tx.week.deleteMany({ where: { programId } });
@@ -368,6 +517,50 @@ async function processGenerationJob(jobId: string, programId: string) {
               },
             });
           }
+
+          // Persist CompositeSession + clips + overlays if present
+          if (session.clips && session.clips.length > 0) {
+            compositeCount++;
+            const compositeSession = await tx.compositeSession.create({
+              data: {
+                sessionId: createdSession.id,
+                title: session.title,
+                description: session.summary,
+                autoAdvance: true,
+              },
+            });
+
+            for (const clip of session.clips) {
+              await tx.sessionClip.create({
+                data: {
+                  compositeSessionId: compositeSession.id,
+                  youtubeVideoId: clip.youtubeVideoId,
+                  startSeconds: clip.startSeconds ?? null,
+                  endSeconds: clip.endSeconds ?? null,
+                  orderIndex: clip.orderIndex,
+                  transitionType: (clip.transitionType ?? "NONE") as "NONE" | "FADE" | "CROSSFADE" | "SLIDE_LEFT",
+                  transitionDurationMs: clip.transitionDurationMs ?? 500,
+                  chapterTitle: clip.chapterTitle ?? null,
+                  chapterDescription: clip.chapterDescription ?? null,
+                },
+              });
+            }
+
+            for (const overlay of session.overlays ?? []) {
+              await tx.sessionOverlay.create({
+                data: {
+                  compositeSessionId: compositeSession.id,
+                  type: overlay.type as "TITLE_CARD" | "CHAPTER_TITLE" | "KEY_POINTS" | "LOWER_THIRD" | "CTA" | "OUTRO",
+                  content: overlay.content as unknown as Prisma.InputJsonValue,
+                  clipOrderIndex: overlay.clipOrderIndex ?? null,
+                  triggerAtSeconds: overlay.triggerAtSeconds ?? null,
+                  durationMs: overlay.durationMs ?? 5000,
+                  position: (overlay.position ?? "CENTER") as "CENTER" | "BOTTOM" | "TOP" | "LOWER_THIRD",
+                  orderIndex: overlay.orderIndex,
+                },
+              });
+            }
+          }
         }
       }
     }, { timeout: 30000 });
@@ -377,6 +570,8 @@ async function processGenerationJob(jobId: string, programId: string) {
       sessionCount,
       actionCount,
     });
+
+    console.info(`[generate-async] Persisted: ${sessionCount} sessions, ${actionCount} actions, ${compositeCount} composite sessions`);
 
     // Mark complete
     await prisma.generationJob.update({

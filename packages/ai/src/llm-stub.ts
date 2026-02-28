@@ -1,10 +1,11 @@
 /**
  * Stub LLM — generates deterministic ProgramDraft JSON for local dev without API keys.
  * Distributes content evenly across all weeks.
+ * When enriched digests are available, generates scene-based output with clips/overlays.
  */
 
 import type { ProgramDraft } from "@guide-rail/shared";
-import type { ContentDigest } from "./llm-adapter";
+import type { ContentDigest, EnrichedContentDigest } from "./llm-adapter";
 
 interface StubInput {
   programId: string;
@@ -24,6 +25,7 @@ interface StubInput {
     summary?: string;
   }[];
   contentDigests?: ContentDigest[];
+  hasVideoAnalysis?: boolean;
 }
 
 /**
@@ -77,6 +79,8 @@ export function generateWithStub(input: StubInput): ProgramDraft {
     (input.contentDigests ?? []).map((d) => [d.contentId, d]),
   );
 
+  const useSceneMode = input.hasVideoAnalysis === true;
+
   // Distribute content across weeks
   const itemsPerWeek = Math.max(1, Math.ceil(allContent.length / input.durationWeeks));
   const weeks: ProgramDraft["weeks"] = [];
@@ -88,23 +92,25 @@ export function generateWithStub(input: StubInput): ProgramDraft {
     const actions: ProgramDraft["weeks"][0]["sessions"][0]["actions"] = [];
     let orderIndex = 0;
 
-    // Add watch/read actions for each content item
-    for (const item of weekContent) {
-      if (item.type === "video") {
-        actions.push({
-          title: `Watch: ${item.title}`,
-          type: "watch" as const,
-          instructions: `Watch the video carefully and take notes on the key concepts discussed.`,
-          youtubeVideoId: item.id,
-          orderIndex: orderIndex++,
-        });
-      } else {
-        actions.push({
-          title: `Read: ${item.title}`,
-          type: "read" as const,
-          instructions: `Read through the document and identify the key concepts, frameworks, and actionable insights.`,
-          orderIndex: orderIndex++,
-        });
+    // In scene mode, DO NOT add WATCH actions (clips handle video viewing)
+    if (!useSceneMode) {
+      for (const item of weekContent) {
+        if (item.type === "video") {
+          actions.push({
+            title: `Watch: ${item.title}`,
+            type: "watch" as const,
+            instructions: `Watch the video carefully and take notes on the key concepts discussed.`,
+            youtubeVideoId: item.id,
+            orderIndex: orderIndex++,
+          });
+        } else {
+          actions.push({
+            title: `Read: ${item.title}`,
+            type: "read" as const,
+            instructions: `Read through the document and identify the key concepts, frameworks, and actionable insights.`,
+            orderIndex: orderIndex++,
+          });
+        }
       }
     }
 
@@ -163,6 +169,72 @@ export function generateWithStub(input: StubInput): ProgramDraft {
             `Prepare for advanced application`,
           ];
 
+    // Build clips and overlays in scene mode
+    let clips: ProgramDraft["weeks"][0]["sessions"][0]["clips"];
+    let overlays: ProgramDraft["weeks"][0]["sessions"][0]["overlays"];
+
+    if (useSceneMode) {
+      const videoItems = weekContent.filter((item) => item.type === "video");
+      clips = [];
+      overlays = [];
+
+      let clipOrder = 0;
+      for (const item of videoItems) {
+        const enriched = digestMap.get(item.id) as EnrichedContentDigest | undefined;
+        if (enriched?.topics && enriched.topics.length > 0) {
+          // Create clips from topic segments
+          for (const topic of enriched.topics.slice(0, 4)) {
+            clips.push({
+              youtubeVideoId: item.id,
+              startSeconds: topic.startSeconds,
+              endSeconds: topic.endSeconds,
+              orderIndex: clipOrder,
+              transitionType: clipOrder === 0 ? "NONE" : "FADE",
+              transitionDurationMs: 500,
+              chapterTitle: topic.label,
+              chapterDescription: topic.subtopics?.join(", "),
+            });
+            clipOrder++;
+          }
+        } else {
+          // No topic data — single clip for entire video
+          clips.push({
+            youtubeVideoId: item.id,
+            startSeconds: 0,
+            endSeconds: enriched?.durationSeconds ?? 600,
+            orderIndex: clipOrder,
+            transitionType: clipOrder === 0 ? "NONE" : "FADE",
+            transitionDurationMs: 500,
+            chapterTitle: item.title,
+          });
+          clipOrder++;
+        }
+      }
+
+      // Title card overlay
+      overlays.push({
+        type: "TITLE_CARD",
+        content: { title: weekContent.length > 0 ? `Learning Session` : `Review Session`, subtitle: `Week ${weekNum}` },
+        position: "CENTER",
+        durationMs: 4000,
+        orderIndex: 0,
+        triggerAtSeconds: 0,
+      });
+
+      // KEY_POINTS overlay if we have takeaways
+      if (keyTakeaways.length > 0 && clips.length > 1) {
+        overlays.push({
+          type: "KEY_POINTS",
+          content: { points: keyTakeaways },
+          clipOrderIndex: 1,
+          position: "BOTTOM",
+          durationMs: 6000,
+          orderIndex: 1,
+          triggerAtSeconds: 5,
+        });
+      }
+    }
+
     weeks.push({
       title: `Week ${weekNum}: ${weekTitle}`,
       summary: weekDigest
@@ -178,6 +250,8 @@ export function generateWithStub(input: StubInput): ProgramDraft {
           keyTakeaways,
           orderIndex: 0,
           actions,
+          ...(clips && clips.length > 0 ? { clips } : {}),
+          ...(overlays && overlays.length > 0 ? { overlays } : {}),
         },
       ],
     });

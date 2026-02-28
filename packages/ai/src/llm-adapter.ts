@@ -35,6 +35,17 @@ export interface ContentDigest {
   summary: string;
 }
 
+/**
+ * Enriched digest built from Gemini VideoAnalysis — includes timestamped data
+ * for scene-based lesson generation.
+ */
+export interface EnrichedContentDigest extends ContentDigest {
+  segments: { startSeconds: number; endSeconds: number; text: string; topic?: string }[];
+  topics: { label: string; startSeconds: number; endSeconds: number; subtopics?: string[] }[];
+  keyMoments: { timestampSeconds: number; description: string; significance?: string; type?: string }[];
+  durationSeconds?: number;
+}
+
 interface GenerateInput {
   programId: string;
   programTitle: string;
@@ -53,6 +64,8 @@ interface GenerateInput {
     summary?: string;
   }[];
   contentDigests?: ContentDigest[];
+  /** When true, prompt requests scene-based output with clips/overlays */
+  hasVideoAnalysis?: boolean;
 }
 
 const MAX_REPAIR_ATTEMPTS = 2;
@@ -315,12 +328,14 @@ function extractJSON(text: string): string {
 }
 
 function buildPrompt(input: GenerateInput): string {
+  const useSceneMode = input.hasVideoAnalysis === true;
+
   // Build digest lookup
   const digestMap = new Map(
     (input.contentDigests ?? []).map((d) => [d.contentId, d]),
   );
 
-  // Flatten all content items with their text for the prompt
+  // Flatten all content items
   const allContent: { id: string; title: string; text?: string; clusterId: number; type: "video" | "document" }[] = [];
   for (const c of input.clusters) {
     for (let i = 0; i < c.contentIds.length; i++) {
@@ -339,10 +354,39 @@ function buildPrompt(input: GenerateInput): string {
   const hasVideos = videoCount > 0;
   const hasDocs = docCount > 0;
 
-  // Build content descriptions — use rich digests when available, fall back to text snippet
+  // Build content descriptions — enriched with timestamps when available
   const contentDescriptions = allContent.map((item, i) => {
     const typeLabel = item.type === "video" ? "VIDEO" : "DOCUMENT";
     const digest = digestMap.get(item.id);
+
+    // Enriched digest with timestamps (from Gemini analysis)
+    const enriched = digest as EnrichedContentDigest | undefined;
+    if (enriched?.topics && enriched.topics.length > 0) {
+      const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+      const durationStr = enriched.durationSeconds
+        ? ` (Duration: ${formatTime(enriched.durationSeconds)})`
+        : "";
+
+      const topicLines = enriched.topics.map((t) =>
+        `  - "${t.label}" (${formatTime(t.startSeconds)} - ${formatTime(t.endSeconds)})`
+      ).join("\n");
+
+      const momentLines = (enriched.keyMoments ?? []).slice(0, 6).map((m) =>
+        `  - ${formatTime(m.timestampSeconds)} — ${m.description}${m.significance ? ` [${m.significance}]` : ""}`
+      ).join("\n");
+
+      return [
+        `${i + 1}. [${typeLabel}] "${item.title}" (ID: ${item.id}, Cluster: ${item.clusterId})${durationStr}`,
+        `   Summary: ${enriched.summary}`,
+        `   Topics:`,
+        topicLines,
+        momentLines ? `   Key moments:\n${momentLines}` : "",
+        `   Skills: ${enriched.skillsIntroduced.join(", ") || "N/A"}`,
+        `   Difficulty: ${enriched.difficultyLevel}`,
+      ].filter(Boolean).join("\n");
+    }
+
+    // Basic digest (from LLM extraction)
     if (digest && digest.keyConcepts.length > 0) {
       return [
         `${i + 1}. [${typeLabel}] "${item.title}" (ID: ${item.id}, Cluster: ${item.clusterId})`,
@@ -353,6 +397,7 @@ function buildPrompt(input: GenerateInput): string {
         `   Difficulty: ${digest.difficultyLevel}`,
       ].join("\n");
     }
+
     // Fallback to text snippet
     const textSnippet = item.text
       ? `\n   Content preview: ${item.text.slice(0, 600)}${item.text.length > 600 ? "..." : ""}`
@@ -363,13 +408,11 @@ function buildPrompt(input: GenerateInput): string {
   const totalContent = allContent.length;
   const contentPerWeek = Math.max(1, Math.ceil(totalContent / input.durationWeeks));
 
-  // Build content summary line
   const contentSummaryParts: string[] = [];
   if (hasVideos) contentSummaryParts.push(`${videoCount} video(s)`);
   if (hasDocs) contentSummaryParts.push(`${docCount} document(s)`);
   const contentSummary = contentSummaryParts.join(" and ");
 
-  // Build audience and transformation context
   const audienceContext = input.targetAudience
     ? `- Target Audience: ${input.targetAudience}`
     : "";
@@ -377,7 +420,6 @@ function buildPrompt(input: GenerateInput): string {
     ? `- Target Transformation: ${input.targetTransformation}`
     : "";
 
-  // Build vibe/style instructions
   const vibeInstructions = input.vibePrompt
     ? `\nCREATOR'S STYLE GUIDE:
 ${input.vibePrompt}
@@ -385,7 +427,147 @@ ${input.vibePrompt}
 Apply this style throughout all titles, descriptions, instructions, and reflection prompts.`
     : "";
 
-  // Build content-type-specific action instructions
+  // ── Scene-based prompt (with clips/overlays) ──
+  if (useSceneMode) {
+    return `You are an expert curriculum designer creating a scene-based learning program with video clips, transitions, and overlays.
+
+PROGRAM CONTEXT:
+- Title: "${input.programTitle}"
+- Duration: EXACTLY ${input.durationWeeks} weeks (you MUST create ${input.durationWeeks} weeks)
+- Content available: ${contentSummary}
+${input.programDescription ? `- Description: ${input.programDescription}` : ""}
+${audienceContext}
+${transformationContext}
+${input.outcomeStatement ? `- Outcome Statement: ${input.outcomeStatement}` : ""}
+${vibeInstructions}
+
+AVAILABLE CONTENT SOURCES (with timestamped topic data):
+${contentDescriptions}
+
+YOUR TASK:
+Create a ${input.durationWeeks}-week scene-based program. Each session is a curated playlist of video clips from the source material, with transitions and overlays.
+
+LESSON SHAPING RULES:
+- Target 8-15 minutes of clip content per session
+- Minimum clip length: 30 seconds
+- Maximum 6 clips per session
+- Prefer contiguous clips from the same source video
+- Use startSeconds/endSeconds from the topic timestamps to create focused clips
+- Each session starts with a TITLE_CARD overlay
+- Add KEY_POINTS overlay after major topic transitions
+- Use FADE transition between clips from different videos, NONE for contiguous clips from the same video
+- Progressive complexity: foundational → applied → integration across weeks
+
+CRITICAL REQUIREMENTS:
+1. Generate EXACTLY ${input.durationWeeks} weeks (weekNumber 1 through ${input.durationWeeks})
+2. Distribute content logically across all ${input.durationWeeks} weeks (~${contentPerWeek} source(s) per week)
+3. Each week needs a clear theme building toward the transformation
+4. Each session MUST include keyTakeaways (2-3 items)
+5. Each session MUST include a "clips" array with video clip segments
+6. Each session MUST include an "overlays" array (at minimum a TITLE_CARD)
+7. Each session also needs actions: at least one DO and one REFLECT action
+${hasVideos ? `8. Use exact youtubeVideoId values from the content sources above` : ""}
+
+OUTPUT FORMAT (JSON only, no markdown):
+{
+  "programId": "${input.programId}",
+  "title": "${input.programTitle}",
+  "description": "Compelling 1-2 sentence description",
+  "pacingMode": "drip_by_week",
+  "durationWeeks": ${input.durationWeeks},
+  "weeks": [
+    {
+      "title": "Week 1: [Theme]",
+      "summary": "What learners achieve this week",
+      "weekNumber": 1,
+      "sessions": [
+        {
+          "title": "Session title",
+          "summary": "Session focus",
+          "keyTakeaways": ["Takeaway 1", "Takeaway 2", "Takeaway 3"],
+          "orderIndex": 0,
+          "clips": [
+            {
+              "youtubeVideoId": "[exact video record ID]",
+              "startSeconds": 0,
+              "endSeconds": 180,
+              "orderIndex": 0,
+              "transitionType": "NONE",
+              "transitionDurationMs": 500,
+              "chapterTitle": "Introduction to the concept",
+              "chapterDescription": "Brief description of what this clip covers"
+            },
+            {
+              "youtubeVideoId": "[exact video record ID]",
+              "startSeconds": 180,
+              "endSeconds": 420,
+              "orderIndex": 1,
+              "transitionType": "FADE",
+              "transitionDurationMs": 500,
+              "chapterTitle": "Deep dive",
+              "chapterDescription": "Exploring the technique in detail"
+            }
+          ],
+          "overlays": [
+            {
+              "type": "TITLE_CARD",
+              "content": { "title": "Session title", "subtitle": "Week 1" },
+              "position": "CENTER",
+              "durationMs": 4000,
+              "orderIndex": 0,
+              "triggerAtSeconds": 0
+            },
+            {
+              "type": "KEY_POINTS",
+              "content": { "points": ["Key point 1", "Key point 2"] },
+              "clipOrderIndex": 1,
+              "position": "BOTTOM",
+              "durationMs": 6000,
+              "orderIndex": 1,
+              "triggerAtSeconds": 5
+            }
+          ],
+          "actions": [
+            {
+              "title": "Practice: [Exercise name]",
+              "type": "do",
+              "instructions": "Clear, actionable exercise (3-5 steps)",
+              "orderIndex": 0
+            },
+            {
+              "title": "Reflect: [Topic]",
+              "type": "reflect",
+              "instructions": "Context for the reflection",
+              "reflectionPrompt": "Thought-provoking question",
+              "orderIndex": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+OVERLAY TYPES:
+- TITLE_CARD: { title, subtitle } — shown at session start, position CENTER
+- KEY_POINTS: { points: string[] } — shown after topic transitions, position BOTTOM
+- CHAPTER_TITLE: { title } — shown at clip boundaries, position LOWER_THIRD
+- CTA: { text, action? } — call to action, position BOTTOM
+- OUTRO: { text } — end of session, position CENTER
+
+TRANSITION TYPES: NONE, FADE, CROSSFADE, SLIDE_LEFT
+
+QUALITY GUIDELINES:
+- Create focused clips around specific topics, NOT "watch the whole video" actions
+- Use topic timestamps to pick the most valuable segments
+- Key moments marked [high] significance are the best candidates for clips
+- Build complexity progressively across weeks
+- DO exercises should reference real techniques from the clips
+- REFLECT prompts should connect clip content to the learner's personal context
+- Final week should synthesize and prepare for real-world application`;
+  }
+
+  // ── Classic prompt (flat actions, no clips) ──
   const actionInstructions = [];
   if (hasVideos) {
     actionInstructions.push(`  * WATCH action(s) — for VIDEO content, reference videos by their exact ID in the youtubeVideoId field`);
@@ -396,7 +578,6 @@ Apply this style throughout all titles, descriptions, instructions, and reflecti
   actionInstructions.push(`  * DO action — practical exercise applying what was learned`);
   actionInstructions.push(`  * REFLECT action (at least one per week) — thought-provoking prompt connecting to the transformation`);
 
-  // Build action format examples
   const actionExamples = [];
   if (hasVideos) {
     actionExamples.push(`            {
