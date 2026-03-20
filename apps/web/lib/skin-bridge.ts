@@ -11,6 +11,7 @@ import type { SkinTokens, SkinId } from "@guide-rail/shared";
 /** Default typography shared across all auto-converted skins */
 const DEFAULT_TYPOGRAPHY: SkinTokens["text"] = {
   heading: {
+    display: { font: "inherit", size: "2.25rem", weight: "700", lineHeight: "1.1" },
     xl: { font: "inherit", size: "1.875rem", weight: "700", lineHeight: "1.2" },
     lg: { font: "inherit", size: "1.25rem", weight: "600", lineHeight: "1.3" },
     md: { font: "inherit", size: "1rem", weight: "600", lineHeight: "1.4" },
