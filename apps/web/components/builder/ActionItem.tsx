@@ -275,7 +275,7 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
 
               {/* Video selector dropdown */}
               {showVideoSelector && (
-                <div className="mt-1 bg-white border border-gray-200 rounded-lg max-h-40 overflow-y-auto shadow-sm">
+                <div className="mt-1 bg-gray-900 border border-gray-700 rounded-lg max-h-40 overflow-y-auto shadow-sm">
                   {videos.length === 0 ? (
                     <p className="p-2 text-xs text-gray-400">No videos added to program</p>
                   ) : (
@@ -286,7 +286,7 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
                           setSelectedVideoId(video.id);
                           setShowVideoSelector(false);
                         }}
-                        className="w-full flex items-center gap-2 p-2 hover:bg-gray-50 transition"
+                        className="w-full flex items-center gap-2 p-2 hover:bg-gray-800 transition"
                       >
                         {video.thumbnailUrl && (
                           <img
@@ -295,7 +295,7 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
                             className="w-10 h-6 rounded object-cover"
                           />
                         )}
-                        <span className="flex-1 text-left text-xs text-gray-700 truncate">
+                        <span className="flex-1 text-left text-xs text-gray-300 truncate">
                           {video.title || video.videoId}
                         </span>
                       </button>

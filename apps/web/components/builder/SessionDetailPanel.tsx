@@ -606,7 +606,7 @@ export function SessionDetailPanel({
                 key={type}
                 onClick={() => handleAddAction(type)}
                 disabled={addingAction}
-                className={`py-2 text-xs rounded-lg border transition disabled:opacity-50 ${
+                className={`py-2 text-xs rounded-lg border bg-gray-900 transition disabled:opacity-50 ${
                   type === "WATCH"
                     ? "border-blue-800 text-blue-400 hover:bg-blue-900/30 hover:border-blue-600"
                     : type === "REFLECT"
