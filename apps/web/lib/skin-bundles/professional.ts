@@ -19,6 +19,8 @@ export const professionalTokens: SkinTokens = {
     background: {
       default: "#ffffff",
       elevated: "#f9fafb",
+      hero: "#ffffff",
+      surface: "#f9fafb",
     },
     border: {
       subtle: "#e5e7eb",
@@ -27,7 +29,7 @@ export const professionalTokens: SkinTokens = {
       primary: "#1a1a1a",
       secondary: "#6b7280",
     },
-    accent: "#2563eb",
+    accent: { primary: "#2563eb", secondary: "#1d4ed8" },
     accentHover: "#1d4ed8",
     semantic: {
       success: "#16a34a",
@@ -40,6 +42,7 @@ export const professionalTokens: SkinTokens = {
 
   text: {
     heading: {
+      display: { font: FONT, size: "2.25rem", weight: "700", lineHeight: "1.1" },
       xl: { font: FONT, size: "1.875rem", weight: "700", lineHeight: "1.2" },
       lg: { font: FONT, size: "1.25rem", weight: "600", lineHeight: "1.3" },
       md: { font: FONT, size: "1rem", weight: "600", lineHeight: "1.4" },
@@ -65,6 +68,10 @@ export const professionalTokens: SkinTokens = {
     lg: "0 25px 50px -12px rgba(0,0,0,0.25)",
   },
 
+  motion: {
+    transition: { duration: "200ms", easing: "ease-out" },
+  },
+
   component: {
     button: {
       primary: {
@@ -75,6 +82,11 @@ export const professionalTokens: SkinTokens = {
         variant: "outline",
         radius: "4px",
       },
+    },
+    card: {
+      radius: "4px",
+      shadow: "0 4px 6px -1px rgba(0,0,0,0.1)",
+      border: "1px solid #e5e7eb",
     },
     chip: {
       background: "#2563eb20",

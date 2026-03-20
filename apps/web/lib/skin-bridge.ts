@@ -76,6 +76,9 @@ export function skinToTokens(skin: Skin): SkinTokens {
         : "none",
       lg: "0 25px 50px -12px rgba(0,0,0,0.25)",
     },
+    motion: {
+      transition: { duration: "300ms", easing: "ease-out" },
+    },
     component: {
       button: {
         primary: {
@@ -86,6 +89,13 @@ export function skinToTokens(skin: Skin): SkinTokens {
           variant: "outline",
           radius: radiusTokens.md,
         },
+      },
+      card: {
+        radius: radiusTokens.md,
+        shadow: skin.cardStyle === "elevated"
+          ? "0 4px 6px -1px rgba(0,0,0,0.1)"
+          : "none",
+        border: `1px solid ${skin.colors.border}`,
       },
       chip: {
         background: skin.colors.accent + "20",
@@ -190,6 +200,10 @@ export function getTokenCSSVars(tokens: SkinTokens): Record<string, string> {
     "--token-color-semantic-action-do": tokens.color.semantic.actionDo,
     "--token-color-semantic-action-reflect": tokens.color.semantic.actionReflect,
 
+    // --- Motion tokens ---
+    "--token-motion-duration": tokens.motion.transition.duration,
+    "--token-motion-easing": tokens.motion.transition.easing,
+
     // --- Radius & shadow tokens ---
     "--token-radius-sm": tokens.radius.sm,
     "--token-radius-md": tokens.radius.md,
@@ -199,6 +213,10 @@ export function getTokenCSSVars(tokens: SkinTokens): Record<string, string> {
     "--token-shadow-lg": tokens.shadow.lg,
 
     // --- Typography tokens ---
+    "--token-text-heading-display-font": tokens.text.heading.display.font,
+    "--token-text-heading-display-size": tokens.text.heading.display.size,
+    "--token-text-heading-display-weight": tokens.text.heading.display.weight,
+    "--token-text-heading-display-line-height": tokens.text.heading.display.lineHeight,
     "--token-text-heading-xl-font": tokens.text.heading.xl.font,
     "--token-text-heading-xl-size": tokens.text.heading.xl.size,
     "--token-text-heading-xl-weight": tokens.text.heading.xl.weight,
@@ -229,6 +247,9 @@ export function getTokenCSSVars(tokens: SkinTokens): Record<string, string> {
     "--token-comp-btn-primary-radius": tokens.component.button.primary.radius,
     "--token-comp-btn-secondary-variant": tokens.component.button.secondary.variant,
     "--token-comp-btn-secondary-radius": tokens.component.button.secondary.radius,
+    "--token-comp-card-radius": tokens.component.card.radius,
+    "--token-comp-card-shadow": tokens.component.card.shadow,
+    "--token-comp-card-border": tokens.component.card.border,
     "--token-comp-chip-bg": tokens.component.chip.background,
     "--token-comp-chip-text": tokens.component.chip.text,
     "--token-comp-chip-radius": tokens.component.chip.radius,

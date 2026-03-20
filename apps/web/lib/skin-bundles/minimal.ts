@@ -19,6 +19,8 @@ export const minimalTokens: SkinTokens = {
     background: {
       default: "#fafafa",
       elevated: "#f4f4f5",
+      hero: "#fafafa",
+      surface: "#f4f4f5",
     },
     border: {
       subtle: "#e4e4e7",
@@ -27,7 +29,7 @@ export const minimalTokens: SkinTokens = {
       primary: "#171717",
       secondary: "#71717a",
     },
-    accent: "#525252",
+    accent: { primary: "#525252", secondary: "#3f3f46" },
     accentHover: "#3f3f46",
     semantic: {
       success: "#16a34a",
@@ -40,6 +42,7 @@ export const minimalTokens: SkinTokens = {
 
   text: {
     heading: {
+      display: { font: FONT, size: "2.25rem", weight: "600", lineHeight: "1.1" },
       xl: { font: FONT, size: "1.875rem", weight: "600", lineHeight: "1.2" },
       lg: { font: FONT, size: "1.25rem", weight: "600", lineHeight: "1.3" },
       md: { font: FONT, size: "1rem", weight: "500", lineHeight: "1.4" },
@@ -65,6 +68,10 @@ export const minimalTokens: SkinTokens = {
     lg: "0 25px 50px -12px rgba(0,0,0,0.25)",
   },
 
+  motion: {
+    transition: { duration: "150ms", easing: "ease-out" },
+  },
+
   component: {
     button: {
       primary: {
@@ -75,6 +82,11 @@ export const minimalTokens: SkinTokens = {
         variant: "outline",
         radius: "4px",
       },
+    },
+    card: {
+      radius: "4px",
+      shadow: "none",
+      border: "1px solid #e4e4e7",
     },
     chip: {
       background: "#52525220",
