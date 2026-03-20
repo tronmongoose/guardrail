@@ -311,9 +311,9 @@ export function SessionDetailPanel({
   }
 
   return (
-    <div className="h-full flex flex-col bg-white overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden" style={{ background: "#111118" }}>
       {/* Header */}
-      <div className="p-4 border-b border-gray-100">
+      <div className="p-4 border-b border-gray-800">
         <div className="flex items-center justify-between mb-1">
           <span className="text-xs text-gray-400">{week.title}</span>
           <div className="flex items-center gap-2">
@@ -331,7 +331,7 @@ export function SessionDetailPanel({
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          className="w-full text-xl font-semibold bg-transparent text-gray-900 focus:outline-none placeholder:text-gray-300"
+          className="w-full text-xl font-semibold bg-transparent text-white focus:outline-none placeholder:text-gray-600"
           placeholder="Session title"
         />
       </div>
@@ -360,7 +360,7 @@ export function SessionDetailPanel({
                 return (
                   <div
                     key={clip.id}
-                    className="flex items-center gap-3 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100"
+                    className="flex items-center gap-3 px-3 py-2 bg-gray-800 rounded-lg border border-gray-700"
                   >
                     <span className="text-xs text-gray-400 w-5 text-right flex-shrink-0">{i + 1}</span>
                     {clip.transitionType && clip.transitionType !== "NONE" && (
@@ -369,7 +369,7 @@ export function SessionDetailPanel({
                       </span>
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-gray-900 truncate">
+                      <p className="text-sm text-white truncate">
                         {clip.chapterTitle || clipVideo?.title || "Untitled clip"}
                       </p>
                       {clipVideo?.title && clip.chapterTitle && (
@@ -386,7 +386,7 @@ export function SessionDetailPanel({
           </div>
         ) : video ? (
           /* Video card */
-          <div className="flex items-center gap-4 p-4 bg-white border border-gray-100 rounded-xl">
+          <div className="flex items-center gap-4 p-4 bg-gray-900 border border-gray-700 rounded-xl">
             {video.thumbnailUrl ? (
               <img
                 src={video.thumbnailUrl}
@@ -394,14 +394,14 @@ export function SessionDetailPanel({
                 className="w-28 h-16 rounded-lg object-cover flex-shrink-0"
               />
             ) : (
-              <div className="w-28 h-16 rounded-lg bg-gray-100 flex-shrink-0 flex items-center justify-center">
+              <div className="w-28 h-16 rounded-lg bg-gray-800 flex-shrink-0 flex items-center justify-center">
                 <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">
+              <p className="text-sm font-semibold text-white truncate">
                 {video.title || "Untitled Video"}
               </p>
               <span className="inline-block mt-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
@@ -413,8 +413,8 @@ export function SessionDetailPanel({
 
         {/* AI suggestions panel */}
         {(video || hasClips) && (
-          <div className="rounded-xl border border-teal-100 bg-teal-50/60 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-teal-100">
+          <div className="rounded-xl border border-teal-800 bg-teal-900/20 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-teal-800">
               <span className="text-xs font-medium text-teal-700">✨ Suggest from video</span>
               <div className="flex items-center gap-2">
                 {suggestions && (
@@ -477,7 +477,7 @@ export function SessionDetailPanel({
             )}
 
             {suggestions && (
-              <div className="divide-y divide-teal-100">
+              <div className="divide-y divide-teal-800">
                 {/* Suggested description */}
                 <div className="px-4 py-3 space-y-1.5">
                   <div className="flex items-center justify-between">
@@ -489,7 +489,7 @@ export function SessionDetailPanel({
                       Apply
                     </button>
                   </div>
-                  <p className="text-xs text-gray-700 leading-relaxed">{suggestions.description}</p>
+                  <p className="text-xs text-gray-300 leading-relaxed">{suggestions.description}</p>
                 </div>
 
                 {/* Suggested takeaways */}
@@ -505,7 +505,7 @@ export function SessionDetailPanel({
                   </div>
                   <ul className="space-y-1">
                     {suggestions.keyTakeaways.map((t, i) => (
-                      <li key={i} className="flex items-start gap-1.5 text-xs text-gray-700">
+                      <li key={i} className="flex items-start gap-1.5 text-xs text-gray-300">
                         <span className="text-teal-400 mt-0.5 flex-shrink-0">•</span>
                         {t}
                       </li>
@@ -522,7 +522,7 @@ export function SessionDetailPanel({
                         <span className={`text-[10px] font-bold uppercase flex-shrink-0 ${action.type === "DO" ? "text-amber-600" : "text-purple-600"}`}>
                           {action.type === "DO" ? "Practice" : "Reflect"}
                         </span>
-                        <span className="text-xs text-gray-700 truncate">{action.title}</span>
+                        <span className="text-xs text-gray-300 truncate">{action.title}</span>
                       </div>
                       <button
                         onClick={() => acceptSuggestedAction(action)}
@@ -541,8 +541,8 @@ export function SessionDetailPanel({
 
         {/* Summary */}
         <div>
-          <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-100">
-            <label className="text-sm font-medium text-gray-900">
+          <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-800">
+            <label className="text-sm font-medium text-white">
               Description
             </label>
             <AiAssistButton
@@ -557,7 +557,7 @@ export function SessionDetailPanel({
             onChange={(e) => setSummary(e.target.value)}
             rows={3}
             placeholder="What will learners accomplish in this session?"
-            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 resize-none"
+            className="w-full px-4 py-3 bg-gray-900 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500 resize-none"
           />
         </div>
 
@@ -569,8 +569,8 @@ export function SessionDetailPanel({
 
         {/* Actions */}
         <div>
-          <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-100">
-            <label className="text-sm font-medium text-gray-900">Actions</label>
+          <div className="flex items-center justify-between pb-2 mb-3 border-b border-gray-800">
+            <label className="text-sm font-medium text-white">Actions</label>
             <span className="text-xs text-gray-400">{session.actions.length} items</span>
           </div>
 
@@ -608,12 +608,12 @@ export function SessionDetailPanel({
                 disabled={addingAction}
                 className={`py-2 text-xs rounded-lg border transition disabled:opacity-50 ${
                   type === "WATCH"
-                    ? "border-blue-100 text-blue-600 hover:bg-blue-50 hover:border-blue-300"
+                    ? "border-blue-800 text-blue-400 hover:bg-blue-900/30 hover:border-blue-600"
                     : type === "REFLECT"
-                    ? "border-purple-100 text-purple-600 hover:bg-purple-50 hover:border-purple-300"
+                    ? "border-purple-800 text-purple-400 hover:bg-purple-900/30 hover:border-purple-600"
                     : type === "DO"
-                    ? "border-amber-100 text-amber-600 hover:bg-amber-50 hover:border-amber-300"
-                    : "border-gray-200 text-gray-500 hover:bg-gray-50 hover:border-gray-400"
+                    ? "border-amber-800 text-amber-400 hover:bg-amber-900/30 hover:border-amber-600"
+                    : "border-gray-700 text-gray-400 hover:bg-gray-800 hover:border-gray-500"
                 }`}
               >
                 + {type === "DO" ? "Practice" : type.charAt(0) + type.slice(1).toLowerCase()}

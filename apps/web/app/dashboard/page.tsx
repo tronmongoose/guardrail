@@ -64,7 +64,7 @@ export default function DashboardPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#0a0a0f" }}>
           <div className="text-gray-400">Loading...</div>
         </div>
       }
@@ -84,6 +84,7 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     if (searchParams.get("stripe") === "success") {
@@ -140,7 +141,7 @@ function DashboardContent() {
 
   if (!isLoaded || loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#0a0a0f" }}>
         <div className="text-gray-400">Loading...</div>
       </div>
     );
@@ -163,13 +164,13 @@ function DashboardContent() {
 
   return (
     <>
-    <style>{`body { background-color: #ffffff !important; }`}</style>
-    <div className="min-h-screen bg-white">
+    <style>{`body { background-color: #0a0a0f !important; }`}</style>
+    <div className="min-h-screen" style={{ backgroundColor: "#0a0a0f" }}>
       {/* Nav */}
-      <nav className="flex items-center justify-between px-5 py-4 border-b border-gray-200 bg-white">
+      <nav className="flex items-center justify-between px-5 py-4 border-b border-white/10" style={{ backgroundColor: "#0a0a0f" }}>
         <Link
           href="/"
-          className="text-xl font-bold tracking-tight text-neon-cyan neon-text-cyan"
+          className="text-xl font-bold tracking-tight text-white"
         >
           Journeyline
         </Link>
@@ -186,7 +187,7 @@ function DashboardContent() {
         {/* ── Header: greeting + metrics + New Program button ── */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex-1 min-w-0 space-y-4">
-            <h1 className="text-[28px] font-semibold text-gray-900 leading-tight">
+            <h1 className="text-[28px] font-semibold text-white leading-tight">
               {getGreeting(clerkUser?.firstName)}
             </h1>
 
@@ -195,12 +196,12 @@ function DashboardContent() {
               {metricPills.map((pill) => (
                 <div
                   key={pill.label}
-                  className="flex-1 min-w-[100px] bg-white border border-gray-200 rounded-xl px-4 py-3 shadow-sm"
+                  className="flex-1 min-w-[100px] rounded-xl px-4 py-3" style={{ backgroundColor: "#111118", border: "1px solid rgba(255,255,255,0.08)" }}
                 >
                   <p className="text-lg font-semibold text-neon-cyan leading-none mb-1">
                     {pill.value}
                   </p>
-                  <p className="text-xs text-gray-500 whitespace-nowrap">{pill.label}</p>
+                  <p className="text-xs text-gray-400 whitespace-nowrap">{pill.label}</p>
                 </div>
               ))}
             </div>
@@ -220,8 +221,8 @@ function DashboardContent() {
         <div className="space-y-3">
           {programs.length === 0 ? (
             /* Empty state */
-            <div className="border-2 border-dashed border-gray-200 rounded-2xl p-10 text-center bg-white">
-              <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+            <div className="border-2 border-dashed border-white/10 rounded-2xl p-10 text-center" style={{ backgroundColor: "#111118" }}>
+              <div className="w-14 h-14 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ backgroundColor: "#1a1a24" }}>
                 <svg
                   className="w-7 h-7 text-gray-400"
                   fill="none"
@@ -236,7 +237,7 @@ function DashboardContent() {
                   />
                 </svg>
               </div>
-              <h3 className="text-base font-semibold text-gray-900 mb-1">
+              <h3 className="text-base font-semibold text-white mb-1">
                 Build your first program
               </h3>
               <p className="text-sm text-gray-500 mb-6 max-w-xs mx-auto">
@@ -264,11 +265,11 @@ function DashboardContent() {
                   <Link
                     key={p.id}
                     href={`/programs/${p.id}/edit`}
-                    className="flex items-center gap-4 bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:border-neon-cyan/40 hover:shadow-md transition-all hover:-translate-y-0.5 group"
+                    className="flex items-center gap-4 rounded-xl p-4 hover:border-neon-cyan/40 transition-all hover:-translate-y-0.5 group" style={{ backgroundColor: "#111118", border: "1px solid rgba(255,255,255,0.08)" }}
                   >
                     {/* Thumbnail placeholder */}
-                    <div className="flex-shrink-0 w-12 h-12 rounded-lg bg-gray-200 flex items-center justify-center">
-                      <span className="text-lg font-bold text-gray-600 select-none">
+                    <div className="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#1a1a24" }}>
+                      <span className="text-lg font-bold text-neon-cyan select-none">
                         {initial}
                       </span>
                     </div>
@@ -276,7 +277,7 @@ function DashboardContent() {
                     {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5 mb-1">
-                        <h2 className="text-[17px] font-medium text-gray-900 truncate leading-snug">
+                        <h2 className="text-[17px] font-medium text-white truncate leading-snug">
                           {p.title}
                         </h2>
                         {isGenerating ? (
@@ -311,7 +312,7 @@ function DashboardContent() {
                             className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${
                               p.published
                                 ? "bg-neon-cyan/10 text-neon-cyan border border-neon-cyan/30"
-                                : "bg-gray-100 text-gray-500 border border-gray-200"
+                                : "bg-white/5 text-gray-400 border border-white/10"
                             }`}
                           >
                             {p.published ? "Published" : "Draft"}
@@ -325,7 +326,7 @@ function DashboardContent() {
                       </div>
 
                       {isGenerating && (
-                        <div className="mb-1.5 h-1 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="mb-1.5 h-1 bg-white/10 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-gradient-to-r from-neon-cyan to-neon-pink transition-all"
                             style={{ width: `${p.generationJob?.progress || 0}%` }}
@@ -340,6 +341,34 @@ function DashboardContent() {
                         {" · "}
                         {timeAgo}
                       </p>
+                    </div>
+
+                    {/* Share */}
+                    <div className="relative flex-shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (!p.slug) return;
+                          const url = `${window.location.origin}/p/${p.slug}`;
+                          navigator.clipboard.writeText(url).then(() => {
+                            setCopiedId(p.id);
+                            setTimeout(() => setCopiedId(null), 1500);
+                          });
+                        }}
+                        className="p-1 text-gray-500 hover:text-teal-400 transition-colors"
+                        aria-label="Copy link"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
+                          <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
+                        </svg>
+                      </button>
+                      {copiedId === p.id && (
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 rounded text-xs text-white whitespace-nowrap pointer-events-none" style={{ backgroundColor: "#1a1a24", border: "1px solid rgba(255,255,255,0.15)" }}>
+                          Copied!
+                        </span>
+                      )}
                     </div>
 
                     {/* Arrow */}

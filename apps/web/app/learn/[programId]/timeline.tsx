@@ -305,7 +305,7 @@ export function LearnerTimeline({
                   className="text-sm font-medium"
                   style={{ color: isUnlocked ? "var(--token-color-text-primary)" : "var(--token-color-text-secondary)" }}
                 >
-                  Week {week.weekNumber}: {week.title}
+                  Week {week.weekNumber}: {week.title.replace(/^Week\s+\d+:\s*/i, "")}
                 </h2>
                 {isUnlocked && weekActions.length > 0 && (
                   <span
@@ -491,7 +491,7 @@ export function LearnerTimeline({
                                       : "var(--token-color-text-primary)",
                                   }}
                                 >
-                                  {action.title}
+                                  {action.title.replace(/^(Watch|Practice|Reflect|Read):\s*/i, "")}
                                 </p>
                                 <span
                                   className="text-[10px] uppercase tracking-wider font-semibold"

@@ -79,8 +79,8 @@ function TreeSessionItem({
       className={`
         flex items-center gap-2 pl-6 pr-2 py-1.5 cursor-pointer transition-all
         ${isSelected
-          ? "bg-teal-50 border-l-2 border-teal-500"
-          : "hover:bg-gray-50 border-l-2 border-transparent"
+          ? "bg-teal-900/30 border-l-2 border-teal-500"
+          : "hover:bg-gray-800/50 border-l-2 border-transparent"
         }
       `}
       onClick={onSelect}
@@ -103,14 +103,14 @@ function TreeSessionItem({
           className="w-8 h-5 object-cover rounded flex-shrink-0"
         />
       ) : (
-        <div className="w-8 h-5 bg-gray-100 rounded flex-shrink-0 flex items-center justify-center">
+        <div className="w-8 h-5 bg-gray-800 rounded flex-shrink-0 flex items-center justify-center">
           <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
         </div>
       )}
 
-      <span className={`text-xs truncate flex-1 ${isSelected ? "text-gray-900 font-medium" : "text-gray-600"}`}>
+      <span className={`text-xs truncate flex-1 ${isSelected ? "text-white font-medium" : "text-gray-400"}`}>
         {session.title}
       </span>
 
@@ -204,7 +204,7 @@ function TreeWeekItem({
   return (
     <div ref={setNodeRef} style={style}>
       {/* Week header */}
-      <div className="flex items-center gap-2 px-2 py-2 hover:bg-gray-50 transition">
+      <div className="flex items-center gap-2 px-2 py-2 hover:bg-gray-800/50 transition">
         <button
           {...attributes}
           {...listeners}
@@ -217,7 +217,7 @@ function TreeWeekItem({
 
         <button
           onClick={() => setExpanded(!expanded)}
-          className="text-gray-400 hover:text-gray-700"
+          className="text-gray-500 hover:text-gray-300"
         >
           <svg
             className={`w-3 h-3 transition-transform ${expanded ? "rotate-90" : ""}`}
@@ -229,7 +229,7 @@ function TreeWeekItem({
           </svg>
         </button>
 
-        <span className="text-sm font-medium text-gray-900 flex-1 truncate">
+        <span className="text-sm font-medium text-white flex-1 truncate">
           {week.title}
         </span>
 
@@ -360,9 +360,9 @@ export function TreeNavigation({
   }
 
   return (
-    <div className="h-full flex flex-col bg-white border-r border-gray-100">
-      <div className="p-3 border-b border-gray-100">
-        <h3 className="text-sm font-semibold text-gray-900">Program Structure</h3>
+    <div className="h-full flex flex-col border-r border-gray-800" style={{ background: "#111118" }}>
+      <div className="p-3 border-b border-gray-800">
+        <h3 className="text-sm font-semibold text-white">Program Structure</h3>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -404,11 +404,11 @@ export function TreeNavigation({
       </div>
 
       {weeks.length > 0 && (
-        <div className="p-3 border-t border-gray-100">
+        <div className="p-3 border-t border-gray-800">
           <button
             onClick={handleAddWeek}
             disabled={addingWeek}
-            className="w-full py-2 text-xs text-gray-400 hover:text-teal-600 border border-dashed border-gray-200 hover:border-teal-400 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-1"
+            className="w-full py-2 text-xs text-gray-400 hover:text-teal-400 border border-dashed border-gray-700 hover:border-teal-500 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-1"
           >
             {addingWeek ? (
               <>

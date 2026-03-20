@@ -66,8 +66,8 @@ function GenerationProgress({ stage, progress, onCancel }: { stage: string | nul
   return (
     <div className="max-w-lg mx-auto mt-16 text-center">
       {/* Animated icon */}
-      <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-pink-50 border border-pink-200 flex items-center justify-center generation-icon-glow">
-        <svg className="w-10 h-10 text-pink-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-pink-900/30 border border-pink-700/50 flex items-center justify-center generation-icon-glow">
+        <svg className="w-10 h-10 text-pink-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         </svg>
       </div>
@@ -77,7 +77,7 @@ function GenerationProgress({ stage, progress, onCancel }: { stage: string | nul
         {AMBIENT_HEADERS[headerIndex]}
       </p>
 
-      <h2 className="text-2xl font-bold text-gray-900 mb-3">Building your program...</h2>
+      <h2 className="text-2xl font-bold text-white mb-3">Building your program...</h2>
       <p className="text-gray-400 mb-8">
         AI is carefully analyzing your content and crafting a structured curriculum
       </p>
@@ -377,7 +377,7 @@ export default function ProgramEditPage() {
   // Loading state
   if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a0a0f" }}>
         <div className="flex flex-col items-center gap-3">
           <Spinner size="lg" />
           <p className="text-sm text-gray-400">Loading program...</p>
@@ -389,14 +389,14 @@ export default function ProgramEditPage() {
   // Error state
   if (loadError || !program) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0a0a0f" }}>
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-pink-50 border border-pink-200 flex items-center justify-center">
-            <svg className="w-8 h-8 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-pink-900/30 border border-pink-700/50 flex items-center justify-center">
+            <svg className="w-8 h-8 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <p className="text-lg text-gray-900 mb-2">Failed to load program</p>
+          <p className="text-lg text-white mb-2">Failed to load program</p>
           <p className="text-sm text-gray-500 mb-4">{loadError || "Program not found"}</p>
           <button
             onClick={() => router.push("/dashboard")}
@@ -670,20 +670,20 @@ export default function ProgramEditPage() {
       </div>
     )}
 
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen" style={{ background: "#0a0a0f" }}>
       {/* Header */}
-      <nav className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-100">
+      <nav className="flex items-center justify-between px-6 py-3 border-b border-gray-800" style={{ background: "#0a0a0f" }}>
         <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => router.push("/dashboard")}
-            className="text-xl font-bold tracking-tight text-gray-900 hover:text-teal-600 transition flex-shrink-0"
+            className="text-xl font-bold tracking-tight text-white hover:text-teal-400 transition flex-shrink-0"
           >
             ←
           </button>
-          <div className="h-6 w-px bg-gray-200 flex-shrink-0" />
+          <div className="h-6 w-px bg-gray-700 flex-shrink-0" />
           <button
             onClick={() => setActiveTab("settings")}
-            className="text-base font-semibold text-gray-900 truncate hover:text-teal-600 transition cursor-pointer text-left"
+            className="text-base font-semibold text-white truncate hover:text-teal-400 transition cursor-pointer text-left"
             title="Click to edit program details"
           >
             {program.title}
@@ -691,8 +691,8 @@ export default function ProgramEditPage() {
           <span
             className={`flex-shrink-0 text-xs px-2 py-1 rounded-full font-medium ${
               program.published
-                ? "bg-teal-50 text-teal-700"
-                : "bg-gray-100 text-gray-500"
+                ? "bg-teal-900/40 text-teal-400"
+                : "bg-gray-800 text-gray-400"
             }`}
           >
             {program.published ? "Published" : "Draft"}
@@ -732,7 +732,7 @@ export default function ProgramEditPage() {
                     showToast("Failed to unpublish", "error");
                   }
                 }}
-                className="text-xs px-3 py-1.5 rounded-lg font-medium bg-white text-gray-500 border border-gray-200 hover:border-pink-400 hover:text-pink-600 transition"
+                className="text-xs px-3 py-1.5 rounded-lg font-medium bg-gray-900 text-gray-400 border border-gray-700 hover:border-pink-500 hover:text-pink-500 transition"
               >
                 Unpublish
               </button>
@@ -740,7 +740,7 @@ export default function ProgramEditPage() {
                 href={`/p/${program.slug}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs px-3 py-1.5 rounded-lg font-medium bg-teal-50 text-teal-600 border border-teal-200 hover:bg-teal-100 transition"
+                className="text-xs px-3 py-1.5 rounded-lg font-medium bg-teal-900/30 text-teal-400 border border-teal-700 hover:bg-teal-900/50 transition"
               >
                 View Live →
               </a>
@@ -750,7 +750,7 @@ export default function ProgramEditPage() {
       </nav>
 
       {/* Tab Bar */}
-      <div className="bg-white border-b border-gray-100">
+      <div className="border-b border-gray-800" style={{ background: "#0a0a0f" }}>
         <div className="flex overflow-x-auto px-6">
           {(["curriculum", "settings", "pricing", "preview"] as const).map((tab) => (
             <button
@@ -758,8 +758,8 @@ export default function ProgramEditPage() {
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-3 text-sm font-medium whitespace-nowrap capitalize transition border-b-2 ${
                 activeTab === tab
-                  ? "text-gray-900 border-teal-500"
-                  : "text-gray-400 border-transparent hover:text-gray-600"
+                  ? "text-white border-teal-500"
+                  : "text-gray-500 border-transparent hover:text-gray-300"
               }`}
             >
               {tab === "curriculum" ? "Curriculum" : tab === "settings" ? "Settings" : tab === "pricing" ? "Pricing" : "Preview"}
@@ -770,40 +770,42 @@ export default function ProgramEditPage() {
 
       {/* === Curriculum Tab === */}
       {activeTab === "curriculum" && (
-        <main className="p-4">
+        <main className="p-4" style={{ background: "#0a0a0f" }}>
           {program.weeks.length === 0 && program.videos.length === 0 ? (
-            <div className="max-w-lg mx-auto mt-16 text-center">
-              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center">
-                <svg className="w-10 h-10 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
+            <div className="flex items-center justify-center min-h-[60vh]" style={{ background: "#0a0a0f" }}>
+              <div className="max-w-lg text-center">
+                <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-teal-900/40 border border-teal-700/50 flex items-center justify-center">
+                  <svg className="w-10 h-10 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold text-white mb-3">Let&apos;s build your program</h2>
+                <p className="text-gray-400 mb-6">
+                  Start by adding videos and content, then let AI help you create a structured learning experience.
+                </p>
+                <button
+                  onClick={() => setShowWizard(true)}
+                  className="px-8 py-3 rounded-xl bg-gradient-to-r from-teal-500 to-pink-500 text-white font-semibold hover:opacity-90 transition"
+                >
+                  Open Program Wizard
+                </button>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">Let&apos;s build your program</h2>
-              <p className="text-gray-400 mb-6">
-                Start by adding videos and content, then let AI help you create a structured learning experience.
-              </p>
-              <button
-                onClick={() => setShowWizard(true)}
-                className="px-8 py-3 rounded-xl bg-gradient-to-r from-teal-500 to-pink-500 text-white font-semibold hover:opacity-90 transition"
-              >
-                Open Program Wizard
-              </button>
             </div>
           ) : program.weeks.length === 0 && asyncGenerating ? (
             <GenerationProgress stage={asyncStage} progress={asyncProgress} onCancel={cancelGeneration} />
           ) : program.weeks.length === 0 ? (
             <div className="max-w-lg mx-auto mt-16 text-center">
-              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-pink-50 border border-pink-200 flex items-center justify-center">
-                <svg className="w-10 h-10 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-pink-900/30 border border-pink-700/50 flex items-center justify-center">
+                <svg className="w-10 h-10 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-3">
+              <h2 className="text-2xl font-bold text-white mb-3">
                 {lastGenError ? "Generation failed" : "Ready to generate!"}
               </h2>
               {lastGenError && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 text-left">
-                  <p className="text-xs text-red-600 line-clamp-3">{lastGenError}</p>
+                <div className="bg-red-900/30 border border-red-700/50 rounded-lg p-3 mb-4 text-left">
+                  <p className="text-xs text-red-400 line-clamp-3">{lastGenError}</p>
                 </div>
               )}
               <p className="text-gray-400 mb-2">
@@ -847,7 +849,7 @@ export default function ProgramEditPage() {
 
       {/* === Settings Tab === */}
       {activeTab === "settings" && (
-        <div className="max-w-2xl mx-auto py-8 px-4">
+        <div className="max-w-2xl mx-auto py-8 px-4" style={{ background: "#0a0a0f", minHeight: "calc(100vh - 112px)" }}>
           <form
             onSubmit={async (e) => {
               e.preventDefault();
@@ -874,13 +876,13 @@ export default function ProgramEditPage() {
             className="space-y-8"
           >
             <div className="space-y-4">
-              <h2 className="text-base font-semibold text-gray-900">Program Details</h2>
+              <h2 className="text-base font-semibold text-white">Program Details</h2>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Title</label>
                 <input
                   name="title"
                   defaultValue={program.title}
-                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 text-sm focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-teal-500"
                 />
               </div>
               <div>
@@ -889,7 +891,7 @@ export default function ProgramEditPage() {
                   name="description"
                   defaultValue={program.description || ""}
                   rows={3}
-                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 text-sm focus:outline-none focus:border-teal-500 resize-none"
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-teal-500 resize-none"
                 />
               </div>
               <div>
@@ -898,7 +900,7 @@ export default function ProgramEditPage() {
                   name="targetAudience"
                   defaultValue={program.targetAudience || ""}
                   placeholder="Who is this program for?"
-                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 text-sm focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-teal-500 placeholder:text-gray-600"
                 />
               </div>
               <div>
@@ -907,7 +909,7 @@ export default function ProgramEditPage() {
                   name="targetTransformation"
                   defaultValue={program.targetTransformation || ""}
                   placeholder="What will learners achieve?"
-                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 text-sm focus:outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-teal-500 placeholder:text-gray-600"
                 />
               </div>
               <div>
@@ -917,22 +919,22 @@ export default function ProgramEditPage() {
                   defaultValue={program.vibePrompt || ""}
                   rows={2}
                   placeholder="How should the AI write? (only affects re-generation)"
-                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-gray-900 text-sm focus:outline-none focus:border-teal-500 resize-none"
+                  className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:border-teal-500 resize-none placeholder:text-gray-600"
                 />
               </div>
               {program.published && (
                 <p className="text-xs text-gray-500">
-                  Slug: <code className="text-teal-600">/p/{program.slug}</code> — frozen after publish
+                  Slug: <code className="text-teal-400">/p/{program.slug}</code> — frozen after publish
                 </p>
               )}
             </div>
 
             <div className="space-y-3">
-              <h2 className="text-base font-semibold text-gray-900">Theme</h2>
+              <h2 className="text-base font-semibold text-white">Theme</h2>
               <SkinPicker value={program.skinId} onChange={handleSkinChange} />
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+            <div className="flex items-center justify-between pt-2 border-t border-gray-800">
               {program.videos.length > 0 && (
                 <button
                   type="button"
@@ -944,7 +946,7 @@ export default function ProgramEditPage() {
                     setActiveTab("curriculum");
                   }}
                   disabled={generating}
-                  className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-medium bg-pink-50 text-pink-600 border border-pink-200 hover:bg-pink-100 transition disabled:opacity-50"
+                  className="flex items-center gap-2 text-sm px-4 py-2 rounded-lg font-medium bg-pink-900/20 text-pink-400 border border-pink-800 hover:bg-pink-900/40 transition disabled:opacity-50"
                 >
                   {generating ? (
                     <>
@@ -974,10 +976,10 @@ export default function ProgramEditPage() {
 
       {/* === Pricing Tab === */}
       {activeTab === "pricing" && (
-        <div className="max-w-2xl mx-auto py-8 px-4 space-y-8">
+        <div className="max-w-2xl mx-auto py-8 px-4 space-y-8" style={{ background: "#0a0a0f", minHeight: "calc(100vh - 112px)" }}>
           <div className="space-y-4">
             <div>
-              <h2 className="text-base font-semibold text-gray-900 mb-1">Price</h2>
+              <h2 className="text-base font-semibold text-white mb-1">Price</h2>
               <p className="text-sm text-gray-400 mb-4">Choose how much to charge for your program</p>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -987,8 +989,8 @@ export default function ProgramEditPage() {
                   onClick={() => handlePriceChange(price)}
                   className={`px-4 py-3 rounded-xl border-2 text-sm font-medium transition ${
                     program.priceInCents === price
-                      ? "border-teal-500 bg-teal-50 text-teal-700"
-                      : "border-gray-200 text-gray-600 hover:border-gray-300 bg-white"
+                      ? "border-teal-500 bg-teal-900/30 text-teal-400"
+                      : "border-gray-700 text-gray-400 hover:border-gray-600 bg-gray-900"
                   }`}
                 >
                   {formatPrice(price)}
@@ -998,14 +1000,14 @@ export default function ProgramEditPage() {
           </div>
 
           <div className="space-y-3">
-            <h2 className="text-base font-semibold text-gray-900">Payments</h2>
+            <h2 className="text-base font-semibold text-white">Payments</h2>
             <p className="text-sm text-gray-400">Connect Stripe to receive payments for paid programs</p>
             {stripeStatus?.onboardingComplete ? (
-              <div className="flex items-center gap-3 px-4 py-3 bg-teal-50 border border-teal-200 rounded-xl">
+              <div className="flex items-center gap-3 px-4 py-3 bg-teal-900/30 border border-teal-700 rounded-xl">
                 <svg className="w-5 h-5 text-teal-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-sm text-teal-700 font-medium">Stripe connected</span>
+                <span className="text-sm text-teal-400 font-medium">Stripe connected</span>
               </div>
             ) : (
               <div className="bg-[#635BFF]/5 border border-[#635BFF]/20 rounded-xl p-6">
@@ -1016,7 +1018,7 @@ export default function ProgramEditPage() {
                     </svg>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-900">Connect Stripe</p>
+                    <p className="text-sm font-medium text-white">Connect Stripe</p>
                     <p className="text-xs text-gray-400">Required to sell paid programs</p>
                   </div>
                 </div>

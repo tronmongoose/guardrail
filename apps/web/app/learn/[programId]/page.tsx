@@ -54,7 +54,7 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
 
     const entitlement = await getEntitlement(user.id, programId);
     if (!entitlement || entitlement.status !== "ACTIVE") {
-      redirect("/");
+      redirect("/p/" + program.slug);
     }
 
     completedWeeks = entitlement.weekCompletions.map((wc) => wc.weekNumber);

@@ -131,14 +131,14 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
     <div
       ref={setNodeRef}
       style={style}
-      className="border border-gray-100 rounded-lg bg-white"
+      className="border border-gray-700 rounded-lg bg-gray-800"
     >
       {/* Collapsed view */}
       <div className="flex items-center gap-2 px-3 py-2">
         <button
           {...attributes}
           {...listeners}
-          className="cursor-grab text-gray-300 hover:text-gray-500 touch-none"
+          className="cursor-grab text-gray-600 hover:text-gray-400 touch-none"
         >
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
@@ -151,7 +151,7 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
 
         <button
           onClick={() => setExpanded(!expanded)}
-          className="flex-1 text-left text-xs text-gray-700 hover:text-gray-900 transition truncate"
+          className="flex-1 text-left text-xs text-white hover:text-gray-300 transition truncate"
         >
           {action.title}
         </button>
@@ -175,14 +175,14 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
 
       {/* Expanded edit view */}
       {expanded && (
-        <div className="px-3 pb-3 pt-2 space-y-2 border-t border-gray-100">
+        <div className="px-3 pb-3 pt-2 space-y-2 border-t border-gray-700">
           <div>
             <label className="text-[10px] text-gray-400 uppercase">Title</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full mt-0.5 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-900 focus:outline-none focus:border-teal-500"
+              className="w-full mt-0.5 px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-xs text-white focus:outline-none focus:border-teal-500"
             />
           </div>
 
@@ -191,7 +191,7 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
             <select
               value={type}
               onChange={(e) => setType(e.target.value as ActionData["type"])}
-              className="w-full mt-0.5 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-900 focus:outline-none focus:border-teal-500"
+              className="w-full mt-0.5 px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-xs text-white focus:outline-none focus:border-teal-500"
             >
               <option value="WATCH">Watch</option>
               <option value="READ">Read</option>
@@ -215,7 +215,7 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
               onChange={(e) => setInstructions(e.target.value)}
               rows={2}
               placeholder="What should the learner do?"
-              className="w-full mt-0.5 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-teal-500 resize-none"
+              className="w-full mt-0.5 px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-teal-500 resize-none"
             />
           </div>
 
@@ -235,7 +235,7 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
                 onChange={(e) => setReflectionPrompt(e.target.value)}
                 rows={2}
                 placeholder="What question should they answer?"
-                className="w-full mt-0.5 px-2 py-1.5 bg-white border border-gray-200 rounded text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-teal-500 resize-none"
+                className="w-full mt-0.5 px-2 py-1.5 bg-gray-900 border border-gray-700 rounded text-xs text-white placeholder:text-gray-600 focus:outline-none focus:border-teal-500 resize-none"
               />
             </div>
           )}
@@ -244,7 +244,7 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
             <div>
               <label className="text-[10px] text-gray-400 uppercase">Video</label>
               {selectedVideo ? (
-                <div className="flex items-center gap-2 mt-0.5 p-2 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-2 mt-0.5 p-2 bg-gray-900 border border-gray-700 rounded-lg">
                   {selectedVideo.thumbnailUrl && (
                     <img
                       src={selectedVideo.thumbnailUrl}
@@ -252,7 +252,7 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
                       className="w-12 h-8 rounded object-cover"
                     />
                   )}
-                  <span className="flex-1 text-xs text-gray-700 truncate">
+                  <span className="flex-1 text-xs text-gray-300 truncate">
                     {selectedVideo.title || selectedVideo.videoId}
                   </span>
                   <button
@@ -267,7 +267,7 @@ export function ActionItem({ action, programId, videos, onUpdate }: ActionItemPr
               ) : (
                 <button
                   onClick={() => setShowVideoSelector(true)}
-                  className="w-full mt-0.5 py-2 border border-dashed border-gray-200 rounded-lg text-xs text-gray-400 hover:border-teal-400 hover:text-teal-600 transition"
+                  className="w-full mt-0.5 py-2 border border-dashed border-gray-700 rounded-lg text-xs text-gray-400 hover:border-teal-500 hover:text-teal-400 transition"
                 >
                   + Attach Video
                 </button>

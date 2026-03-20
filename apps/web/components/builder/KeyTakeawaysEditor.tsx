@@ -81,8 +81,8 @@ export function KeyTakeawaysEditor({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-        <label className="text-sm font-medium text-gray-900">Key Takeaways</label>
+      <div className="flex items-center justify-between pb-2 border-b border-gray-800">
+        <label className="text-sm font-medium text-white">Key Takeaways</label>
         <span className="text-xs text-gray-400">
           {localTakeaways.filter((t) => t.value.trim()).length}/{maxItems}
         </span>
@@ -101,7 +101,7 @@ export function KeyTakeawaysEditor({
               onKeyDown={(e) => handleKeyDown(e, index)}
               placeholder="What will learners take away from this session?"
               maxLength={200}
-              className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
+              className="flex-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
             />
             <span className="mt-1.5">
               <AiAssistButton
@@ -129,7 +129,7 @@ export function KeyTakeawaysEditor({
       {localTakeaways.length < maxItems && (
         <button
           onClick={handleAdd}
-          className="w-full py-2 text-xs text-gray-400 hover:text-teal-600 border border-dashed border-gray-200 hover:border-teal-400 rounded-lg transition flex items-center justify-center gap-1"
+          className="w-full py-2 text-xs text-gray-400 hover:text-teal-400 border border-dashed border-gray-700 hover:border-teal-500 rounded-lg transition flex items-center justify-center gap-1"
         >
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
