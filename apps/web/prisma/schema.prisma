@@ -261,12 +261,22 @@ model YouTubeVideo {
   program         Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
   createdAt       DateTime @default(now())
 
+  // Virtual segmentation — long videos (>10 min) are split into child records per Gemini topic
+  parentVideoId String?
+  parentVideo   YouTubeVideo?  @relation("VideoSegments", fields: [parentVideoId], references: [id], onDelete: Cascade)
+  segments      YouTubeVideo[] @relation("VideoSegments")
+  isSegment     Boolean        @default(false)
+  segmentIndex  Int?
+  startSeconds  Float?
+  endSeconds    Float?
+
   actions       Action[]
   embeddings    Embedding[]
   clips         SessionClip[]
   analysis      VideoAnalysis?
 
   @@unique([programId, videoId])
+  @@index([parentVideoId])
 }
 
 // --- Video Analysis (Gemini-generated structured analysis) ---

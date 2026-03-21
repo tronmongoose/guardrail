@@ -10,12 +10,14 @@ import { defaultTokens } from "./default";
 import { professionalTokens } from "./professional";
 import { warmTokens } from "./warm";
 import { minimalTokens } from "./minimal";
+import { cosmicStudioTokens } from "./cosmic-studio";
 
 export const SKIN_TOKENS: Record<SkinId, SkinTokens> = {
   default: defaultTokens,
   professional: professionalTokens,
   warm: warmTokens,
   minimal: minimalTokens,
+  "cosmic-studio": cosmicStudioTokens,
 };
 
 /**

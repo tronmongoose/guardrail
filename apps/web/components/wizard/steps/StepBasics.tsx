@@ -21,7 +21,29 @@ export function StepBasics({ value, onChange }: StepBasicsProps) {
       <div>
         <h2 className="text-xl font-semibold text-white mb-2">Program Basics</h2>
         <p className="text-gray-400 text-sm">
-          Define what your program is about and who it&apos;s for.
+          Your answers shape everything the AI builds — week titles, lesson names, review steps, and reflection prompts. Don&apos;t overthink it: even a rough idea gives the AI something to work with, and you can edit everything after.
+        </p>
+      </div>
+
+      {/* AI context callout */}
+      <div className="p-4 bg-surface-dark border border-surface-border rounded-lg">
+        <p className="text-xs font-medium text-gray-300 mb-2">From your answers, AI will create:</p>
+        <ul className="text-xs text-gray-400 space-y-1 mb-3">
+          <li>· Week and session headlines</li>
+          <li>· Guided lessons and key watchpoints</li>
+          <li>· Review steps and action prompts</li>
+          <li>· Reflection questions for your learners</li>
+        </ul>
+        <p className="text-xs text-gray-500">
+          See the{" "}
+          <span className="inline-flex items-center gap-0.5 text-neon-cyan">
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M15 4l5 5L8 21l-5-2 2-5L15 4Z" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M3 3l1.5 1.5M3 6h1M6 3v1" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            wand icon
+          </span>{" "}
+          next to any field? That&apos;s AI assist — tap it to help flesh out your answer.
         </p>
       </div>
 
@@ -53,7 +75,7 @@ export function StepBasics({ value, onChange }: StepBasicsProps) {
           />
         </div>
         <p className="text-xs text-gray-500 mb-2">
-          Describe your ideal learner - their background, skill level, and industry.
+          A quick sketch of who this is for — their background, skill level, and what they&apos;re trying to solve. This helps the AI pitch lessons at the right level.
         </p>
         <textarea
           value={value.targetAudience}
@@ -135,11 +157,11 @@ export function StepBasics({ value, onChange }: StepBasicsProps) {
 
       {/* Tips */}
       <div className="p-4 bg-neon-cyan/5 border border-neon-cyan/20 rounded-lg">
-        <h4 className="text-sm font-medium text-neon-cyan mb-2">Tips for great programs:</h4>
+        <h4 className="text-sm font-medium text-neon-cyan mb-2">What helps the AI the most:</h4>
         <ul className="text-xs text-gray-400 space-y-1">
-          <li>• Be specific about your audience (their pain points, goals, current skill level)</li>
-          <li>• Make the transformation measurable (e.g., &quot;10lbs of muscle&quot; vs &quot;get fit&quot;)</li>
-          <li>• The clearer your transformation, the better AI can structure your content</li>
+          <li>• A specific audience (e.g., &quot;beginner runners&quot; beats &quot;fitness people&quot;)</li>
+          <li>• A measurable transformation (e.g., &quot;run a 5K in 8 weeks&quot; beats &quot;get fit&quot;)</li>
+          <li>• Anything is better than nothing — you can refine it all after generation</li>
         </ul>
       </div>
     </div>

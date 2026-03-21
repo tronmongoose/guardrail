@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEmbeddings, clusterEmbeddings, generateProgramDraft, extractContentDigests, analyzeVideoWithGemini } from "@guide-rail/ai";
+import { getEmbeddings, clusterEmbeddings, generateProgramDraft, extractContentDigests, analyzeVideoWithGemini, analyzeUploadedVideoWithGemini } from "@guide-rail/ai";
 import type { ContentDigest, EnrichedContentDigest } from "@guide-rail/ai";
+import { maybeSegmentVideo } from "@/lib/video-segmentation";
 import { ProgramDraftSchema } from "@guide-rail/shared";
 import type { VideoAnalysisOutput } from "@guide-rail/shared";
 import { Prisma } from "@prisma/client";
@@ -141,13 +142,13 @@ async function processGenerationJob(jobId: string, programId: string) {
       (a) => a.extractedText && a.extractedText.length > 0
     );
 
-    // Build ID sets for later lookups
+    // Build ID sets for later lookups — will be updated after segmentation re-fetch
     const videoIdSet = new Set(program.videos.map((v) => v.id));
 
     // ── Step 0: Video Analysis (0-10%) ──
-    // Check/run Gemini analysis for videos missing it
+    // Only analyze top-level (non-segment) videos; segment children inherit parent's analysis
     checkDeadline("video_analysis");
-    const videosNeedingAnalysis = program.videos.filter((v) => !v.analysis);
+    const videosNeedingAnalysis = program.videos.filter((v) => !v.isSegment && !v.analysis);
     let analysisCount = 0;
 
     if (videosNeedingAnalysis.length > 0 && process.env.GOOGLE_AI_API_KEY) {
@@ -159,7 +160,16 @@ async function processGenerationJob(jobId: string, programId: string) {
         const batch = videosNeedingAnalysis.slice(i, i + ANALYSIS_CONCURRENCY);
         const results = await Promise.allSettled(
           batch.map(async (v) => {
-            const analysis = await analyzeVideoWithGemini(v.videoId, v.title ?? "Untitled", v.durationSeconds ?? undefined);
+            // Detect whether this is a direct upload (non-YouTube URL) or a YouTube video
+            const isUpload = !v.url.includes("youtube.com") && !v.url.includes("youtu.be");
+            const analysis = isUpload
+              ? await analyzeUploadedVideoWithGemini(
+                  v.url,
+                  v.title ?? "Untitled",
+                  v.url.toLowerCase().endsWith(".mov") ? "video/quicktime" : "video/mp4",
+                )
+              : await analyzeVideoWithGemini(v.videoId, v.title ?? "Untitled", v.durationSeconds ?? undefined);
+
             await prisma.videoAnalysis.upsert({
               where: { youtubeVideoId: v.id },
               create: {
@@ -183,6 +193,12 @@ async function processGenerationJob(jobId: string, programId: string) {
                 analyzedAt: new Date(),
               },
             });
+
+            // Create virtual segments for long videos (idempotent)
+            if (analysis.durationSeconds) {
+              await maybeSegmentVideo(prisma, v, analysis.topics, analysis.durationSeconds);
+            }
+
             return analysis;
           }),
         );
@@ -200,11 +216,23 @@ async function processGenerationJob(jobId: string, programId: string) {
       }
     }
 
-    // Re-fetch videos with analyses after running new ones
-    const videosWithAnalysis = await prisma.youTubeVideo.findMany({
+    // Re-fetch all videos (including newly created segment children) with analyses
+    const allVideosWithAnalysis = await prisma.youTubeVideo.findMany({
       where: { programId },
       include: { analysis: true },
     });
+
+    // Segment-aware pipeline filter:
+    // Use child segments when available; exclude parents that have been segmented
+    const segmentedParentIds = new Set(
+      allVideosWithAnalysis.filter((v) => v.isSegment && v.parentVideoId).map((v) => v.parentVideoId as string),
+    );
+    const videosForPipeline = allVideosWithAnalysis.filter(
+      (v) => v.isSegment || !segmentedParentIds.has(v.id),
+    );
+
+    // For backwards-compat: keep using videosWithAnalysis name for analysis map building
+    const videosWithAnalysis = videosForPipeline;
 
     // Build analysis lookup: video record ID → VideoAnalysis data
     const analysisMap = new Map<string, VideoAnalysisOutput>();
@@ -222,8 +250,11 @@ async function processGenerationJob(jobId: string, programId: string) {
       }
     }
 
+    // Update videoIdSet to reflect the pipeline videos (includes segment children)
+    for (const v of videosForPipeline) videoIdSet.add(v.id);
+
     const hasVideoAnalysis = analysisMap.size > 0;
-    console.info(`[generate-async] Video analysis: ${analysisMap.size}/${program.videos.length} videos analyzed (${analysisCount} new)`);
+    console.info(`[generate-async] Video analysis: ${analysisMap.size}/${allVideosWithAnalysis.length} videos analyzed (${analysisCount} new), ${videosForPipeline.length} in pipeline`);
 
     // ── Step 1: Embeddings (10-25%) ──
     checkDeadline("embedding");
@@ -232,11 +263,23 @@ async function processGenerationJob(jobId: string, programId: string) {
       data: { stage: "embedding", progress: 10 },
     });
 
-    // Use analysis summaries for richer embeddings when available
-    const videoEmbeddingInputs = program.videos.map((v) => {
+    // Use analysis summaries for richer embeddings when available.
+    // For segment children, build narrowed embedding text from the matching topic slice.
+    const videoEmbeddingInputs = videosForPipeline.map((v) => {
+      if (v.isSegment && v.parentVideoId) {
+        const parentAnalysis = analysisMap.get(v.parentVideoId);
+        if (parentAnalysis) {
+          const matchingTopic = parentAnalysis.topics.find(
+            (t) => Math.abs(t.startSeconds - (v.startSeconds ?? 0)) < 10,
+          );
+          return {
+            contentId: v.id,
+            text: `${v.title ?? ""}: ${matchingTopic?.label ?? parentAnalysis.summary}`.slice(0, 4000),
+          };
+        }
+      }
       const analysis = analysisMap.get(v.id);
       if (analysis) {
-        // Richer embedding text from analysis
         const topicLabels = analysis.topics.map((t) => t.label).join(". ");
         return {
           contentId: v.id,
@@ -289,7 +332,7 @@ async function processGenerationJob(jobId: string, programId: string) {
       embedding: r.embedding,
     }));
 
-    const totalContent = program.videos.length + usableArtifacts.length;
+    const totalContent = videosForPipeline.length + usableArtifacts.length;
     const k = Math.min(program.durationWeeks, totalContent);
     const clusters = clusterEmbeddings(clusterInputs, k);
 
@@ -322,28 +365,52 @@ async function processGenerationJob(jobId: string, programId: string) {
     const enrichedDigests: (ContentDigest | EnrichedContentDigest)[] = [];
     const videosNeedingLLMExtraction: { contentId: string; contentTitle: string; text: string | null; contentType: "video" }[] = [];
 
-    for (const v of program.videos) {
-      const analysis = analysisMap.get(v.id);
-      if (analysis && analysis.topics.length > 0) {
-        // Build enriched digest directly from Gemini analysis — no LLM call needed
+    for (const v of videosForPipeline) {
+      // For segment children, use the parent's analysis filtered to this segment's time range
+      const sourceAnalysis = v.isSegment && v.parentVideoId
+        ? analysisMap.get(v.parentVideoId)
+        : analysisMap.get(v.id);
+
+      if (sourceAnalysis && sourceAnalysis.topics.length > 0) {
+        // For segments, narrow topics/segments to this child's time bounds
+        const relevantTopics = v.isSegment
+          ? sourceAnalysis.topics.filter(
+              (t) => t.startSeconds >= (v.startSeconds ?? 0) && t.endSeconds <= ((v.endSeconds ?? Infinity) + 5),
+            )
+          : sourceAnalysis.topics;
+        const relevantSegments = v.isSegment
+          ? sourceAnalysis.segments.filter(
+              (s) => s.startSeconds >= (v.startSeconds ?? 0) && s.endSeconds <= ((v.endSeconds ?? Infinity) + 5),
+            )
+          : sourceAnalysis.segments;
+        const relevantMoments = v.isSegment
+          ? (sourceAnalysis.keyMoments ?? []).filter(
+              (m) => m.timestampSeconds >= (v.startSeconds ?? 0) && m.timestampSeconds <= (v.endSeconds ?? Infinity),
+            )
+          : (sourceAnalysis.keyMoments ?? []);
+
+        const topicsForDigest = relevantTopics.length > 0 ? relevantTopics : sourceAnalysis.topics;
+
         const enriched: EnrichedContentDigest = {
           contentId: v.id,
           contentTitle: v.title ?? "Untitled",
           contentType: "video",
-          keyConcepts: analysis.topics.map((t) => t.label),
-          skillsIntroduced: analysis.topics
-            .flatMap((t) => t.subtopics ?? [])
-            .slice(0, 5),
-          memorableExamples: (analysis.keyMoments ?? [])
+          keyConcepts: topicsForDigest.map((t) => t.label),
+          skillsIntroduced: topicsForDigest.flatMap((t) => t.subtopics ?? []).slice(0, 5),
+          memorableExamples: relevantMoments
             .filter((m) => m.significance === "high")
             .map((m) => m.description)
             .slice(0, 3),
           difficultyLevel: "intermediate",
-          summary: analysis.summary,
-          segments: analysis.segments,
-          topics: analysis.topics,
-          keyMoments: analysis.keyMoments ?? [],
-          durationSeconds: analysis.durationSeconds,
+          summary: v.isSegment
+            ? `${v.title}: ${topicsForDigest.map((t) => t.label).join(", ")}`
+            : sourceAnalysis.summary,
+          segments: relevantSegments,
+          topics: topicsForDigest,
+          keyMoments: relevantMoments,
+          durationSeconds: v.isSegment
+            ? (v.endSeconds ?? 0) - (v.startSeconds ?? 0)
+            : sourceAnalysis.durationSeconds,
         };
         enrichedDigests.push(enriched);
       } else {
@@ -400,7 +467,7 @@ async function processGenerationJob(jobId: string, programId: string) {
     });
 
     // Build lookup maps
-    const videoMap = new Map(program.videos.map((v) => [v.id, v]));
+    const videoMap = new Map(videosForPipeline.map((v) => [v.id, v]));
     const artifactMap = new Map(usableArtifacts.map((a) => [a.id, a]));
 
     const clusterData = clusters.map((c) => ({

@@ -61,11 +61,12 @@ export const SKIN_CATEGORIES: SkinCategoryDef[] = [
     id: "entertainment",
     label: "ENTERTAINMENT",
     skins: [
-      { id: "entertainment-cinema",  name: "Cinema",      description: "Dark theater with gold highlights", category: "entertainment" },
-      { id: "entertainment-arcade",  name: "Arcade",      description: "Retro pixels and neon glow",        category: "entertainment" },
-      { id: "entertainment-podcast", name: "Podcast",     description: "Clean audio-first layout",          category: "entertainment" },
-      { id: "entertainment-sports",  name: "Sports",      description: "High energy, bold scoreboards",     category: "entertainment" },
-      { id: "entertainment-gaming",  name: "Gaming",      description: "Immersive dark with RGB accents",   category: "entertainment" },
+      { id: "entertainment-cinema",  name: "Cinema",        description: "Dark theater with gold highlights",                                              category: "entertainment" },
+      { id: "entertainment-arcade",  name: "Arcade",        description: "Retro pixels and neon glow",                                                      category: "entertainment" },
+      { id: "entertainment-podcast", name: "Podcast",       description: "Clean audio-first layout",                                                         category: "entertainment" },
+      { id: "entertainment-sports",  name: "Sports",        description: "High energy, bold scoreboards",                                                    category: "entertainment" },
+      { id: "entertainment-gaming",  name: "Gaming",        description: "Immersive dark with RGB accents",                                                  category: "entertainment" },
+      { id: "cosmic-studio",         name: "Cosmic Studio", description: "Space exploration — deep purple cosmos with magenta-to-pink gradient accents",      category: "entertainment" },
     ],
   },
   {

@@ -3,7 +3,8 @@ import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { parseYouTubeVideoId, fetchYouTubeOEmbed, fetchYouTubeTranscript } from "@guide-rail/shared";
-import { analyzeVideoWithGemini } from "@guide-rail/ai";
+import { analyzeVideoWithGemini, analyzeUploadedVideoWithGemini } from "@guide-rail/ai";
+import { maybeSegmentVideo } from "@/lib/video-segmentation";
 import { videoLogger, createTimer } from "@/lib/logger";
 
 export async function POST(
@@ -42,6 +43,43 @@ export async function POST(
         programId,
       },
     });
+
+    // Fire-and-forget Gemini analysis for uploaded video via Files API
+    const mimeType = url.toLowerCase().endsWith(".mov") ? "video/quicktime" : "video/mp4";
+    analyzeUploadedVideoWithGemini(url, title, mimeType)
+      .then(async (analysis) => {
+        await prisma.videoAnalysis.upsert({
+          where: { youtubeVideoId: video.id },
+          create: {
+            youtubeVideoId: video.id,
+            summary: analysis.summary,
+            fullTranscript: analysis.fullTranscript ?? null,
+            segments: analysis.segments as unknown as Prisma.InputJsonValue,
+            topics: analysis.topics as unknown as Prisma.InputJsonValue,
+            keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
+            people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
+            durationSeconds: analysis.durationSeconds ?? null,
+          },
+          update: {
+            summary: analysis.summary,
+            fullTranscript: analysis.fullTranscript ?? null,
+            segments: analysis.segments as unknown as Prisma.InputJsonValue,
+            topics: analysis.topics as unknown as Prisma.InputJsonValue,
+            keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
+            people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
+            durationSeconds: analysis.durationSeconds ?? null,
+            analyzedAt: new Date(),
+          },
+        });
+        if (analysis.durationSeconds) {
+          await maybeSegmentVideo(prisma, video, analysis.topics, analysis.durationSeconds);
+        }
+        console.log(`[gemini] Upload analysis saved for "${title}" (record ${video.id})`);
+      })
+      .catch((err) => {
+        console.error(`[gemini] Upload analysis failed for "${title}":`, err);
+      });
+
     return NextResponse.json(video);
   }
 
@@ -127,6 +165,9 @@ export async function POST(
             analyzedAt: new Date(),
           },
         });
+        if (analysis.durationSeconds) {
+          await maybeSegmentVideo(prisma, video, analysis.topics, analysis.durationSeconds);
+        }
         console.log(`[gemini] Video analysis saved for ${videoId} (record ${video.id})`);
       })
       .catch((err) => {
@@ -141,4 +182,29 @@ export async function POST(
     });
     throw err;
   }
+}
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: programId } = await params;
+
+  const user = await getOrCreateUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const program = await prisma.program.findUnique({
+    where: { id: programId },
+    select: { creatorId: true },
+  });
+  if (!program) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (program.creatorId !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const videos = await prisma.youTubeVideo.findMany({
+    where: { programId, isSegment: false },
+    include: { _count: { select: { segments: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  return NextResponse.json(videos);
 }

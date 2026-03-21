@@ -13,11 +13,12 @@ export const SkinId = {
   Professional: "professional",
   Warm: "warm",
   Minimal: "minimal",
+  CosmicStudio: "cosmic-studio",
 } as const;
 
 export type SkinId = (typeof SkinId)[keyof typeof SkinId];
 
-export const SkinIdSchema = z.enum(["default", "professional", "warm", "minimal"]);
+export const SkinIdSchema = z.enum(["default", "professional", "warm", "minimal", "cosmic-studio"]);
 
 // ---------------------------------------------------------------------------
 // Color Tokens

@@ -67,15 +67,15 @@ Input: "${sanitizedInput}"
 
 Respond with ONLY the improved transformation statement, no quotes or explanation.`,
 
-    target_audience: `You are a marketing expert helping course creators define their ideal audience.
+    target_audience: `You are a curriculum design expert helping course creators define their target learner.
 ${contextBlock}
-Take the user's rough audience description and make it specific and vivid.
+Take the user's rough audience description and make it clear and specific.
 
 Guidelines:
-- Be specific about demographics, skill level, and goals
-- Identify the pain point or aspiration
-- Keep it to 1-2 sentences
-- Make it feel like a real person, not an abstract segment
+- Write a concise 1-2 sentence group profile (no fictional names or persona stories)
+- Include who they are, their skill level, and what they want to achieve
+- Identify the core pain point or aspiration
+- Use a group description, not a fictional individual (e.g., "intermediate runners who want to..." not "Meet Sarah, a 32-year-old...")
 
 Input: "${sanitizedInput}"
 

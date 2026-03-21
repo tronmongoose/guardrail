@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { parseYouTubeVideoId } from "@guide-rail/shared";
-import { extractAudioChunks, isAudioVideoFile, MAX_AUDIO_DURATION_SECONDS } from "@/lib/audio-extract";
+import { upload } from "@vercel/blob/client";
+import { extractAudioChunks } from "@/lib/audio-extract";
 import { ContentLegalNotice } from "../ContentLegalNotice";
 
 interface Video {
@@ -10,6 +11,7 @@ interface Video {
   videoId: string;
   title: string | null;
   thumbnailUrl: string | null;
+  _count?: { segments: number };
 }
 
 interface Artifact {
@@ -51,6 +53,16 @@ function getFileType(filename: string): string | null {
   return null;
 }
 
+function isVideoFile(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return lower.endsWith(".mp4") || lower.endsWith(".webm") || lower.endsWith(".mov");
+}
+
+function isAudioFile(filename: string): boolean {
+  const lower = filename.toLowerCase();
+  return lower.endsWith(".mp3") || lower.endsWith(".m4a") || lower.endsWith(".wav");
+}
+
 function getFileTypeColor(fileType: string): string {
   switch (fileType) {
     case "pdf": return "bg-red-500/20 text-red-400";
@@ -88,6 +100,26 @@ export function StepContent({
   const [batchUrls, setBatchUrls] = useState("");
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, errors: [] as string[] });
+
+  // Segment counts — refreshed after videos change (Gemini analysis is async/fire-and-forget)
+  const [segmentCounts, setSegmentCounts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (videos.length === 0) return;
+    fetch(`/api/programs/${programId}/videos`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: Array<{ id: string; _count: { segments: number } }>) => {
+        const counts: Record<string, number> = {};
+        for (const v of data) {
+          if (v._count?.segments > 0) counts[v.id] = v._count.segments;
+        }
+        setSegmentCounts(counts);
+      })
+      .catch(() => {/* best-effort */});
+  }, [programId, videos.length]);
+
+  const totalSegmentCount = Object.values(segmentCounts).reduce((a, b) => a + b, 0);
+  const segmentedVideoCount = Object.keys(segmentCounts).length;
 
   const isExtracting = extractionStates.some((s) => s.status === "extracting" || s.status === "transcribing");
 
@@ -188,6 +220,39 @@ export function StepContent({
     }
   };
 
+  const uploadVideoBlob = async (file: File): Promise<Video | null> => {
+    const updateState = (progress: number, phase: string, status: "extracting" | "transcribing" = "extracting") => {
+      setExtractionStates((prev) =>
+        prev.map((s) => s.filename === file.name ? { ...s, progress, phase, status } : s)
+      );
+    };
+
+    updateState(0, "Uploading");
+
+    const blob = await upload(file.name, file, {
+      access: "public",
+      handleUploadUrl: `/api/programs/${programId}/videos/upload`,
+      onUploadProgress: ({ percentage }) => {
+        updateState(Math.round(percentage * 0.9), "Uploading");
+      },
+    });
+
+    updateState(92, "Saving");
+
+    const res = await fetch(`/api/programs/${programId}/videos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: blob.url, source: "upload", title: file.name }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || "Failed to save video");
+    }
+
+    return res.json();
+  };
+
   const extractSingleFile = async (file: File): Promise<Artifact | null> => {
     const fileType = getFileType(file.name);
     if (!fileType) {
@@ -259,7 +324,7 @@ export function StepContent({
 
   const extractAudioVideoFile = async (file: File): Promise<Artifact | null> => {
     const fileType = getFileType(file.name);
-    if (!fileType || (fileType !== "video" && fileType !== "audio")) return null;
+    if (!fileType || fileType !== "audio") return null;
 
     if (file.size > 100 * 1024 * 1024) {
       throw new Error(`${file.name}: File must be less than 100MB`);
@@ -337,48 +402,63 @@ export function StepContent({
     setExtractionStates((prev) => [...prev, ...newStates]);
 
     const newArtifacts: Artifact[] = [];
+    const newVideos: Video[] = [];
 
-    // Process files sequentially — extract text then save to API immediately
+    // Process files sequentially
     for (const file of files) {
       try {
-        const artifact = isAudioVideoFile(file.name)
-          ? await extractAudioVideoFile(file)
-          : await extractSingleFile(file);
-        if (artifact) {
-          // Save to API immediately so extractedText is persisted server-side
-          try {
-            const res = await fetch(`/api/programs/${programId}/artifacts`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(artifact),
-            });
-            if (res.ok) {
-              const saved = await res.json();
-              artifact.id = saved.id;
-            }
-          } catch {
-            // Non-critical — artifact can be saved later in handleGenerate
+        if (isVideoFile(file.name)) {
+          // Video files → direct Vercel Blob upload → Gemini analysis pipeline
+          const video = await uploadVideoBlob(file);
+          if (video) {
+            newVideos.push(video);
+            setExtractionStates((prev) =>
+              prev.map((s) => s.filename === file.name ? { ...s, status: "done", progress: 100 } : s)
+            );
           }
-          newArtifacts.push(artifact);
-          setExtractionStates((prev) =>
-            prev.map((s) => s.filename === file.name ? { ...s, status: "done", progress: 100 } : s)
-          );
         } else {
-          setExtractionStates((prev) =>
-            prev.map((s) => s.filename === file.name ? { ...s, status: "error", error: "Unsupported file type" } : s)
-          );
+          const artifact = isAudioFile(file.name)
+            ? await extractAudioVideoFile(file)
+            : await extractSingleFile(file);
+          if (artifact) {
+            // Save to API immediately so extractedText is persisted server-side
+            try {
+              const res = await fetch(`/api/programs/${programId}/artifacts`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(artifact),
+              });
+              if (res.ok) {
+                const saved = await res.json();
+                artifact.id = saved.id;
+              }
+            } catch {
+              // Non-critical — artifact can be saved later in handleGenerate
+            }
+            newArtifacts.push(artifact);
+            setExtractionStates((prev) =>
+              prev.map((s) => s.filename === file.name ? { ...s, status: "done", progress: 100 } : s)
+            );
+          } else {
+            setExtractionStates((prev) =>
+              prev.map((s) => s.filename === file.name ? { ...s, status: "error", error: "Unsupported file type" } : s)
+            );
+          }
         }
       } catch (error) {
-        console.error("Extraction error:", error);
+        console.error("Upload/extraction error:", error);
         setExtractionStates((prev) =>
           prev.map((s) => s.filename === file.name
-            ? { ...s, status: "error", error: error instanceof Error ? error.message : "Extraction failed" }
+            ? { ...s, status: "error", error: error instanceof Error ? error.message : "Upload failed" }
             : s
           )
         );
       }
     }
 
+    if (newVideos.length > 0) {
+      onVideosChange([...videos, ...newVideos]);
+    }
     if (newArtifacts.length > 0) {
       onArtifactsChange([...artifacts, ...newArtifacts]);
     }
@@ -400,7 +480,7 @@ export function StepContent({
   const docArtifacts = artifacts.filter((a) => a.fileType !== "video" && a.fileType !== "audio");
   const avArtifacts = artifacts.filter((a) => a.fileType === "video" || a.fileType === "audio");
   const contentParts: string[] = [];
-  if (videos.length > 0) contentParts.push(`${videos.length} YouTube video${videos.length !== 1 ? "s" : ""}`);
+  if (videos.length > 0) contentParts.push(`${videos.length} video${videos.length !== 1 ? "s" : ""}`);
   if (avArtifacts.length > 0) contentParts.push(`${avArtifacts.length} uploaded recording${avArtifacts.length !== 1 ? "s" : ""}`);
   if (docArtifacts.length > 0) contentParts.push(`${docArtifacts.length} document${docArtifacts.length !== 1 ? "s" : ""}`);
   const contentSummary = contentParts.length > 0
@@ -423,6 +503,20 @@ export function StepContent({
         </svg>
         {contentSummary}
       </div>
+
+      {/* Long video segmentation notice */}
+      {totalSegmentCount > 0 && (
+        <div className="flex items-start gap-2 p-3 bg-neon-cyan/5 border border-neon-cyan/20 rounded-lg">
+          <svg className="w-4 h-4 text-neon-cyan flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <p className="text-xs text-gray-300">
+            <span className="text-neon-cyan font-medium">Long videos detected</span> —{" "}
+            {segmentedVideoCount === 1 ? "1 video" : `${segmentedVideoCount} videos`} will be auto-split into{" "}
+            <span className="text-neon-cyan font-medium">{totalSegmentCount} focused segments</span> before generation.
+          </p>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex border-b border-surface-border">
@@ -553,6 +647,11 @@ export function StepContent({
                   <span className="flex-1 text-sm text-white truncate">
                     {video.title || video.videoId}
                   </span>
+                  {segmentCounts[video.id] > 0 && (
+                    <span className="flex-shrink-0 text-xs px-2 py-0.5 bg-gray-700/60 text-gray-300 rounded-full">
+                      Split into {segmentCounts[video.id]} parts
+                    </span>
+                  )}
                   <button
                     onClick={() => handleRemoveVideo(video.id)}
                     className="p-1.5 text-gray-400 hover:text-neon-pink transition"
@@ -572,8 +671,18 @@ export function StepContent({
       {activeTab === "upload" && (
         <div className="space-y-4">
           <p className="text-xs text-gray-500">
-            Upload documents to include in your program. Files are processed locally for privacy.
+            Add videos from your phone, documents, or audio recordings. AI will analyze everything and build your program.
           </p>
+
+          {/* Video upload nudge */}
+          <div className="flex items-start gap-2 p-3 bg-neon-cyan/5 border border-neon-cyan/20 rounded-lg">
+            <svg className="w-4 h-4 text-neon-cyan flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            <p className="text-xs text-gray-300">
+              Short clips work best — aim for <span className="text-neon-cyan">1–3 videos per lesson</span> and we&apos;ll group related ones together. Got a big batch or long video? Drop everything in. We&apos;ll put something sharp together.
+            </p>
+          </div>
 
           {/* File dropzone — mobile-optimized */}
           <label className="block cursor-pointer">
@@ -602,7 +711,7 @@ export function StepContent({
                   <p className="text-sm text-gray-400 block sm:hidden">
                     <span className="text-neon-cyan">Tap to choose files</span>
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">PDF, DOCX, TXT, Markdown, or Video/Audio (MP4, MP3, WAV) — max 5 min</p>
+                  <p className="text-xs text-gray-500 mt-1">Videos (MP4, MOV), Audio (MP3, WAV), or Docs (PDF, DOCX, TXT) · up to 500 MB per file</p>
                 </>
               )}
             </div>

@@ -5,4 +5,4 @@ export type { ContentDigest, EnrichedContentDigest } from "./llm-adapter";
 export { generateWithStub, generateStubContentDigest } from "./llm-stub";
 export { transcribeAudio } from "./whisper";
 export type { TranscribeOptions, TranscribeResult } from "./whisper";
-export { analyzeVideoWithGemini } from "./gemini-video-analyzer";
+export { analyzeVideoWithGemini, analyzeUploadedVideoWithGemini } from "./gemini-video-analyzer";

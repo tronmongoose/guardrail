@@ -95,6 +95,23 @@ export const SKINS: Record<SkinId, Skin> = {
     buttonStyle: "outline",
     cardStyle: "flat",
   },
+  "cosmic-studio": {
+    id: "cosmic-studio",
+    name: "Cosmic Studio",
+    description: "Space exploration — deep purple cosmos with magenta-to-pink gradient accents",
+    colors: {
+      bg: "#1A0A2E",
+      bgSecondary: "#2D1B4E",
+      text: "#FFFFFF",
+      textMuted: "#C4A8E0",
+      accent: "#C84FD8",
+      accentHover: "#D966E8",
+      border: "#3D1F5E",
+    },
+    videoFrame: "rounded",
+    buttonStyle: "gradient",
+    cardStyle: "bordered",
+  },
 };
 
 export const SKIN_IDS = Object.keys(SKINS) as (keyof typeof SKINS)[];
