@@ -11,6 +11,7 @@ import { useAutosave } from "@/hooks/useAutosave";
 import { useBeforeUnload } from "@/hooks/useBeforeUnload";
 import { ContentLegalNotice } from "@/components/wizard/ContentLegalNotice";
 import { upload } from "@vercel/blob/client";
+import { SkinPicker } from "@/components/skins/SkinPicker";
 
 /**
  * First Program Creation Flow
@@ -53,6 +54,7 @@ interface AutosaveData {
   pacingMode: "unlock_on_complete" | "drip_by_week";
   vibePrompt: string;
   videoHints: string;
+  skinId: string;
 }
 
 const STORAGE_KEY_PREFIX = "new-program-";
@@ -94,6 +96,7 @@ export default function NewProgramPage() {
   const [pacingMode, setPacingMode] = useState<"unlock_on_complete" | "drip_by_week">("unlock_on_complete");
   const [vibePrompt, setVibePrompt] = useState("");
   const [videoHints, setVideoHints] = useState("");
+  const [skinId, setSkinId] = useState("default");
   const [intentResult, setIntentResult] = useState<{
     groups: { clipIndexes: number[]; title: string; combinable: boolean }[];
     sectionBoundaries: number[];
@@ -103,9 +106,9 @@ export default function NewProgramPage() {
   // Autosave: persist form state to localStorage + debounced DB save
   const autosaveData = useMemo<AutosaveData>(() => ({
     step, programTitle, programDescription, targetAudience, targetTransformation,
-    durationWeeks, pacingMode, vibePrompt, videoHints,
+    durationWeeks, pacingMode, vibePrompt, videoHints, skinId,
   }), [step, programTitle, programDescription, targetAudience, targetTransformation,
-       durationWeeks, pacingMode, vibePrompt, videoHints]);
+       durationWeeks, pacingMode, vibePrompt, videoHints, skinId]);
 
   const { saveStatus, flush, clear, hasUnsavedChanges } = useAutosave<AutosaveData>({
     storageKey: programId ? `${STORAGE_KEY_PREFIX}${programId}` : "",
@@ -124,6 +127,7 @@ export default function NewProgramPage() {
           durationWeeks: data.durationWeeks,
           pacingMode: data.pacingMode,
           vibePrompt: data.vibePrompt,
+          skinId: data.skinId,
         }),
       });
       if (!res.ok) throw new Error("Save failed");
@@ -149,6 +153,7 @@ export default function NewProgramPage() {
         if (parsed.pacingMode) setPacingMode(parsed.pacingMode);
         if (parsed.vibePrompt) setVibePrompt(parsed.vibePrompt);
         if (parsed.videoHints) setVideoHints(parsed.videoHints);
+        if (parsed.skinId) setSkinId(parsed.skinId);
         if (parsed.step && parsed.step !== "welcome") setStep(parsed.step);
         restoredFromStorage = true;
       } catch {
@@ -170,6 +175,7 @@ export default function NewProgramPage() {
           if (program.durationWeeks) setDurationWeeks(program.durationWeeks);
           if (program.pacingMode) setPacingMode(program.pacingMode);
           if (program.vibePrompt) setVibePrompt(program.vibePrompt);
+          if (program.skinId) setSkinId(program.skinId);
           // Infer step from available data
           if (program.videos?.length > 0) setStep("structure");
           else if (program.targetTransformation) setStep("videos");
@@ -1083,6 +1089,12 @@ export default function NewProgramPage() {
                   rows={2}
                   className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan resize-none"
                 />
+              </div>
+
+              {/* Visual theme */}
+              <div>
+                <label className="text-sm text-gray-400 block mb-2">Visual theme</label>
+                <SkinPicker value={skinId} onChange={setSkinId} />
               </div>
             </div>
           </div>
