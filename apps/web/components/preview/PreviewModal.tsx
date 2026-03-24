@@ -167,6 +167,7 @@ export function PreviewModal({ isOpen, onClose, program }: PreviewModalProps) {
             <ProgramOverviewPreview
               program={program}
               skin={skin}
+              layout={deviceMode === "mobile" ? "mobile" : "auto"}
               onSelectSession={handleSelectSession}
             />
           ) : selectedSession ? (

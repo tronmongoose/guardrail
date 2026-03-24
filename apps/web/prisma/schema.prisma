@@ -73,7 +73,7 @@ model Program {
   description      String?
   outcomeStatement String?     @db.Text
   durationWeeks    Int
-  pacingMode       PacingMode  @default(DRIP_BY_WEEK)
+  pacingMode       PacingMode  @default(UNLOCK_ON_COMPLETE)
   priceInCents     Int         @default(0)
   currency         String      @default("usd")
   published        Boolean     @default(false)
@@ -88,6 +88,7 @@ model Program {
   targetTransformation String?   @db.Text  // 1-2 sentence transformation goal
   vibePrompt           String?   @db.Text  // AI generation style guidance
   skinId               String    @default("default")
+  transitionMode       ProgramTransitionMode @default(NONE)
 
   // AI intent parser output (set during /new flow)
   videoGroups       Json?    // { clipIndexes: number[], title: string, combinable: boolean }[]
@@ -151,7 +152,8 @@ model Session {
   weekId       String
   week         Week     @relation(fields: [weekId], references: [id], onDelete: Cascade)
   actions      Action[]
-  keyTakeaways String[] // 2-3 key takeaway bullets per session
+  keyTakeaways   String[] // 2-3 key takeaway bullets per session
+  hideTransition Boolean  @default(false)
 
   compositeSession CompositeSession?
 
@@ -184,6 +186,12 @@ enum ActionType {
 }
 
 // --- Composite Session (multi-clip playlist for a session) ---
+
+enum ProgramTransitionMode {
+  NONE
+  SIMPLE
+  BRANDED
+}
 
 enum TransitionType {
   NONE
@@ -270,6 +278,7 @@ model YouTubeVideo {
   createdAt       DateTime @default(now())
 
   // Virtual segmentation — long videos (>10 min) are split into child records per Gemini topic
+  desiredSegmentCount Int     @default(1)  // 1 = no split; 2-4 = creator-directed split count
   parentVideoId String?
   parentVideo   YouTubeVideo?  @relation("VideoSegments", fields: [parentVideoId], references: [id], onDelete: Cascade)
   segments      YouTubeVideo[] @relation("VideoSegments")

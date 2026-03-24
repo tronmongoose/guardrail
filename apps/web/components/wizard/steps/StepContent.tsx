@@ -9,8 +9,11 @@ import { ContentLegalNotice } from "../ContentLegalNotice";
 interface Video {
   id: string;
   videoId: string;
+  url?: string;
   title: string | null;
   thumbnailUrl: string | null;
+  durationSeconds?: number | null;
+  desiredSegmentCount?: number;
   _count?: { segments: number };
 }
 
@@ -28,6 +31,10 @@ interface StepContentProps {
   artifacts: Artifact[];
   onVideosChange: (videos: Video[]) => void;
   onArtifactsChange: (artifacts: Artifact[]) => void;
+}
+
+function isUploadedVideo(video: Video): boolean {
+  return !!(video.url?.includes("blob.vercel-storage.com"));
 }
 
 type ContentTab = "youtube" | "upload";
@@ -82,6 +89,45 @@ function formatDuration(seconds: number): string {
   return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
+// Extract a thumbnail frame from a video File object (runs entirely client-side).
+// Seeks to `seekTo` seconds (or 10% of duration if shorter) to skip black frames.
+function extractVideoThumbnail(file: File, seekTo = 2): Promise<string | null> {
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+
+    const cleanup = () => URL.revokeObjectURL(objectUrl);
+
+    video.onerror = () => { cleanup(); resolve(null); };
+
+    video.onloadedmetadata = () => {
+      video.currentTime = Math.min(seekTo, video.duration * 0.1);
+    };
+
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const aspect = video.videoHeight / (video.videoWidth || 1);
+        canvas.width = 640;
+        canvas.height = Math.round(640 * aspect) || 360;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { cleanup(); resolve(null); return; }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        cleanup();
+        resolve(canvas.toDataURL("image/jpeg", 0.7));
+      } catch {
+        cleanup();
+        resolve(null);
+      }
+    };
+
+    video.src = objectUrl;
+  });
+}
+
 export function StepContent({
   programId,
   videos,
@@ -132,16 +178,41 @@ export function StepContent({
   // Segment counts — refreshed after videos change (Gemini analysis is async/fire-and-forget)
   const [segmentCounts, setSegmentCounts] = useState<Record<string, number>>({});
 
+  // Creator-directed split counts: videoId → desired number of sessions
+  const [videoSplitCounts, setVideoSplitCounts] = useState<Record<string, number>>(() => {
+    const initial: Record<string, number> = {};
+    for (const v of videos) {
+      if (v.desiredSegmentCount && v.desiredSegmentCount > 1) {
+        initial[v.id] = v.desiredSegmentCount;
+      }
+    }
+    return initial;
+  });
+
+  const handleSetSplit = async (videoId: string, count: number) => {
+    setVideoSplitCounts((prev) => ({ ...prev, [videoId]: count }));
+    await fetch(`/api/programs/${programId}/videos/${videoId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ desiredSegmentCount: count }),
+    }).catch(() => {/* best-effort */});
+  };
+
   useEffect(() => {
     if (videos.length === 0) return;
     fetch(`/api/programs/${programId}/videos`)
       .then((r) => r.ok ? r.json() : [])
-      .then((data: Array<{ id: string; _count: { segments: number } }>) => {
+      .then((data: Array<{ id: string; desiredSegmentCount?: number; _count: { segments: number } }>) => {
         const counts: Record<string, number> = {};
+        const splitCounts: Record<string, number> = {};
         for (const v of data) {
           if (v._count?.segments > 0) counts[v.id] = v._count.segments;
+          if (v.desiredSegmentCount && v.desiredSegmentCount > 1) splitCounts[v.id] = v.desiredSegmentCount;
         }
         setSegmentCounts(counts);
+        // Restore server-persisted split counts without overwriting any local changes
+        // the creator may have made since the last API call
+        setVideoSplitCounts((prev) => ({ ...splitCounts, ...prev }));
       })
       .catch(() => {/* best-effort */});
   }, [programId, videos.length]);
@@ -246,8 +317,18 @@ export function StepContent({
     }
   };
 
+  function getVideoMimeType(filename: string): string {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith(".mov")) return "video/quicktime";
+    if (lower.endsWith(".webm")) return "video/webm";
+    return "video/mp4";
+  }
+
+  function sanitizeFilename(name: string): string {
+    return name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  }
+
   const uploadVideoBlob = async (file: File): Promise<Video | null> => {
-    let lastProgress = 0;
     const updateState = (progress: number, phase: string, status: "extracting" | "transcribing" = "extracting") => {
       setExtractionStates((prev) =>
         prev.map((s) => s.filename === file.name ? { ...s, progress, phase, status } : s)
@@ -259,20 +340,35 @@ export function StepContent({
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000); // 10-minute timeout
 
+    // Monotonic high-water mark: progress bar can NEVER go backward.
+    // @vercel/blob retries up to 10x on failure; each XHR retry resets event.loaded to 0,
+    // which would cause the bar to oscillate without this gate.
+    let highWater = 0;
+    const advance = (pct: number) => {
+      const next = Math.min(89, Math.round(pct));
+      if (next > highWater) {
+        highWater = next;
+        updateState(highWater, "Uploading");
+      }
+    };
+
+    // Simulation: ensures the bar inches forward even during retries or slow uploads,
+    // so it never looks frozen. Asymptotically approaches 85%, leaving room for "Saving".
+    const simId = setInterval(() => advance(highWater + (85 - highWater) * 0.015), 250);
+
+    const blobName = `${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
+
     let blob: Awaited<ReturnType<typeof upload>>;
     try {
-      blob = await upload(file.name, file, {
+      blob = await upload(blobName, file, {
         access: "public",
         handleUploadUrl: `/api/programs/${programId}/videos/upload`,
         abortSignal: controller.signal,
-        onUploadProgress: ({ loaded, total }) => {
-          // Use loaded/total to compute cumulative progress and clamp to 90%
-          // (prevents per-chunk oscillation from multipart uploads)
-          const pct = total > 0 ? Math.round((loaded / total) * 90) : 0;
-          if (pct > lastProgress) {
-            lastProgress = pct;
-            updateState(pct, "Uploading");
-          }
+        multipart: true,                           // 8 MB chunks, 6 concurrent — each retries independently
+        contentType: getVideoMimeType(file.name),  // explicit MIME override; browser detection is unreliable
+        onUploadProgress: ({ percentage }) => {
+          // percentage is cumulative 0-100; scale to 0-89 and push through the gate.
+          advance(percentage * 0.89);
         },
       });
     } catch (err) {
@@ -282,6 +378,7 @@ export function StepContent({
       throw err;
     } finally {
       clearTimeout(timeoutId);
+      clearInterval(simId);
     }
 
     updateState(92, "Saving");
@@ -297,7 +394,12 @@ export function StepContent({
       throw new Error(err.error || "Failed to save video");
     }
 
-    return res.json();
+    const video: Video = await res.json();
+
+    // Extract a thumbnail from the local File (while we still have it).
+    // This runs entirely in the browser — no extra network call.
+    const thumbnailUrl = await extractVideoThumbnail(file);
+    return { ...video, thumbnailUrl: thumbnailUrl ?? video.thumbnailUrl };
   };
 
   const extractSingleFile = async (file: File): Promise<Artifact | null> => {
@@ -483,7 +585,7 @@ export function StepContent({
             prev.map((s) => s.filename === file.name ? { ...s, status: "done", progress: 100 } : s)
           );
         } else if (result.status === "rejected") {
-          console.error("Upload error:", result.reason);
+          console.error(`[upload] Failed for "${file.name}":`, result.reason);
           setExtractionStates((prev) =>
             prev.map((s) => s.filename === file.name
               ? { ...s, status: "error", error: result.reason instanceof Error ? result.reason.message : "Upload failed" }
@@ -545,9 +647,9 @@ export function StepContent({
       onArtifactsChange([...artifacts, ...newArtifacts]);
     }
 
-    // Clear completed extraction states after a delay
+    // Clear only "done" states after a delay; keep errors visible so the user can see what failed
     setTimeout(() => {
-      setExtractionStates((prev) => prev.filter((s) => s.status === "pending" || s.status === "extracting" || s.status === "transcribing"));
+      setExtractionStates((prev) => prev.filter((s) => s.status !== "done"));
     }, 2000);
 
     // Reset file input
@@ -721,37 +823,63 @@ export function StepContent({
             )}
           </div>
 
-          {/* Video list */}
-          {videos.length > 0 && (
+          {/* YouTube video list */}
+          {videos.filter((v) => !isUploadedVideo(v)).length > 0 && (
             <div className="space-y-2">
-              {videos.map((video) => (
+              {videos.filter((v) => !isUploadedVideo(v)).map((video) => (
                 <div
                   key={video.id}
-                  className="flex items-center gap-3 p-2 bg-surface-dark rounded-lg border border-surface-border"
+                  className="flex items-start gap-3 p-2 bg-surface-dark rounded-lg border border-surface-border"
                 >
                   {video.thumbnailUrl && (
                     <img
                       src={video.thumbnailUrl}
                       alt=""
-                      className="w-16 h-9 object-cover rounded"
+                      className="w-16 h-9 object-cover rounded flex-shrink-0 mt-0.5"
                     />
                   )}
-                  <span className="flex-1 text-sm text-white truncate">
-                    {video.title || video.videoId}
-                  </span>
-                  {segmentCounts[video.id] > 0 && (
-                    <span className="flex-shrink-0 text-xs px-2 py-0.5 bg-gray-700/60 text-gray-300 rounded-full">
-                      Split into {segmentCounts[video.id]} parts
+                  <div className="flex-1 min-w-0">
+                    <span className="block text-sm text-white truncate">
+                      {video.title || video.videoId}
                     </span>
-                  )}
-                  <button
-                    onClick={() => handleRemoveVideo(video.id)}
-                    className="p-1.5 text-gray-400 hover:text-neon-pink transition"
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      <span className="text-xs text-gray-500">Sessions:</span>
+                      {[1, 2, 3, 4].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => handleSetSplit(video.id, n)}
+                          className={`w-6 h-6 text-xs rounded transition font-medium
+                            ${(videoSplitCounts[video.id] ?? 1) === n
+                              ? "bg-neon-cyan text-black"
+                              : "bg-surface-border text-gray-400 hover:text-white"
+                            }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                      {(videoSplitCounts[video.id] ?? 1) > 1 && video.durationSeconds && (
+                        <span className="text-xs text-gray-500">
+                          ≈ {formatDuration(Math.round(video.durationSeconds / (videoSplitCounts[video.id] ?? 1)))} each
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
+                    {segmentCounts[video.id] > 0 && (
+                      <span className="text-xs px-2 py-0.5 bg-gray-700/60 text-gray-300 rounded-full">
+                        {segmentCounts[video.id]} parts
+                      </span>
+                    )}
+                    <button
+                      onClick={() => handleRemoveVideo(video.id)}
+                      className="p-1.5 text-gray-400 hover:text-neon-pink transition"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -837,8 +965,81 @@ export function StepContent({
                     />
                   </div>
                   {state.error && (
-                    <p className="text-xs text-red-400 mt-1">{state.error}</p>
+                    <div className="flex items-start justify-between mt-1">
+                      <p className="text-xs text-red-400 flex-1">{state.error}</p>
+                      <button
+                        onClick={() => setExtractionStates((prev) => prev.filter((s) => s.filename !== state.filename))}
+                        className="ml-2 text-gray-500 hover:text-red-400 flex-shrink-0"
+                        title="Dismiss"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
                   )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Uploaded video list */}
+          {videos.filter(isUploadedVideo).length > 0 && (
+            <div className="space-y-2">
+              {videos.filter(isUploadedVideo).map((video) => (
+                <div
+                  key={video.id}
+                  className="flex items-start gap-3 p-2 bg-surface-dark rounded-lg border border-surface-border"
+                >
+                  {video.thumbnailUrl ? (
+                    <img
+                      src={video.thumbnailUrl}
+                      alt=""
+                      className="w-16 h-9 object-cover rounded flex-shrink-0 mt-0.5"
+                    />
+                  ) : (
+                    <div className="w-16 h-9 rounded bg-orange-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <svg className="w-4 h-4 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">{video.title || "Uploaded Video"}</p>
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400">
+                        Uploaded
+                      </span>
+                      <span className="text-xs text-gray-500">Sessions:</span>
+                      {[1, 2, 3, 4].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => handleSetSplit(video.id, n)}
+                          className={`w-6 h-6 text-xs rounded transition font-medium
+                            ${(videoSplitCounts[video.id] ?? 1) === n
+                              ? "bg-neon-cyan text-black"
+                              : "bg-surface-border text-gray-400 hover:text-white"
+                            }`}
+                        >
+                          {n}
+                        </button>
+                      ))}
+                      {(videoSplitCounts[video.id] ?? 1) > 1 && video.durationSeconds && (
+                        <span className="text-xs text-gray-500">
+                          ≈ {formatDuration(Math.round(video.durationSeconds / (videoSplitCounts[video.id] ?? 1)))} each
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveVideo(video.id)}
+                    className="p-1.5 text-gray-400 hover:text-neon-pink transition flex-shrink-0 mt-0.5"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
               ))}
             </div>

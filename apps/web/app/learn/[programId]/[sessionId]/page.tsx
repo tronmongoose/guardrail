@@ -123,6 +123,9 @@ export default async function SessionPage({
         clips={finalClips.map((c) => ({
           id: c.id,
           youtubeVideoId: c.youtubeVideo.videoId,
+          blobUrl: c.youtubeVideo.url.includes("blob.vercel-storage.com")
+            ? c.youtubeVideo.url
+            : undefined,
           title: c.youtubeVideo.title ?? c.chapterTitle ?? "Untitled",
           chapterTitle: c.chapterTitle ?? c.youtubeVideo.title ?? "Untitled",
           chapterDescription: c.chapterDescription ?? undefined,
@@ -153,6 +156,8 @@ export default async function SessionPage({
         }))}
         autoAdvance={autoAdvance}
         userId={user.id}
+        transitionMode={program.transitionMode ?? "NONE"}
+        hideTransition={session.hideTransition ?? false}
       />
     </SkinThemeProvider>
   );

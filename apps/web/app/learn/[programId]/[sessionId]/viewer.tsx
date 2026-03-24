@@ -12,12 +12,16 @@ import {
   type OverlayPositionType,
 } from "@/components/viewer/ContentOverlay";
 import { ViewerNav } from "@/components/viewer/ViewerNav";
+import { BrandedTransitionScreen } from "@/components/viewer/BrandedTransitionScreen";
+import { SimpleTransitionScreen } from "@/components/viewer/SimpleTransitionScreen";
 
 // --- Types ---
 
 export interface ViewerClip {
   id: string;
   youtubeVideoId: string;
+  /** Set for uploaded (Vercel Blob) videos — use HTML5 <video> instead of YouTube iframe */
+  blobUrl?: string;
   title: string;
   chapterTitle: string;
   chapterDescription?: string;
@@ -52,9 +56,11 @@ export interface SessionViewerProps {
   actions: ViewerAction[];
   autoAdvance: boolean;
   userId: string;
+  transitionMode?: "NONE" | "SIMPLE" | "BRANDED";
+  hideTransition?: boolean;
 }
 
-type PlaybackState = "LOADING" | "PLAYING" | "TRANSITIONING" | "ENDED";
+type PlaybackState = "LOADING" | "INTRO" | "PLAYING" | "TRANSITIONING" | "OUTRO" | "ENDED";
 
 // --- Component ---
 
@@ -66,7 +72,10 @@ export function SessionViewer({
   actions,
   autoAdvance,
   userId,
+  transitionMode = "NONE",
+  hideTransition = false,
 }: SessionViewerProps) {
+  const effectiveMode = hideTransition || clips.length === 0 ? "NONE" : transitionMode;
   const [currentClipIndex, setCurrentClipIndex] = useState(0);
   const [playbackState, setPlaybackState] = useState<PlaybackState>("LOADING");
   const [activeOverlay, setActiveOverlay] = useState<ContentOverlayItem | null>(null);
@@ -118,8 +127,14 @@ export function SessionViewer({
   }, [currentClipIndex, clips.length]);
 
   const handleClipEnd = useCallback(() => {
-    if (!autoAdvance || currentClipIndex >= clips.length - 1) {
-      setPlaybackState("ENDED");
+    const isLastClip = currentClipIndex >= clips.length - 1;
+
+    if (!autoAdvance || isLastClip) {
+      if (isLastClip && effectiveMode !== "NONE") {
+        setPlaybackState("OUTRO");
+      } else {
+        setPlaybackState("ENDED");
+      }
       return;
     }
 
@@ -132,7 +147,7 @@ export function SessionViewer({
     } else {
       setPlaybackState("TRANSITIONING");
     }
-  }, [autoAdvance, currentClipIndex, clips, advanceToNextClip]);
+  }, [autoAdvance, currentClipIndex, clips, advanceToNextClip, effectiveMode]);
 
   const handleTransitionComplete = useCallback(() => {
     advanceToNextClip();
@@ -144,7 +159,19 @@ export function SessionViewer({
   }, []);
 
   const handlePlayerReady = useCallback(() => {
+    if (effectiveMode !== "NONE") {
+      setPlaybackState("INTRO");
+    } else {
+      setPlaybackState("PLAYING");
+    }
+  }, [effectiveMode]);
+
+  const handleIntroComplete = useCallback(() => {
     setPlaybackState("PLAYING");
+  }, []);
+
+  const handleOutroComplete = useCallback(() => {
+    setPlaybackState("ENDED");
   }, []);
 
   const handleDismissOverlay = useCallback(() => {
@@ -177,15 +204,29 @@ export function SessionViewer({
         <div className="flex flex-1 flex-col">
           {hasClips ? (
             <div className="relative w-full">
-              <VideoPlayer
-                videoId={currentClip.youtubeVideoId}
-                startSeconds={currentClip.startSeconds}
-                endSeconds={currentClip.endSeconds}
-                onTimeUpdate={handleTimeUpdate}
-                onClipEnd={handleClipEnd}
-                onReady={handlePlayerReady}
-                className="w-full"
-              />
+              {currentClip.blobUrl ? (
+                <video
+                  key={currentClip.id}
+                  src={currentClip.blobUrl}
+                  className="w-full aspect-video bg-black"
+                  controls
+                  playsInline
+                  preload="metadata"
+                  onLoadedMetadata={handlePlayerReady}
+                  onEnded={handleClipEnd}
+                  onTimeUpdate={(e) => handleTimeUpdate(e.currentTarget.currentTime)}
+                />
+              ) : (
+                <VideoPlayer
+                  videoId={currentClip.youtubeVideoId}
+                  startSeconds={currentClip.startSeconds}
+                  endSeconds={currentClip.endSeconds}
+                  onTimeUpdate={handleTimeUpdate}
+                  onClipEnd={handleClipEnd}
+                  onReady={handlePlayerReady}
+                  className="w-full"
+                />
+              )}
               <TransitionOverlay
                 active={playbackState === "TRANSITIONING"}
                 style={transitionStyle}
@@ -196,6 +237,40 @@ export function SessionViewer({
                 overlay={activeOverlay}
                 onDismiss={handleDismissOverlay}
               />
+
+              {/* Session intro screen */}
+              {playbackState === "INTRO" && effectiveMode === "BRANDED" && (
+                <BrandedTransitionScreen
+                  variant="intro"
+                  sessionTitle={session.title}
+                  keyTakeaways={session.keyTakeaways}
+                  onComplete={handleIntroComplete}
+                />
+              )}
+              {playbackState === "INTRO" && effectiveMode === "SIMPLE" && (
+                <SimpleTransitionScreen
+                  variant="intro"
+                  sessionTitle={session.title}
+                  onComplete={handleIntroComplete}
+                />
+              )}
+
+              {/* Session outro screen */}
+              {playbackState === "OUTRO" && effectiveMode === "BRANDED" && (
+                <BrandedTransitionScreen
+                  variant="outro"
+                  sessionTitle={session.title}
+                  keyTakeaways={session.keyTakeaways}
+                  onComplete={handleOutroComplete}
+                />
+              )}
+              {playbackState === "OUTRO" && effectiveMode === "SIMPLE" && (
+                <SimpleTransitionScreen
+                  variant="outro"
+                  sessionTitle={session.title}
+                  onComplete={handleOutroComplete}
+                />
+              )}
             </div>
           ) : (
             <div

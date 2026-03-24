@@ -18,7 +18,7 @@ interface ActionData {
   type: string;
   instructions: string | null;
   reflectionPrompt: string | null;
-  youtubeVideo: { videoId: string; title: string | null } | null;
+  youtubeVideo: { videoId: string; title: string | null; url: string } | null;
   progress: ActionProgress[];
 }
 
@@ -559,7 +559,7 @@ export function LearnerTimeline({
                                   </p>
                                 )}
 
-                                {/* YouTube embed */}
+                                {/* Video embed — YouTube iframe or HTML5 video for uploads */}
                                 {action.youtubeVideo && (
                                   <div
                                     className="aspect-video overflow-hidden"
@@ -568,13 +568,24 @@ export function LearnerTimeline({
                                       border: "var(--token-comp-video-border)",
                                     }}
                                   >
-                                    <iframe
-                                      src={`https://www.youtube.com/embed/${action.youtubeVideo.videoId}?rel=0&modestbranding=1&iv_load_policy=3`}
-                                      title={action.youtubeVideo.title || action.title}
-                                      className="w-full h-full"
-                                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                      allowFullScreen
-                                    />
+                                    {action.youtubeVideo.url.includes("blob.vercel-storage.com") ? (
+                                      <video
+                                        src={action.youtubeVideo.url}
+                                        title={action.youtubeVideo.title || action.title}
+                                        className="w-full h-full"
+                                        controls
+                                        playsInline
+                                        preload="metadata"
+                                      />
+                                    ) : (
+                                      <iframe
+                                        src={`https://www.youtube.com/embed/${action.youtubeVideo.videoId}?rel=0&modestbranding=1&iv_load_policy=3`}
+                                        title={action.youtubeVideo.title || action.title}
+                                        className="w-full h-full"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowFullScreen
+                                      />
+                                    )}
                                   </div>
                                 )}
 

@@ -25,7 +25,7 @@ export async function POST(
   }
 
   const body = await req.json();
-  const { title, type } = body;
+  const { title, type, youtubeVideoId } = body;
 
   if (!type || !["WATCH", "READ", "DO", "REFLECT"].includes(type)) {
     return NextResponse.json({ error: "Invalid action type" }, { status: 400 });
@@ -44,6 +44,7 @@ export async function POST(
       type,
       orderIndex,
       sessionId,
+      ...(youtubeVideoId ? { youtubeVideoId } : {}),
     },
   });
 

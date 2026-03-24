@@ -39,39 +39,55 @@ export function SessionPreview({ session, skin, onBack }: SessionPreviewProps) {
 
       {/* Content */}
       <div className="p-4 space-y-6">
-        {/* Video placeholder */}
-        {watchAction && (
-          <div
-            className={`aspect-video flex items-center justify-center ${
-              skin.videoFrame === "rounded" ? "rounded-xl" : "rounded"
-            }`}
-            style={{ backgroundColor: skin.colors.bgSecondary }}
-          >
-            <div className="text-center">
-              <svg
-                className="w-16 h-16 mx-auto mb-2"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                style={{ color: skin.colors.textMuted }}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+        {/* Video hero with thumbnail + play button */}
+        {watchAction && (() => {
+          const thumbnailUrl =
+            session.compositeSession?.clips?.[0]?.youtubeVideo?.thumbnailUrl ??
+            watchAction.youtubeVideo?.thumbnailUrl ??
+            (watchAction.youtubeVideo?.videoId
+              ? `https://img.youtube.com/vi/${watchAction.youtubeVideo.videoId}/hqdefault.jpg`
+              : null);
+
+          return (
+            <div
+              className={`relative aspect-video overflow-hidden ${
+                skin.videoFrame === "rounded" ? "rounded-xl" : "rounded"
+              }`}
+              style={{ backgroundColor: "#000" }}
+            >
+              {thumbnailUrl ? (
+                <img
+                  src={thumbnailUrl}
+                  alt={watchAction.title}
+                  className="absolute inset-0 w-full h-full object-cover"
                 />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              ) : (
+                <div
+                  className="absolute inset-0"
+                  style={{ backgroundColor: skin.colors.bgSecondary }}
                 />
-              </svg>
-              <p style={{ color: skin.colors.textMuted }}>Video Player</p>
+              )}
+              {/* Dark scrim so play button is always visible */}
+              <div className="absolute inset-0 bg-black/30" />
+              {/* Play button */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center shadow-lg"
+                  style={{ backgroundColor: skin.colors.accent }}
+                >
+                  <svg
+                    className="w-7 h-7 ml-1"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                    style={{ color: "#fff" }}
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Session info */}
         {session.summary && (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useGenerationSteps } from "./useGenerationSteps";
 import { GenerationSteps } from "./GenerationSteps";
 
@@ -26,6 +26,8 @@ export function GenerationNotification({
   onDismiss,
 }: GenerationNotificationProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const isOnEditPage = pathname === `/programs/${programId}/edit`;
   const [job, setJob] = useState<GenerationJob | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
@@ -45,6 +47,11 @@ export function GenerationNotification({
     }
   }, [programId, onComplete]);
 
+  const handleDismiss = useCallback(() => {
+    setDismissed(true);
+    onDismiss?.();
+  }, [onDismiss]);
+
   useEffect(() => {
     // Initial fetch
     pollStatus();
@@ -59,6 +66,16 @@ export function GenerationNotification({
     return () => clearInterval(interval);
   }, [pollStatus, job?.status]);
 
+  // When on the edit page and generation completes: trigger a reload of program data via custom event,
+  // then auto-dismiss the toast. This handles the case where the edit page's own polling isn't running.
+  useEffect(() => {
+    if (job?.status === "COMPLETED" && isOnEditPage) {
+      window.dispatchEvent(new CustomEvent("generation-complete", { detail: { programId } }));
+      const timer = setTimeout(() => handleDismiss(), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [job?.status, isOnEditPage, programId, handleDismiss]);
+
   if (dismissed || !job) return null;
 
   // Don't show if completed more than 10 seconds ago
@@ -68,11 +85,6 @@ export function GenerationNotification({
       return null;
     }
   }
-
-  const handleDismiss = () => {
-    setDismissed(true);
-    onDismiss?.();
-  };
 
   const handleViewProgram = () => {
     router.push(`/programs/${programId}/edit`);
@@ -149,7 +161,7 @@ export function GenerationNotification({
             )}
 
             {/* Actions */}
-            {job.status === "COMPLETED" && (
+            {job.status === "COMPLETED" && !isOnEditPage && (
               <button
                 onClick={handleViewProgram}
                 className="mt-3 w-full px-3 py-1.5 text-xs font-medium rounded-lg bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30 transition"

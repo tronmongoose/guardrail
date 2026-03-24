@@ -85,6 +85,8 @@ function DashboardContent() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("stripe") === "success") {
@@ -143,6 +145,22 @@ function DashboardContent() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create program");
       setCreating(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/programs/${deleteTarget.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+      setPrograms((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+      setDeleteTarget(null);
+      showToast("Program deleted.", "success");
+    } catch {
+      showToast("Failed to delete program.", "error");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -359,7 +377,7 @@ function DashboardContent() {
                     </div>
 
                     {/* Share */}
-                    <div className="relative flex-shrink-0">
+                    <div className="relative flex-shrink-0 group/share">
                       <button
                         onClick={(e) => {
                           e.preventDefault();
@@ -379,12 +397,34 @@ function DashboardContent() {
                           <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
                         </svg>
                       </button>
-                      {copiedId === p.id && (
+                      {copiedId === p.id ? (
                         <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 rounded text-xs text-white whitespace-nowrap pointer-events-none" style={{ backgroundColor: "#1a1a24", border: "1px solid rgba(255,255,255,0.15)" }}>
                           Copied!
                         </span>
+                      ) : (
+                        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 px-2 py-0.5 rounded text-xs text-white whitespace-nowrap pointer-events-none opacity-0 group-hover/share:opacity-100 transition-opacity" style={{ backgroundColor: "#1a1a24", border: "1px solid rgba(255,255,255,0.15)" }}>
+                          Copy link to share with your audience
+                        </span>
                       )}
                     </div>
+
+                    {/* Delete */}
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDeleteTarget({ id: p.id, title: p.title });
+                      }}
+                      className="flex-shrink-0 p-1 text-gray-600 hover:text-red-400 transition-colors"
+                      aria-label="Delete program"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                      </svg>
+                    </button>
 
                     {/* Arrow */}
                     <span className="flex-shrink-0 text-gray-300 group-hover:text-neon-cyan transition text-lg leading-none">
@@ -398,6 +438,57 @@ function DashboardContent() {
         </div>
       </main>
     </div>
+
+    {/* Delete confirmation modal */}
+    {deleteTarget && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ backgroundColor: "rgba(0,0,0,0.7)" }}
+        onClick={() => !deleting && setDeleteTarget(null)}
+      >
+        <div
+          className="w-full max-w-sm rounded-2xl p-6 space-y-4"
+          style={{ backgroundColor: "#111118", border: "1px solid rgba(255,255,255,0.12)" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "rgba(239,68,68,0.15)" }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f87171" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="3 6 5 6 21 6" />
+                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                <path d="M10 11v6M14 11v6" />
+                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-white">Delete program?</h2>
+              <p className="text-sm text-gray-400 mt-0.5">This cannot be undone.</p>
+            </div>
+          </div>
+          <p className="text-sm text-gray-300">
+            <span className="font-medium text-white">&ldquo;{deleteTarget.title}&rdquo;</span> and all its content will be permanently deleted.
+          </p>
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={() => setDeleteTarget(null)}
+              disabled={deleting}
+              className="flex-1 py-2 rounded-xl text-sm font-medium text-gray-300 hover:text-white transition disabled:opacity-50"
+              style={{ backgroundColor: "#1a1a24", border: "1px solid rgba(255,255,255,0.1)" }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="flex-1 py-2 rounded-xl text-sm font-medium text-white transition disabled:opacity-50"
+              style={{ backgroundColor: deleting ? "#7f1d1d" : "#dc2626" }}
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 }

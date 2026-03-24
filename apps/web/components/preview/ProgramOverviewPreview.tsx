@@ -19,6 +19,10 @@ interface ProgramOverviewPreviewProps {
   // skin kept for backwards compat — CSS vars are injected by the parent frame
   skin: { name: string };
   onSelectSession: (sessionId: string) => void;
+  /** Force mobile single-column layout regardless of viewport width. Use when
+   *  rendering inside a narrow container (e.g. device-preview frame) where
+   *  Tailwind responsive breakpoints fire against the browser viewport. */
+  layout?: "auto" | "mobile";
 }
 
 const actionTypeOrder = ["WATCH", "READ", "DO", "REFLECT"] as const;
@@ -32,7 +36,9 @@ const actionTypeIcons: Record<string, string> = {
 export function ProgramOverviewPreview({
   program,
   onSelectSession,
+  layout = "auto",
 }: ProgramOverviewPreviewProps) {
+  const isMobile = layout === "mobile";
   const totalSessions = program.weeks.reduce((n, w) => n + w.sessions.length, 0);
   const allActions = program.weeks.flatMap((w) => w.sessions.flatMap((s) => s.actions));
   const actionTypeCounts = allActions.reduce(
@@ -70,17 +76,17 @@ export function ProgramOverviewPreview({
     >
       {/* ── Hero ──────────────────────────────────────────────────────────────── */}
       <section className="px-6 pt-16 pb-8 max-w-5xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
+        <div className={`grid grid-cols-1 items-center ${isMobile ? "gap-10" : "md:grid-cols-2 gap-10 md:gap-16"}`}>
 
           {/* Left: text */}
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6 min-w-0 overflow-hidden">
             {creatorName && (
               <p
                 style={{
                   fontFamily: "var(--token-text-label-sm-font)",
                   fontSize: "var(--token-text-label-sm-size)",
                   fontWeight: "var(--token-text-label-sm-weight)",
-                  color: "var(--token-color-accent)",
+                  color: "var(--token-color-text-secondary)",
                   textTransform: "uppercase",
                   letterSpacing: "0.15em",
                 }}
@@ -95,11 +101,8 @@ export function ProgramOverviewPreview({
                 fontSize: "clamp(1.75rem, 4vw, var(--token-text-heading-xl-size))",
                 fontWeight: "var(--token-text-heading-xl-weight)",
                 lineHeight: "1.05",
-                background:
-                  "linear-gradient(90deg, var(--token-color-accent), var(--token-color-accent-secondary, var(--token-color-accent)))",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
+                color: "var(--token-color-text-primary)",
+                wordBreak: "break-word",
               }}
             >
               {program.targetTransformation || program.title}
@@ -140,7 +143,7 @@ export function ProgramOverviewPreview({
 
           {/* Right: At a Glance card (desktop only) */}
           <div
-            className="hidden md:flex flex-col gap-5 p-7"
+            className={`${isMobile ? "hidden" : "hidden md:flex"} flex-col gap-5 p-7`}
             style={{
               borderRadius: "var(--token-radius-lg)",
               backgroundColor: "var(--token-color-bg-elevated)",
@@ -231,7 +234,7 @@ export function ProgramOverviewPreview({
       </section>
 
       {/* ── Mobile stats strip ────────────────────────────────────────────────── */}
-      <div className="md:hidden px-6 pb-6 max-w-5xl mx-auto">
+      <div className={`${isMobile ? "block" : "md:hidden"} px-6 pb-6 max-w-5xl mx-auto`}>
         <p
           className="flex flex-wrap gap-x-3 gap-y-1"
           style={{
@@ -254,7 +257,7 @@ export function ProgramOverviewPreview({
       {hasWhoSection && (
         <section className="px-6 pb-10 max-w-5xl mx-auto">
           <div
-            className={`grid grid-cols-1 gap-4 ${program.targetAudience && program.outcomeStatement ? "md:grid-cols-2" : ""}`}
+            className={`grid grid-cols-1 gap-4 ${!isMobile && program.targetAudience && program.outcomeStatement ? "md:grid-cols-2" : ""}`}
           >
             {program.targetAudience && (
               <div
@@ -342,13 +345,13 @@ export function ProgramOverviewPreview({
             fontFamily: "var(--token-text-heading-lg-font)",
             fontSize: "var(--token-text-heading-lg-size)",
             fontWeight: "var(--token-text-heading-lg-weight)",
-            color: "var(--token-color-accent)",
+            color: "var(--token-color-text-primary)",
           }}
         >
           What&apos;s inside
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className={`grid grid-cols-1 gap-8 ${isMobile ? "" : "md:grid-cols-2"}`}>
           {/* Left: weeks list */}
           <div className="flex flex-col gap-5">
             {program.weeks.map((week) => (
@@ -486,7 +489,7 @@ export function ProgramOverviewPreview({
 
       {/* ── Pricing ──────────────────────────────────────────────────────────── */}
       {priceDisplay !== null && (
-        <section className="px-6 pt-8 pb-12 max-w-5xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <section className={`px-6 pt-8 pb-12 max-w-5xl mx-auto flex flex-col gap-6 ${isMobile ? "" : "md:flex-row md:items-center md:justify-between"} items-start`}>
           <div>
             <p
               style={{

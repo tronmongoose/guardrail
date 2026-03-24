@@ -34,11 +34,12 @@ export async function PATCH(
     select: { id: true, title: true },
   });
   const titleMap = new Map(currentWeeks.map((w) => [w.id, w.title]));
-  const autoTitlePattern = /^Week\s+\d+$/i;
+  // Matches "Week N" or "Lesson N" (auto-generated titles that should track position)
+  const autoTitlePattern = /^(Week|Lesson)\s+\d+$/i;
 
   // Two-pass update to avoid unique constraint violations on (programId, weekNumber):
   // First set to negative temporaries, then to final positive values.
-  // Also update auto-generated titles ("Week N") to reflect the new position.
+  // Also update auto-generated titles ("Week N" / "Lesson N") to reflect the new position.
   try {
     await prisma.$transaction([
       ...weekIds.map((weekId, index) =>
@@ -51,8 +52,10 @@ export async function PATCH(
         const newWeekNumber = index + 1;
         const currentTitle = titleMap.get(weekId) ?? "";
         const data: { weekNumber: number; title?: string } = { weekNumber: newWeekNumber };
-        if (autoTitlePattern.test(currentTitle)) {
-          data.title = `Week ${newWeekNumber}`;
+        const match = currentTitle.match(/^(Week|Lesson)\s+\d+$/i);
+        if (match) {
+          // Preserve the prefix (Week or Lesson) the creator used
+          data.title = `${match[1]} ${newWeekNumber}`;
         }
         return prisma.week.update({ where: { id: weekId }, data });
       }),

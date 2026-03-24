@@ -150,7 +150,7 @@ export default function NewProgramPage() {
         if (parsed.targetAudience) setTargetAudience(parsed.targetAudience);
         if (parsed.targetTransformation) setTargetTransformation(parsed.targetTransformation);
         if (parsed.durationWeeks) setDurationWeeks(parsed.durationWeeks);
-        if (parsed.pacingMode) setPacingMode(parsed.pacingMode);
+        // pacingMode intentionally not restored — always defaults to unlock_on_complete
         if (parsed.vibePrompt) setVibePrompt(parsed.vibePrompt);
         if (parsed.videoHints) setVideoHints(parsed.videoHints);
         if (parsed.skinId) setSkinId(parsed.skinId);
@@ -173,7 +173,7 @@ export default function NewProgramPage() {
           if (program.targetAudience) setTargetAudience(program.targetAudience);
           if (program.targetTransformation) setTargetTransformation(program.targetTransformation);
           if (program.durationWeeks) setDurationWeeks(program.durationWeeks);
-          if (program.pacingMode) setPacingMode(program.pacingMode);
+          // pacingMode intentionally not restored from DB — always defaults to unlock_on_complete
           if (program.vibePrompt) setVibePrompt(program.vibePrompt);
           if (program.skinId) setSkinId(program.skinId);
           // Infer step from available data
@@ -436,7 +436,7 @@ export default function NewProgramPage() {
     for (const item of pending) {
       try {
         const blob = await upload(item.file.name, item.file, {
-          access: "public",
+          access: "private",
           handleUploadUrl: `/api/programs/${programId}/videos/upload`,
           onUploadProgress: ({ percentage }) => {
             setPendingUploads((prev) =>

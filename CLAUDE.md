@@ -91,7 +91,7 @@ Schema: [apps/web/prisma/schema.prisma](apps/web/prisma/schema.prisma)
 | Model | Purpose |
 |---|---|
 | `User` | Creators (clerkId) and learners (email). Same table, `role` field distinguishes. |
-| `Program` | Creator-owned program. Has `stripeProductId`, `stripePriceId`, `skinId`, `pacingMode`. |
+| `Program` | Creator-owned program. Has `stripeProductId`, `stripePriceId`, `skinId`, `pacingMode`, `videoGroups`, `sectionBoundaries`. |
 | `Week → Session → Action` | Hierarchical content. Actions are WATCH / READ / DO / REFLECT. |
 | `Entitlement` | Purchase record. Tracks `currentWeek`, `status` (ACTIVE/REVOKED/EXPIRED). Unique on `(userId, programId)`. |
 | `LearnerProgress` | Per-action completion + reflection text. |
@@ -125,25 +125,70 @@ Edge case: if a creator somehow lacks a Stripe Connect account at checkout time,
 
 ## Skin / Theme System
 
-- 4 built-in skins: `default`, `professional`, `warm`, `minimal`
+- **50+ skin bundles** across 8 categories: `activity`, `classic`, `creative`, `entertainment`, `lifestyle`, `media`, `music`, `pro`
+- Legacy skins (`default`, `professional`, `warm`, `minimal`) have been removed — all programs use the new catalog
 - Token types defined in [packages/shared/src/skin-tokens.ts](packages/shared/src/skin-tokens.ts)
 - Full spec in [docs/SKIN-CONTRACT.md](docs/SKIN-CONTRACT.md)
 - Runtime CSS variable injection via [apps/web/lib/skin-bridge.ts](apps/web/lib/skin-bridge.ts)
 - Both modern (`--token-*`) and legacy (`--skin-*`) CSS variables are emitted for compatibility
 - Token categories: `color`, `text`, `radius`, `shadow`, `component`
+- Optional `background.gradient` token emits `--token-color-bg-gradient` for learner page gradient backgrounds
+- `SkinPicker` uses a two-panel layout (category tabs + skin grid) with hover-to-preview via `SkinPreviewPanel`
+- `SkinPreviewPanel` renders a live mock learner page using CSS token vars; shows Learner step view and Program covers sections
 
 ---
 
 ## AI Pipeline
 
 1. Creator pastes YouTube video URLs
-2. HuggingFace generates embeddings from video metadata/transcripts ([packages/ai/src/hf-embeddings.ts](packages/ai/src/hf-embeddings.ts))
-3. K-means clustering groups related videos ([packages/ai/src/clustering.ts](packages/ai/src/clustering.ts))
-4. LLM generates a structured program draft (weeks/sessions/actions) ([packages/ai/src/llm-adapter.ts](packages/ai/src/llm-adapter.ts))
-5. Gemini 2.5 Flash analyzes individual videos for transcripts, key moments, topics ([packages/ai/src/gemini-video-analyzer.ts](packages/ai/src/gemini-video-analyzer.ts))
-6. Creator reviews the `ProgramDraft` and approves or edits before publishing
+2. **Video segmentation** ([packages/ai/src/video-segmentation.ts](packages/ai/src/video-segmentation.ts)): long videos (>10 min) are split into virtual child records using Gemini topic timestamps — no physical file splitting
+3. HuggingFace generates embeddings from video metadata/transcripts ([packages/ai/src/hf-embeddings.ts](packages/ai/src/hf-embeddings.ts))
+4. K-means clustering groups related videos ([packages/ai/src/clustering.ts](packages/ai/src/clustering.ts))
+5. LLM generates a structured program draft (weeks/sessions/actions) ([packages/ai/src/llm-adapter.ts](packages/ai/src/llm-adapter.ts))
+6. Gemini 2.5 Flash analyzes individual videos for full topic extraction, segment boundaries, transcripts ([packages/ai/src/gemini-video-analyzer.ts](packages/ai/src/gemini-video-analyzer.ts))
+7. Async generation pipeline handles segmented videos as independent content pieces
+8. Creator reviews the `ProgramDraft` and approves or edits before publishing
 
 Use `LLM_PROVIDER=stub` locally to skip all LLM API calls.
+
+---
+
+## Program Creation Wizard
+
+4-step wizard at `apps/web/components/wizard/`:
+
+| Step | Label | Component | Notes |
+|---|---|---|---|
+| 1 | Basics | `StepBasics` | Title + target transformation only (description/outcome removed from UI but kept in data model) |
+| 2 | Content | `StepContent` | YouTube URLs + file artifact uploads |
+| 3 | Lessons flow | `StepDuration` | Program length presets + pacing mode (drip vs unlock-on-complete) |
+| 4 | Theme | `StepReview` | `SkinPicker` as hero; `vibePrompt` + `skinId` saved on generation |
+
+- Wizard state auto-persists to `localStorage` (artifacts' `extractedText` excluded to avoid quota issues)
+- On final step, saves program details via `PATCH /api/programs/[id]`, then calls `POST /api/programs/[id]/generate-async`
+
+---
+
+## Program Editor
+
+Tab-based editor (`ProgramBuilderSplit`) with four tabs:
+
+- **Curriculum** — drag-and-drop week/session tree (`TreeNavigation`), single `DndContext` to avoid nested sensor interference, cross-group session moves, inline rename on click
+- **Settings** — program metadata
+- **Pricing** — price, promo codes
+- **Preview** — live skin preview
+
+Drag-and-drop notes:
+- Week reordering uses a two-pass DB transaction to avoid unique constraint conflicts on `sortOrder`
+- Session moves send `weekId` to support cross-group (cross-week) moves
+- "Week" label swaps to "Lesson" in display when `pacingMode = UNLOCK_ON_COMPLETE`
+
+---
+
+## Promo Codes
+
+- Full CRUD API at `POST/GET/PATCH/DELETE /api/programs/[id]/promo-codes`
+- Validate endpoint: `POST /api/promo-codes/validate`
 
 ---
 
@@ -168,7 +213,14 @@ Use `LLM_PROVIDER=stub` locally to skip all LLM API calls.
 | Magic link utility | [apps/web/lib/magic-link.ts](apps/web/lib/magic-link.ts) |
 | Skin bridge (CSS variable injection) | [apps/web/lib/skin-bridge.ts](apps/web/lib/skin-bridge.ts) |
 | Skin token types | [packages/shared/src/skin-tokens.ts](packages/shared/src/skin-tokens.ts) |
+| Skin picker component | [apps/web/components/SkinPicker.tsx](apps/web/components/SkinPicker.tsx) |
+| Skin preview panel | [apps/web/components/SkinPreviewPanel.tsx](apps/web/components/SkinPreviewPanel.tsx) |
 | LLM adapter | [packages/ai/src/llm-adapter.ts](packages/ai/src/llm-adapter.ts) |
+| Video segmentation | [packages/ai/src/video-segmentation.ts](packages/ai/src/video-segmentation.ts) |
+| Gemini video analyzer | [packages/ai/src/gemini-video-analyzer.ts](packages/ai/src/gemini-video-analyzer.ts) |
+| Promo codes API | [apps/web/app/api/programs/[id]/promo-codes/route.ts](apps/web/app/api/programs/[id]/promo-codes/route.ts) |
+| Platform checkout | [apps/web/app/api/checkout/platform/route.ts](apps/web/app/api/checkout/platform/route.ts) |
+| Dashboard settings | [apps/web/app/dashboard/settings/page.tsx](apps/web/app/dashboard/settings/page.tsx) |
 | Next.js config | [apps/web/next.config.ts](apps/web/next.config.ts) |
 | Clerk middleware | [apps/web/middleware.ts](apps/web/middleware.ts) |
 | Stripe client init | [apps/web/lib/stripe.ts](apps/web/lib/stripe.ts) |

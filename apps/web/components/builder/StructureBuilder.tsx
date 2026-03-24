@@ -25,6 +25,7 @@ export interface ActionData {
   instructions: string | null;
   reflectionPrompt: string | null;
   youtubeVideoId: string | null;
+  youtubeVideo?: { videoId: string; thumbnailUrl: string | null } | null;
   orderIndex: number;
 }
 
@@ -57,6 +58,7 @@ export interface SessionData {
   title: string;
   summary: string | null;
   keyTakeaways?: string[];
+  hideTransition?: boolean;
   orderIndex: number;
   actions: ActionData[];
   compositeSession?: CompositeSessionData | null;
@@ -75,6 +77,7 @@ export interface YouTubeVideoData {
   videoId: string;
   title: string | null;
   thumbnailUrl: string | null;
+  url: string;
 }
 
 interface StructureBuilderProps {
@@ -82,6 +85,7 @@ interface StructureBuilderProps {
   weeks: WeekData[];
   videos: YouTubeVideoData[];
   onUpdate: () => void;
+  programTransitionMode?: "NONE" | "SIMPLE" | "BRANDED";
 }
 
 export function StructureBuilder({

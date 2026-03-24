@@ -29,7 +29,12 @@ export async function GET(
             sessions: {
               orderBy: { orderIndex: "asc" },
               include: {
-                actions: { orderBy: { orderIndex: "asc" } },
+                actions: {
+                  orderBy: { orderIndex: "asc" },
+                  include: {
+                    youtubeVideo: { select: { videoId: true, thumbnailUrl: true } },
+                  },
+                },
                 compositeSession: {
                   include: {
                     clips: { orderBy: { orderIndex: "asc" }, include: { youtubeVideo: true } },
@@ -117,9 +122,34 @@ export async function PATCH(
       drip_by_week: "DRIP_BY_WEEK",
       unlock_on_complete: "UNLOCK_ON_COMPLETE",
     };
-    data.pacingMode = pacingModeMap[body.pacingMode] || "DRIP_BY_WEEK";
+    data.pacingMode = pacingModeMap[body.pacingMode] || "UNLOCK_ON_COMPLETE";
+  }
+  if (body.transitionMode !== undefined) {
+    const validModes = ["NONE", "SIMPLE", "BRANDED"];
+    if (validModes.includes(body.transitionMode)) {
+      data.transitionMode = body.transitionMode;
+    }
   }
 
   const program = await prisma.program.update({ where: { id }, data });
   return NextResponse.json(program);
+}
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const user = await getOrCreateUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const existing = await prisma.program.findUnique({
+    where: { id },
+    select: { creatorId: true },
+  });
+  if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (existing.creatorId !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  await prisma.program.delete({ where: { id } });
+  return NextResponse.json({ success: true });
 }

@@ -18,6 +18,7 @@ import { ProgramOverviewPreview } from "@/components/preview/ProgramOverviewPrev
 import { SessionPreview } from "@/components/preview/SessionPreview";
 import { useGenerationSteps } from "@/components/generation/useGenerationSteps";
 import { GenerationSteps } from "@/components/generation/GenerationSteps";
+import { useGeneration } from "@/components/generation/GenerationProvider";
 
 interface StripeConnectStatus {
   connected: boolean;
@@ -45,6 +46,7 @@ interface Program {
   targetTransformation: string | null;
   vibePrompt: string | null;
   skinId: string;
+  transitionMode: "NONE" | "SIMPLE" | "BRANDED";
   durationWeeks: number;
   pacingMode: "DRIP_BY_WEEK" | "UNLOCK_ON_COMPLETE";
   slug: string;
@@ -121,6 +123,7 @@ export default function ProgramEditPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { showToast } = useToast();
+  const { activeGenerations } = useGeneration();
 
   const [program, setProgram] = useState<Program | null>(null);
   const [loading, setLoading] = useState(true);
@@ -152,6 +155,7 @@ export default function ProgramEditPage() {
 
   // Async generation tracking
   const [asyncGenerating, setAsyncGenerating] = useState(false);
+  const [genStatusChecked, setGenStatusChecked] = useState(false); // true once the status API call has resolved
   const [asyncStage, setAsyncStage] = useState<string | null>(null);
   const [asyncProgress, setAsyncProgress] = useState(0);
   const [lastGenError, setLastGenError] = useState<string | null>(null);
@@ -217,29 +221,47 @@ export default function ProgramEditPage() {
       .then(data => {
         if (data) setStripeStatus(data);
       });
-    // Check if async generation is in progress or just completed
+    // Check if async generation is in progress or just completed.
+    // genStatusChecked stays false until this resolves, preventing "Ready to generate!" from
+    // showing prematurely while we don't yet know whether generation is actually in progress.
     fetch(`/api/programs/${id}/generate-async/status`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (!data) return;
-        if (data.status === "PENDING" || data.status === "PROCESSING") {
+        if (data?.status === "PENDING" || data?.status === "PROCESSING") {
           setAsyncGenerating(true);
           setAsyncStage(data.stage);
           setAsyncProgress(data.progress || 0);
-        } else if (data.status === "FAILED" && data.error) {
+        } else if (data?.status === "FAILED" && data.error) {
           setLastGenError(data.error);
-        } else if (data.status === "COMPLETED" && data.completedAt) {
+        } else if (data?.status === "COMPLETED" && data.completedAt) {
           // Generation finished recently - reload program to pick up persisted weeks.
-          // This handles the race where the user is redirected from /new and generation
-          // finishes before or just as the edit page loads.
           const completedAt = new Date(data.completedAt);
           if (Date.now() - completedAt.getTime() < 30000) {
-            // Small delay to ensure persistence is fully committed
             setTimeout(() => load(), 500);
           }
         }
-      });
+      })
+      .finally(() => setGenStatusChecked(true));
   }, [load, id]);
+
+  // Listen for generation-complete event dispatched by GenerationNotification when on this page.
+  // This fires load() even when asyncGenerating is false (e.g. status was already COMPLETED on mount).
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ programId: string }>).detail;
+      if (detail.programId === id) load();
+    };
+    window.addEventListener("generation-complete", handler);
+    return () => window.removeEventListener("generation-complete", handler);
+  }, [id, load]);
+
+  // Bridge activeGenerations → asyncGenerating so polling starts when the wizard triggers generation.
+  // Guards with genStatusChecked to avoid interfering with the initial status-check path.
+  useEffect(() => {
+    if (activeGenerations.includes(id) && !asyncGenerating && genStatusChecked) {
+      setAsyncGenerating(true);
+    }
+  }, [activeGenerations, id, asyncGenerating, genStatusChecked]);
 
   // Poll for async generation progress (max 10 minutes)
   useEffect(() => {
@@ -840,7 +862,7 @@ export default function ProgramEditPage() {
                 </button>
               </div>
             </div>
-          ) : program.weeks.length === 0 && asyncGenerating ? (
+          ) : program.weeks.length === 0 && (asyncGenerating || !genStatusChecked || activeGenerations.includes(id)) ? (
             <GenerationProgress stage={asyncStage} progress={asyncProgress} onCancel={cancelGeneration} />
           ) : program.weeks.length === 0 ? (
             <div className="max-w-lg mx-auto mt-16 text-center">
@@ -892,6 +914,7 @@ export default function ProgramEditPage() {
               videos={program.videos}
               onUpdate={load}
               pacingMode={program.pacingMode}
+              programTransitionMode={program.transitionMode ?? "NONE"}
             />
           )}
         </main>
@@ -1249,7 +1272,7 @@ export default function ProgramEditPage() {
         <div className="max-w-2xl mx-auto py-8 px-4" style={{ background: "#0a0a0f", minHeight: "calc(100vh - 112px)" }}>
           <div className="space-y-3">
             <h2 className="text-base font-semibold text-white">Theme</h2>
-            <SkinPicker value={program.skinId} onChange={handleSkinChange} />
+            <SkinPicker value={program.skinId} onChange={handleSkinChange} thumbnailUrl={program.videos[0]?.thumbnailUrl ?? null} />
           </div>
         </div>
       )}
@@ -1323,6 +1346,7 @@ export default function ProgramEditPage() {
                   <ProgramOverviewPreview
                     program={program}
                     skin={previewSkin}
+                    layout={previewDeviceMode === "mobile" ? "mobile" : "auto"}
                     onSelectSession={(sessionId) => {
                       setPreviewSelectedSessionId(sessionId);
                       setPreviewView("session");

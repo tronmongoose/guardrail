@@ -29,6 +29,7 @@ export async function PATCH(
   if (body.title !== undefined) data.title = body.title;
   if (body.summary !== undefined) data.summary = body.summary;
   if (body.keyTakeaways !== undefined) data.keyTakeaways = body.keyTakeaways;
+  if (body.hideTransition !== undefined) data.hideTransition = body.hideTransition;
   if (body.weekId !== undefined) {
     data.weekId = body.weekId;
     // Append to end of target week

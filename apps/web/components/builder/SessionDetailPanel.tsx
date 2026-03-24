@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { upload } from "@vercel/blob/client";
 import {
   DndContext,
   closestCenter,
@@ -21,6 +22,54 @@ import { Spinner } from "@/components/ui/spinner";
 import { AiAssistButton } from "@/components/ui/AiAssistButton";
 import type { SessionData, YouTubeVideoData, WeekData } from "./StructureBuilder";
 
+function isUploadedVideo(video: YouTubeVideoData): boolean {
+  return video.url.includes("blob.vercel-storage.com");
+}
+
+// Extracts a thumbnail from an uploaded video URL by loading it into a hidden
+// <video> element, seeking to ~2 s, and drawing to canvas.
+function UploadedVideoThumbnail({ url, className }: { url: string; className?: string }) {
+  const [thumb, setThumb] = useState<string | null>(null);
+
+  const extract = useCallback(() => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = "anonymous";
+
+    video.onloadedmetadata = () => {
+      video.currentTime = Math.min(2, video.duration * 0.1);
+    };
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const aspect = video.videoHeight / (video.videoWidth || 1);
+        canvas.width = 320;
+        canvas.height = Math.round(320 * aspect) || 180;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        setThumb(canvas.toDataURL("image/jpeg", 0.7));
+      } catch { /* cross-origin block — leave placeholder */ }
+    };
+    video.src = url;
+  }, [url]);
+
+  useEffect(() => { extract(); }, [extract]);
+
+  if (!thumb) {
+    return (
+      <div className={`bg-gray-800 flex items-center justify-center ${className ?? ""}`}>
+        <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
+      </div>
+    );
+  }
+  return <img src={thumb} alt="" className={`object-cover ${className ?? ""}`} />;
+}
+
 interface VideoSuggestions {
   description: string;
   keyTakeaways: string[];
@@ -33,6 +82,7 @@ interface SessionDetailPanelProps {
   programId: string;
   videos: YouTubeVideoData[];
   onUpdate: () => void;
+  programTransitionMode?: "NONE" | "SIMPLE" | "BRANDED";
 }
 
 export function SessionDetailPanel({
@@ -41,6 +91,7 @@ export function SessionDetailPanel({
   programId,
   videos,
   onUpdate,
+  programTransitionMode = "NONE",
 }: SessionDetailPanelProps) {
   const [title, setTitle] = useState(session.title);
   const [summary, setSummary] = useState(session.summary || "");
@@ -51,6 +102,10 @@ export function SessionDetailPanel({
   const [suggestLoading, setSuggestLoading] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [analyzingVideo, setAnalyzingVideo] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [hideTransition, setHideTransition] = useState(session.hideTransition ?? false);
 
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -123,6 +178,20 @@ export function SessionDetailPanel({
       onUpdate();
     } catch (err) {
       console.error("Save takeaways failed:", err);
+    }
+  }
+
+  async function handleToggleHideTransition(val: boolean) {
+    setHideTransition(val);
+    try {
+      await fetch(`/api/programs/${programId}/sessions/${session.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hideTransition: val }),
+      });
+      onUpdate();
+    } catch (err) {
+      console.error("Save hideTransition failed:", err);
     }
   }
 
@@ -222,6 +291,87 @@ export function SessionDetailPanel({
       setSuggestError(err instanceof Error ? err.message : "Failed to get suggestions");
     } finally {
       setSuggestLoading(false);
+    }
+  }
+
+  function getVideoMimeType(filename: string): string {
+    const lower = filename.toLowerCase();
+    if (lower.endsWith(".mov")) return "video/quicktime";
+    if (lower.endsWith(".webm")) return "video/webm";
+    return "video/mp4";
+  }
+
+  function sanitizeFilename(name: string): string {
+    return name.replace(/[^a-zA-Z0-9._-]/g, "_");
+  }
+
+  async function handleVideoUpload(file: File) {
+    setUploadError(null);
+    setUploadProgress(0);
+
+    let highWater = 0;
+    const simId = setInterval(() => {
+      const next = Math.min(85, highWater + (85 - highWater) * 0.015);
+      if (next > highWater) {
+        highWater = next;
+        setUploadProgress(Math.round(highWater));
+      }
+    }, 250);
+
+    try {
+      const uniqueName = `${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
+      const blob = await upload(uniqueName, file, {
+        access: "public",
+        handleUploadUrl: `/api/programs/${programId}/videos/upload`,
+        multipart: true,
+        contentType: getVideoMimeType(file.name),
+        onUploadProgress: ({ percentage }) => {
+          const next = Math.min(89, Math.round(percentage * 0.89));
+          if (next > highWater) {
+            highWater = next;
+            setUploadProgress(highWater);
+          }
+        },
+      });
+
+      clearInterval(simId);
+      setUploadProgress(92);
+
+      const res = await fetch(`/api/programs/${programId}/videos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: blob.url, source: "upload", title: file.name }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to save video");
+      }
+      const newVideo = await res.json();
+
+      setUploadProgress(97);
+
+      // Create a WATCH action linking to the new video
+      const nextOrderIndex = session.actions.length > 0
+        ? Math.max(...session.actions.map((a) => a.orderIndex)) + 1
+        : 0;
+      const actionRes = await fetch(`/api/programs/${programId}/sessions/${session.id}/actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: `Watch: ${newVideo.title || file.name.replace(/\.[^/.]+$/, "")}`,
+          type: "WATCH",
+          orderIndex: nextOrderIndex,
+          youtubeVideoId: newVideo.id,
+        }),
+      });
+      if (!actionRes.ok) throw new Error("Video uploaded but failed to create Watch action");
+
+      setUploadProgress(null);
+      onUpdate();
+    } catch (err) {
+      clearInterval(simId);
+      setUploadProgress(null);
+      setUploadError(err instanceof Error ? err.message : "Upload failed");
     }
   }
 
@@ -393,6 +543,11 @@ export function SessionDetailPanel({
                 alt=""
                 className="w-28 h-16 rounded-lg object-cover flex-shrink-0"
               />
+            ) : isUploadedVideo(video) ? (
+              <UploadedVideoThumbnail
+                url={video.url}
+                className="w-28 h-16 rounded-lg flex-shrink-0"
+              />
             ) : (
               <div className="w-28 h-16 rounded-lg bg-gray-800 flex-shrink-0 flex items-center justify-center">
                 <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -404,12 +559,59 @@ export function SessionDetailPanel({
               <p className="text-sm font-semibold text-white truncate">
                 {video.title || "Untitled Video"}
               </p>
-              <span className="inline-block mt-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
-                YouTube Video
+              <span className={`inline-block mt-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                isUploadedVideo(video)
+                  ? "bg-orange-500/20 text-orange-400"
+                  : "bg-blue-50 text-blue-600"
+              }`}>
+                {isUploadedVideo(video) ? "Uploaded Video" : "YouTube Video"}
               </span>
             </div>
           </div>
-        ) : null}
+        ) : (
+          /* No video — upload prompt */
+          <div>
+            <input
+              ref={uploadInputRef}
+              type="file"
+              accept=".mp4,.webm,.mov"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleVideoUpload(file);
+                e.target.value = "";
+              }}
+            />
+            {uploadProgress !== null ? (
+              <div className="p-4 bg-gray-900 border border-gray-700 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-400">Uploading video…</span>
+                  <span className="text-xs text-gray-400">{uploadProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-800 rounded-full h-1.5">
+                  <div
+                    className="bg-orange-500 h-1.5 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => uploadInputRef.current?.click()}
+                className="w-full flex flex-col items-center justify-center gap-2 p-5 bg-gray-900 border border-dashed border-gray-700 rounded-xl text-gray-400 hover:border-orange-500 hover:text-orange-400 transition"
+              >
+                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="text-xs font-medium">Upload video</span>
+                <span className="text-[10px] text-gray-600">MP4, WebM, MOV</span>
+              </button>
+            )}
+            {uploadError && (
+              <p className="mt-2 text-xs text-red-500">{uploadError}</p>
+            )}
+          </div>
+        )}
 
         {/* AI suggestions panel */}
         {(video || hasClips) && (
@@ -566,6 +768,90 @@ export function SessionDetailPanel({
           takeaways={session.keyTakeaways || []}
           onChange={handleSaveTakeaways}
         />
+
+        {/* Lesson Transitions — only shown when program has transitions enabled */}
+        {programTransitionMode !== "NONE" && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-800">
+              <div>
+                <label className="text-sm font-medium text-white">Lesson Transitions</label>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {programTransitionMode === "BRANDED" ? "Branded title card + outro" : "Play / next-lesson buttons"} shown to learners
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleToggleHideTransition(!hideTransition)}
+                className={`
+                  relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                  transition-colors duration-200 focus:outline-none
+                  ${hideTransition ? "bg-gray-700" : "bg-teal-500"}
+                `}
+                aria-pressed={!hideTransition}
+                aria-label="Toggle transition for this lesson"
+              >
+                <span
+                  className={`
+                    pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0
+                    transition duration-200
+                    ${hideTransition ? "translate-x-0" : "translate-x-4"}
+                  `}
+                />
+              </button>
+            </div>
+
+            {!hideTransition && (
+              <div className="space-y-2">
+                {/* Opening preview */}
+                <div className="rounded-lg border border-gray-700 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-teal-400 flex-shrink-0" />
+                    <span className="text-xs text-gray-400 font-medium">Opening</span>
+                  </div>
+                  <div className="px-4 py-3 bg-gray-900/60 space-y-1">
+                    <p className="text-[10px] font-semibold tracking-widest uppercase text-teal-400">Now Playing</p>
+                    <p className="text-sm font-semibold text-white leading-snug">{session.title}</p>
+                    {(session.keyTakeaways ?? [])[0] && (
+                      <p className="text-xs text-gray-400">{(session.keyTakeaways ?? [])[0]}</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Closing preview */}
+                <div className="rounded-lg border border-gray-700 overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-800 border-b border-gray-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-teal-400 flex-shrink-0" />
+                    <span className="text-xs text-gray-400 font-medium">Closing</span>
+                  </div>
+                  <div className="px-4 py-3 bg-gray-900/60 space-y-1.5">
+                    <p className="text-[10px] font-semibold tracking-widest uppercase text-teal-400">Lesson Complete</p>
+                    <p className="text-sm font-semibold text-white leading-snug">{session.title}</p>
+                    {(session.keyTakeaways ?? []).length > 0 && (
+                      <ul className="space-y-0.5">
+                        {(session.keyTakeaways ?? []).map((t, i) => (
+                          <li key={i} className="flex items-start gap-1.5 text-xs text-gray-400">
+                            <span className="mt-1 h-1 w-1 rounded-full bg-teal-400 flex-shrink-0" />
+                            {t}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-gray-600 text-center">
+                  Preview uses your selected skin colors in the learner view
+                </p>
+              </div>
+            )}
+
+            {hideTransition && (
+              <p className="text-xs text-gray-500 py-1">
+                Transitions are hidden for this lesson. Learners will go straight to the video.
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Actions */}
         <div>

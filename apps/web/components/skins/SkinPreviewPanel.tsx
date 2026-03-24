@@ -10,6 +10,7 @@ import type { SkinTokens } from "@guide-rail/shared";
 interface SkinPreviewPanelProps {
   skinId: string;
   viewMode?: "desktop" | "mobile";
+  thumbnailUrl?: string | null;
 }
 
 // ── Section header (sticky) ───────────────────────────────────────────────────
@@ -104,7 +105,7 @@ function ColorSwatch({ name, value }: { name: string; value: string }) {
 // Mirrors the layout of apps/web/app/p/[slug]/page.tsx
 // viewMode="mobile"  → single-column (hero + what you get + pricing)
 // viewMode="desktop" → 2-col hero with video preview + what you get + pricing
-function MarketingLanderSection({ viewMode = "mobile" }: { viewMode?: "desktop" | "mobile" }) {
+function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl }: { viewMode?: "desktop" | "mobile"; thumbnailUrl?: string | null }) {
   const weeks = [
     { week: 1, title: "Foundation" },
     { week: 2, title: "Progressive Overload" },
@@ -198,10 +199,7 @@ function MarketingLanderSection({ viewMode = "mobile" }: { viewMode?: "desktop" 
             fontSize: "var(--token-text-heading-md-size)",
             fontWeight: "var(--token-text-heading-xl-weight)",
             lineHeight: "1.1",
-            background: "linear-gradient(90deg, var(--token-color-accent), var(--token-color-accent-secondary, var(--token-color-accent)))",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
+            color: "var(--token-color-text-primary)",
             marginBottom: "8px",
           }}>
             The 8-Week Strength Foundation
@@ -228,6 +226,31 @@ function MarketingLanderSection({ viewMode = "mobile" }: { viewMode?: "desktop" 
           }}>
             Join the program
           </button>
+
+          {/* Video thumbnail */}
+          <div style={{
+            marginTop: "12px",
+            aspectRatio: "16/9",
+            borderRadius: "var(--token-radius-lg)",
+            overflow: "hidden",
+            position: "relative",
+            backgroundColor: "var(--token-color-bg-elevated)",
+            border: "1.5px solid var(--token-color-accent)",
+          }}>
+            {thumbnailUrl && (
+              <img src={thumbnailUrl} alt="Video preview" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+            )}
+            <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)" }} />
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div style={{
+                width: "28px", height: "28px", borderRadius: "50%",
+                background: "linear-gradient(90deg, var(--token-color-accent), var(--token-color-accent-secondary, var(--token-color-accent)))",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z" /></svg>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Divider */}
@@ -239,7 +262,7 @@ function MarketingLanderSection({ viewMode = "mobile" }: { viewMode?: "desktop" 
             fontFamily: "var(--token-text-heading-md-font)",
             fontSize: "var(--token-text-heading-md-size)",
             fontWeight: "var(--token-text-heading-md-weight)",
-            color: "var(--token-color-accent)",
+            color: "var(--token-color-text-primary)",
             marginBottom: "10px",
           }}>
             What you get
@@ -313,10 +336,7 @@ function MarketingLanderSection({ viewMode = "mobile" }: { viewMode?: "desktop" 
             fontSize: "var(--token-text-heading-lg-size)",
             fontWeight: "var(--token-text-heading-xl-weight)",
             lineHeight: "1.05",
-            background: "linear-gradient(90deg, var(--token-color-accent), var(--token-color-accent-secondary, var(--token-color-accent)))",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
+            color: "var(--token-color-text-primary)",
           }}>
             The 8-Week Strength Foundation
           </h1>
@@ -346,36 +366,29 @@ function MarketingLanderSection({ viewMode = "mobile" }: { viewMode?: "desktop" 
         {/* Right: video preview */}
         <div style={{
           flex: 1,
-          aspectRatio: "4/3",
+          aspectRatio: "16/9",
           borderRadius: "var(--token-radius-lg)",
           backgroundColor: "var(--token-color-bg-elevated)",
           border: "1.5px solid var(--token-color-accent)",
           boxShadow: "var(--token-shadow-sm)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "6px",
+          position: "relative",
+          overflow: "hidden",
         }}>
-          <div style={{
-            width: "28px", height: "28px", borderRadius: "50%",
-            background: "linear-gradient(90deg, var(--token-color-accent), var(--token-color-accent-secondary, var(--token-color-accent)))",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
-              <path d="M8 5v14l11-7z" />
-            </svg>
+          {thumbnailUrl && (
+            <img src={thumbnailUrl} alt="Video preview" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+          )}
+          <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.35)" }} />
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{
+              width: "28px", height: "28px", borderRadius: "50%",
+              background: "linear-gradient(90deg, var(--token-color-accent), var(--token-color-accent-secondary, var(--token-color-accent)))",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="white">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </div>
           </div>
-          <p style={{
-            fontSize: "8px", fontWeight: "700",
-            color: "var(--token-color-accent)",
-            textTransform: "uppercase" as const,
-            letterSpacing: "0.15em",
-          }}>Preview</p>
-          <p style={{
-            fontSize: "9px",
-            color: "var(--token-color-text-primary)",
-          }}>Watch program intro</p>
         </div>
       </div>
 
@@ -965,10 +978,7 @@ function ProgramCoversSection() {
                 fontSize: "var(--token-text-heading-md-size)",
                 fontWeight: "700",
                 lineHeight: "1.2",
-                background: "linear-gradient(90deg, var(--token-color-accent), var(--token-color-accent-secondary, var(--token-color-accent)))",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
+                color: "var(--token-color-text-primary)",
                 marginBottom: "4px",
               }}
             >
@@ -1261,7 +1271,7 @@ function DesignTokensSection({ tokens }: { tokens: SkinTokens }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function SkinPreviewPanel({ skinId, viewMode = "mobile" }: SkinPreviewPanelProps) {
+export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl }: SkinPreviewPanelProps) {
   const tokens = useMemo(() => getSkinTokens(skinId), [skinId]);
   const cssVars = useMemo(() => getTokenCSSVars(tokens), [tokens]);
   const entry = getSkinCatalogEntry(skinId);
@@ -1303,7 +1313,7 @@ export function SkinPreviewPanel({ skinId, viewMode = "mobile" }: SkinPreviewPan
 
         {/* ── Section 1: Public program page ── */}
         <SectionHeader label="Public program page" />
-        <MarketingLanderSection viewMode={viewMode} />
+        <MarketingLanderSection viewMode={viewMode} thumbnailUrl={thumbnailUrl} />
 
         {/* ── Section 2: Learner timeline ── */}
         <SectionHeader label="Learner timeline" />

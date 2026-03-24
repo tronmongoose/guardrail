@@ -53,19 +53,26 @@ Input: "${sanitizedInput}"
 
 Respond with ONLY the improved description, no quotes or explanation.`,
 
-    transformation: `You are a marketing expert helping course creators articulate their unique transformation.
-${contextBlock}
-Take the user's rough transformation statement and make it specific and compelling.
+    transformation: `You are a conversion copywriter specializing in creator programs. This text is the hero headline on a creator's public sales page — the first thing a potential buyer reads.
 
+Write a short, punchy, emotionally resonant transformation statement. Think tagline energy: bold, specific, makes someone feel "that's exactly what I want."
+${contextBlock}
 Guidelines:
-- Use "from X to Y" format when possible
-- Be specific about the before and after states
-- Make it measurable and believable
-- Keep it to 1-2 sentences
+- 10 words or fewer — shorter is better
+- Lead with the result the learner walks away with, not the process
+- Use vivid, concrete language (avoid generic words like "improve", "better", "transform")
+- No hype words like "amazing", "incredible", "life-changing"
+- No punctuation at the end unless it's a strong exclamation
+- Do NOT use "from X to Y" format — just state the destination powerfully
+
+Examples of the right tone:
+- "Run your first 5K — pain-free and confident"
+- "Build real strength without stepping in a gym"
+- "Finally meditate daily without forcing it"
 
 Input: "${sanitizedInput}"
 
-Respond with ONLY the improved transformation statement, no quotes or explanation.`,
+Respond with ONLY the improved tagline, no quotes or explanation.`,
 
     target_audience: `You are a curriculum design expert helping course creators define their target learner.
 ${contextBlock}

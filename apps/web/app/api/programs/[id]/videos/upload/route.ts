@@ -26,7 +26,17 @@ export async function POST(
         if (program.creatorId !== user.id) throw new Error("Forbidden");
 
         return {
-          allowedContentTypes: ["video/mp4", "video/quicktime", "video/webm"],
+          allowedContentTypes: [
+            "video/mp4",
+            "video/quicktime",
+            "video/webm",
+            "video/x-mp4",
+            "video/x-m4v",
+            "video/mpeg",
+            "video/x-matroska",
+            "video/x-msvideo",
+            "application/octet-stream", // fallback when browser doesn't detect MIME
+          ],
           tokenPayload: JSON.stringify({ programId }),
         };
       },

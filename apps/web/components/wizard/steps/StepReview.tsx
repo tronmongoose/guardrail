@@ -1,18 +1,23 @@
 "use client";
 
 import { SkinPicker } from "@/components/skins/SkinPicker";
+import { TransitionStylePicker } from "../TransitionStylePicker";
+import type { TransitionMode } from "../TransitionStylePicker";
 import type { WizardState } from "../ProgramWizard";
 
 interface StepReviewProps {
   state: WizardState;
   skinId: string;
   onSkinChange: (skinId: string) => void;
+  transitionMode: TransitionMode;
+  onTransitionModeChange: (mode: TransitionMode) => void;
   isGenerating: boolean;
   onGenerate: () => void;
 }
 
-export function StepReview({ state, skinId, onSkinChange, isGenerating, onGenerate }: StepReviewProps) {
+export function StepReview({ state, skinId, onSkinChange, transitionMode, onTransitionModeChange, isGenerating, onGenerate }: StepReviewProps) {
   const totalContent = state.content.videos.length + state.content.artifacts.length;
+  const firstThumbnail = state.content.videos[0]?.thumbnailUrl ?? null;
 
   return (
     <div className="space-y-6">
@@ -45,7 +50,10 @@ export function StepReview({ state, skinId, onSkinChange, isGenerating, onGenera
       </div>
 
       {/* Skin picker — hero feature */}
-      <SkinPicker value={skinId} onChange={onSkinChange} />
+      <SkinPicker value={skinId} onChange={onSkinChange} thumbnailUrl={firstThumbnail} />
+
+      {/* Transition style */}
+      <TransitionStylePicker value={transitionMode} onChange={onTransitionModeChange} />
 
       {/* No-content warning */}
       {totalContent === 0 && (

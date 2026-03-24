@@ -194,9 +194,12 @@ async function processGenerationJob(jobId: string, programId: string) {
               },
             });
 
-            // Create virtual segments for long videos (idempotent)
+            // Create virtual segments — honours creator-set count or falls back to auto (10+ min)
             if (analysis.durationSeconds) {
-              await maybeSegmentVideo(prisma, v, analysis.topics, analysis.durationSeconds);
+              await maybeSegmentVideo(
+                prisma, v, analysis.topics, analysis.durationSeconds,
+                v.desiredSegmentCount ?? 1,
+              );
             }
 
             return analysis;
@@ -214,6 +217,15 @@ async function processGenerationJob(jobId: string, programId: string) {
           data: { progress: analysisProgress },
         });
       }
+    }
+
+    // For videos that still have no analysis (e.g. stub mode / Gemini skipped) but have a
+    // creator-requested split count, segment them using even splits (no topic boundaries).
+    const videosWithoutAnalysis = program.videos.filter(
+      (v) => !v.isSegment && !v.analysis && (v.desiredSegmentCount ?? 1) > 1 && v.durationSeconds,
+    );
+    for (const v of videosWithoutAnalysis) {
+      await maybeSegmentVideo(prisma, v, [], v.durationSeconds!, v.desiredSegmentCount ?? 1);
     }
 
     // Re-fetch all videos (including newly created segment children) with analyses

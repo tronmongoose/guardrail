@@ -137,7 +137,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
 
           {/* Left: text */}
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-6 min-w-0 overflow-hidden">
             {/* Creator label */}
             {program.creator.name && (
               <p
@@ -145,7 +145,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
                   fontFamily: "var(--token-text-label-sm-font)",
                   fontSize: "var(--token-text-label-sm-size)",
                   fontWeight: "var(--token-text-label-sm-weight)",
-                  color: "var(--token-color-accent)",
+                  color: "var(--token-color-text-secondary)",
                   textTransform: "uppercase",
                   letterSpacing: "0.15em",
                 }}
@@ -154,18 +154,15 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
               </p>
             )}
 
-            {/* Big gradient heading */}
+            {/* Big heading */}
             <h1
               style={{
                 fontFamily: "var(--token-text-heading-xl-font)",
                 fontSize: "clamp(2rem, 5vw, var(--token-text-heading-xl-size))",
                 fontWeight: "var(--token-text-heading-xl-weight)",
                 lineHeight: "1.05",
-                background:
-                  "linear-gradient(90deg, var(--token-color-accent), var(--token-color-accent-secondary, var(--token-color-accent)))",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
+                color: "var(--token-color-text-primary)",
+                wordBreak: "break-word",
               }}
             >
               {program.targetTransformation || program.title}
@@ -403,7 +400,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
             fontFamily: "var(--token-text-heading-lg-font)",
             fontSize: "var(--token-text-heading-lg-size)",
             fontWeight: "var(--token-text-heading-lg-weight)",
-            color: "var(--token-color-accent)",
+            color: "var(--token-color-text-primary)",
           }}
         >
           What&apos;s inside

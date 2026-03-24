@@ -31,14 +31,24 @@ export async function PATCH(
     return NextResponse.json({ error: "sessionIds must be an array" }, { status: 400 });
   }
 
-  // Update session order indices
+  // Fetch current titles to know which ones are auto-generated ("Session N")
+  const currentSessions = await prisma.session.findMany({
+    where: { id: { in: sessionIds } },
+    select: { id: true, title: true },
+  });
+  const titleMap = new Map(currentSessions.map((s) => [s.id, s.title]));
+  const autoTitlePattern = /^Session\s+\d+$/i;
+
+  // Update session order indices and auto-rename "Session N" titles to match new position
   await prisma.$transaction(
-    sessionIds.map((sessionId, index) =>
-      prisma.session.update({
-        where: { id: sessionId },
-        data: { orderIndex: index },
-      })
-    )
+    sessionIds.map((sessionId, index) => {
+      const currentTitle = titleMap.get(sessionId) ?? "";
+      const data: { orderIndex: number; title?: string } = { orderIndex: index };
+      if (autoTitlePattern.test(currentTitle)) {
+        data.title = `Session ${index + 1}`;
+      }
+      return prisma.session.update({ where: { id: sessionId }, data });
+    })
   );
 
   return NextResponse.json({ success: true });

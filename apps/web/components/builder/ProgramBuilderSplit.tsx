@@ -11,6 +11,7 @@ interface ProgramBuilderSplitProps {
   videos: YouTubeVideoData[];
   onUpdate: () => void;
   pacingMode: "DRIP_BY_WEEK" | "UNLOCK_ON_COMPLETE";
+  programTransitionMode?: "NONE" | "SIMPLE" | "BRANDED";
 }
 
 export function ProgramBuilderSplit({
@@ -19,6 +20,7 @@ export function ProgramBuilderSplit({
   videos,
   onUpdate,
   pacingMode,
+  programTransitionMode = "NONE",
 }: ProgramBuilderSplitProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -129,6 +131,7 @@ export function ProgramBuilderSplit({
               programId={programId}
               videos={videos}
               onUpdate={handleUpdate}
+              programTransitionMode={programTransitionMode}
             />
           ) : (
             <div className="h-full flex items-center justify-center" style={{ background: "#111118" }}>

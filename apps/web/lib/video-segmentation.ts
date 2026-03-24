@@ -159,24 +159,147 @@ export async function createVirtualSegments(
 }
 
 /**
+ * Build segment specs for a specific target count, snapping to natural Gemini topic
+ * boundaries within SNAP_WINDOW_SECONDS of each ideal even-split break point.
+ * Falls back to the ideal time if no topic boundary is close enough.
+ */
+const SNAP_WINDOW_SECONDS = 30;
+
+export function buildSegmentSpecsForCount(
+  topics: VideoTopic[],
+  durationSeconds: number,
+  targetCount: number,
+): SegmentSpec[] {
+  if (targetCount <= 1) return [];
+  if (durationSeconds <= 0) return [];
+
+  // Collect all topic boundary times (end of each topic = start of next), excluding the very end
+  const boundaries = topics
+    .map((t) => t.endSeconds)
+    .filter((t) => t > 0 && t < durationSeconds);
+
+  // Compute ideal break points for even splits
+  const idealBreaks: number[] = [];
+  for (let i = 1; i < targetCount; i++) {
+    idealBreaks.push((durationSeconds * i) / targetCount);
+  }
+
+  // Resolve each ideal break to the nearest topic boundary within SNAP_WINDOW_SECONDS
+  const resolvedBreaks: number[] = [];
+  const usedBoundaries = new Set<number>();
+
+  for (const ideal of idealBreaks) {
+    let best: number | null = null;
+    let bestDist = Infinity;
+    for (const b of boundaries) {
+      if (usedBoundaries.has(b)) continue;
+      const dist = Math.abs(b - ideal);
+      if (dist <= SNAP_WINDOW_SECONDS && dist < bestDist) {
+        best = b;
+        bestDist = dist;
+      }
+    }
+    if (best !== null) {
+      usedBoundaries.add(best);
+      resolvedBreaks.push(best);
+    } else {
+      resolvedBreaks.push(ideal);
+    }
+  }
+
+  // Sort break points (snapping could produce out-of-order times in edge cases)
+  resolvedBreaks.sort((a, b) => a - b);
+
+  // Build specs from break points
+  const specs: SegmentSpec[] = [];
+  let start = 0;
+  for (let i = 0; i < resolvedBreaks.length; i++) {
+    const end = resolvedBreaks[i];
+    // Find a Gemini topic label that covers this segment's midpoint
+    const mid = (start + end) / 2;
+    const label =
+      topics.find((t) => t.startSeconds <= mid && t.endSeconds >= mid)?.label ??
+      `Part ${i + 1}`;
+    specs.push({ label, startSeconds: start, endSeconds: end, segmentIndex: i });
+    start = end;
+  }
+  // Final segment to end of video
+  const lastMid = (start + durationSeconds) / 2;
+  const lastLabel =
+    topics.find((t) => t.startSeconds <= lastMid && t.endSeconds >= lastMid)?.label ??
+    `Part ${targetCount}`;
+  specs.push({
+    label: lastLabel,
+    startSeconds: start,
+    endSeconds: durationSeconds,
+    segmentIndex: resolvedBreaks.length,
+  });
+
+  return specs;
+}
+
+/**
  * Convenience helper: run the full segmentation check after Gemini analysis.
- * Safe to call multiple times — skips if segments already exist.
+ * - targetCount > 1: creator-directed split — bypasses the 10-min threshold.
+ * - targetCount = 1: auto-split only for long videos (existing behaviour).
+ * Safe to call multiple times — re-creates segments if the count has changed.
  */
 export async function maybeSegmentVideo(
   prisma: PrismaClient,
   parentVideo: YouTubeVideo,
   topics: VideoTopic[],
   durationSeconds: number,
+  targetCount = 1,
 ): Promise<void> {
-  if (!shouldSegment(durationSeconds) || topics.length < 2) return;
+  let specs: SegmentSpec[];
 
-  const specs = buildSegmentSpecs(topics, durationSeconds);
-  if (specs.length < 2) return;
+  if (targetCount > 1) {
+    // Creator-directed split — no minimum duration threshold
+    specs = buildSegmentSpecsForCount(topics, durationSeconds, targetCount);
+  } else {
+    // Auto-split for long videos only
+    if (!shouldSegment(durationSeconds) || topics.length < 2) return;
+    specs = buildSegmentSpecs(topics, durationSeconds);
+    if (specs.length < 2) return;
+  }
 
-  const existing = await prisma.youTubeVideo.count({
-    where: { parentVideoId: parentVideo.id },
+  // Atomic check-delete-create to avoid race conditions when two analysis
+  // callbacks complete simultaneously for the same parent video.
+  await prisma.$transaction(async (tx) => {
+    const existing = await tx.youTubeVideo.count({
+      where: { parentVideoId: parentVideo.id },
+    });
+
+    // Skip if already segmented to the exact same count
+    if (existing === specs.length) return;
+
+    // Delete stale segments if count differs (e.g. creator changed their selection)
+    if (existing > 0) {
+      await tx.youTubeVideo.deleteMany({ where: { parentVideoId: parentVideo.id } });
+    }
+
+    await tx.$executeRaw`SELECT 1`; // ensure transaction is open before batch create
+    await Promise.all(
+      specs.map((spec) =>
+        tx.youTubeVideo.create({
+          data: {
+            videoId: crypto.randomUUID(),
+            url: parentVideo.url,
+            title: `${parentVideo.title ?? "Video"} — Part ${spec.segmentIndex + 1}: ${spec.label}`,
+            authorName: parentVideo.authorName,
+            thumbnailUrl: parentVideo.thumbnailUrl,
+            programId: parentVideo.programId,
+            parentVideoId: parentVideo.id,
+            isSegment: true,
+            segmentIndex: spec.segmentIndex,
+            startSeconds: spec.startSeconds,
+            endSeconds: spec.endSeconds,
+          },
+        }),
+      ),
+    );
+    console.log(
+      `[segmentation] Created ${specs.length} virtual segments for "${parentVideo.title}" (${parentVideo.id})`,
+    );
   });
-  if (existing > 0) return; // idempotency guard
-
-  await createVirtualSegments(prisma, parentVideo, specs);
 }

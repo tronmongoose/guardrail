@@ -8,6 +8,7 @@ import { SkinPreviewPanel } from "./SkinPreviewPanel";
 interface SkinPickerProps {
   value: string;
   onChange: (skinId: string) => void;
+  thumbnailUrl?: string | null;
 }
 
 // ── Per-skin themed SVG icon paths (24x24 viewBox, stroke-based) ──────────────
@@ -123,7 +124,7 @@ function CategoryIcon({ path, size = 14 }: { path: string; size?: number }) {
   );
 }
 
-export function SkinPicker({ value, onChange }: SkinPickerProps) {
+export function SkinPicker({ value, onChange, thumbnailUrl }: SkinPickerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [openCategories, setOpenCategories] = useState<Set<string>>(() => {
     const entry = getSkinCatalogEntry(value);
@@ -308,7 +309,7 @@ export function SkinPicker({ value, onChange }: SkinPickerProps) {
 
         {/* Right panel: preview */}
         <div className="flex-1 overflow-hidden" style={{ minWidth: 0 }}>
-          <SkinPreviewPanel skinId={previewSkinId} viewMode="desktop" />
+          <SkinPreviewPanel skinId={previewSkinId} viewMode="desktop" thumbnailUrl={thumbnailUrl} />
         </div>
       </div>
 
@@ -364,7 +365,7 @@ export function SkinPicker({ value, onChange }: SkinPickerProps) {
 
         {/* Preview (bottom, taller) */}
         <div className="flex-shrink-0 overflow-hidden" style={{ height: 420 }}>
-          <SkinPreviewPanel skinId={previewSkinId} viewMode="mobile" />
+          <SkinPreviewPanel skinId={previewSkinId} viewMode="mobile" thumbnailUrl={thumbnailUrl} />
         </div>
       </div>
     </>

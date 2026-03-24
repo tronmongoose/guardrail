@@ -23,6 +23,8 @@ interface AiAssistButtonProps {
   context?: string;
   /** Minimum characters required before the button activates */
   minLength?: number;
+  /** "icon" (default) = small icon only; "prominent" = labeled pill button */
+  variant?: "icon" | "prominent";
 }
 
 export function AiAssistButton({
@@ -31,6 +33,7 @@ export function AiAssistButton({
   onEnhance,
   context,
   minLength = 5,
+  variant = "icon",
 }: AiAssistButtonProps) {
   const [loading, setLoading] = useState(false);
   const [previousValue, setPreviousValue] = useState<string | null>(null);
@@ -72,6 +75,55 @@ export function AiAssistButton({
     setPreviousValue(null);
   }
 
+  const wandIcon = loading ? (
+    <svg className="w-3.5 h-3.5 animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  ) : (
+    <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M15 4l5 5L8 21l-5-2 2-5L15 4Z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 3l1.5 1.5M3 6h1M6 3v1" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18 13l1 1M19 13v1.5M18 14.5h1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+
+  if (variant === "prominent") {
+    return (
+      <div className="flex items-center gap-2 mt-2">
+        <button
+          type="button"
+          onClick={handleEnhance}
+          disabled={!canEnhance || loading}
+          title={canEnhance ? "Improve with AI" : `Type at least ${minLength} characters to use AI`}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+          style={
+            canEnhance && !loading
+              ? { background: "linear-gradient(135deg, rgba(0,255,200,0.15), rgba(255,0,128,0.15))", border: "1px solid rgba(0,255,200,0.35)", color: "#00ffc8" }
+              : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#6b7280" }
+          }
+        >
+          {wandIcon}
+          {loading ? "Improving…" : "Improve with AI"}
+        </button>
+        {canUndo && !loading && (
+          <button
+            type="button"
+            onClick={handleUndo}
+            title="Undo AI suggestion"
+            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs text-gray-500 hover:text-neon-pink hover:bg-neon-pink/10 transition"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 10h10a5 5 0 015 5v0a5 5 0 01-5 5H9" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M7 6L3 10l4 4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Undo
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <span className="inline-flex items-center gap-1">
       <button
@@ -81,20 +133,7 @@ export function AiAssistButton({
         title={canEnhance ? "Improve with AI" : `Type at least ${minLength} characters`}
         className="p-1 rounded transition disabled:opacity-30 text-gray-500 hover:text-neon-cyan hover:bg-neon-cyan/10"
       >
-        {loading ? (
-          <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-        ) : (
-          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            {/* wand */}
-            <path d="M15 4l5 5L8 21l-5-2 2-5L15 4Z" strokeLinecap="round" strokeLinejoin="round" />
-            {/* sparkles */}
-            <path d="M3 3l1.5 1.5M3 6h1M6 3v1" strokeLinecap="round" strokeLinejoin="round" />
-            <path d="M18 13l1 1M19 13v1.5M18 14.5h1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
+        {wandIcon}
       </button>
       {canUndo && !loading && (
         <button

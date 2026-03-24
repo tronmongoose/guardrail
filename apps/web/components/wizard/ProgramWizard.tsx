@@ -40,6 +40,7 @@ export interface WizardState {
   };
   theme: {
     skinId: string;
+    transitionMode: "NONE" | "SIMPLE" | "BRANDED";
   };
 }
 
@@ -53,8 +54,8 @@ interface ProgramWizardProps {
 const STEPS = [
   { label: "Basics", description: "Who & what" },
   { label: "Content", description: "Videos & files" },
-  { label: "Duration", description: "Program length" },
-  { label: "Theme", description: "Your look" },
+  { label: "Lessons flow", description: "Program length" },
+  { label: "Theme", description: "Your look & vibe" },
 ];
 
 const DEFAULT_STATE: WizardState = {
@@ -78,6 +79,7 @@ const DEFAULT_STATE: WizardState = {
   },
   theme: {
     skinId: "classic-minimal",
+    transitionMode: "NONE" as const,
   },
 };
 
@@ -109,13 +111,17 @@ export function ProgramWizard({
   });
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Persist state to localStorage (exclude extractedText to avoid quota issues with large docs)
+  // Persist state to localStorage (exclude large blobs to avoid quota issues)
   useEffect(() => {
     const serializable = {
       ...state,
       content: {
         ...state.content,
+        // Strip extractedText (large doc content) and base64 thumbnails (client-extracted video frames)
         artifacts: state.content.artifacts.map(({ extractedText, ...rest }) => rest),
+        videos: state.content.videos.map(({ thumbnailUrl, ...rest }) =>
+          thumbnailUrl?.startsWith("data:") ? rest : { ...rest, thumbnailUrl }
+        ),
       },
     };
     localStorage.setItem(getStorageKey(programId), JSON.stringify(serializable));
@@ -197,6 +203,7 @@ export function ProgramWizard({
           pacingMode: state.duration.pacingMode,
           vibePrompt: state.vibe.vibePrompt,
           skinId: state.theme.skinId,
+          transitionMode: state.theme.transitionMode,
         }),
       });
 
@@ -279,6 +286,8 @@ export function ProgramWizard({
             state={state}
             skinId={state.theme.skinId}
             onSkinChange={(skinId) => updateState("theme", { skinId })}
+            transitionMode={state.theme.transitionMode}
+            onTransitionModeChange={(transitionMode) => updateState("theme", { transitionMode })}
             isGenerating={isGenerating}
             onGenerate={handleGenerate}
           />
