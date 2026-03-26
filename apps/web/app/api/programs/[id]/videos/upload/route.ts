@@ -35,6 +35,11 @@ export async function POST(
             "video/mpeg",
             "video/x-matroska",
             "video/x-msvideo",
+            "audio/mpeg",           // MP3
+            "audio/wav",            // WAV
+            "audio/mp4",            // M4A
+            "audio/x-m4a",         // M4A (Safari)
+            "audio/ogg",            // OGG
             "application/octet-stream", // fallback when browser doesn't detect MIME
           ],
           tokenPayload: JSON.stringify({ programId }),
@@ -47,6 +52,7 @@ export async function POST(
 
     return NextResponse.json(jsonResponse);
   } catch (err) {
+    console.error("[blob-upload-token] Failed for program", programId, "—", (err as Error).message);
     return NextResponse.json(
       { error: (err as Error).message },
       { status: 400 }

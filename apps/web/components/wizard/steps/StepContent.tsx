@@ -367,7 +367,7 @@ export function StepContent({
     updateState(0, "Uploading");
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000); // 10-minute timeout
+    const timeoutId = setTimeout(() => controller.abort(), 3 * 60 * 1000); // 3-minute timeout
 
     // Monotonic high-water mark: progress bar can NEVER go backward.
     // @vercel/blob retries up to 10x on failure; each XHR retry resets event.loaded to 0,
@@ -393,8 +393,7 @@ export function StepContent({
         access: "public",
         handleUploadUrl: `/api/programs/${programId}/videos/upload`,
         abortSignal: controller.signal,
-        multipart: process.env.NODE_ENV === "production", // CORS-blocked on localhost; enabled in prod for chunked retry
-        contentType: getVideoMimeType(file.name),  // explicit MIME override; browser detection is unreliable
+        contentType: file.type || getVideoMimeType(file.name),
         onUploadProgress: ({ percentage }) => {
           // percentage is cumulative 0-100; scale to 0-89 and push through the gate.
           advance(percentage * 0.89);

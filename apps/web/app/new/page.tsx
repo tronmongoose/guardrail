@@ -425,8 +425,7 @@ export default function NewProgramPage() {
         access: "public",
         handleUploadUrl: `/api/programs/${currentProgramId}/videos/upload`,
         abortSignal: controller.signal,
-        multipart: process.env.NODE_ENV === "production", // CORS-blocked on localhost; enabled in prod for chunked retry
-        contentType: getMime(item.file.name),
+        contentType: item.file.type || getMime(item.file.name),
         onUploadProgress: ({ percentage }) => advance(percentage * 0.89),
       });
 
