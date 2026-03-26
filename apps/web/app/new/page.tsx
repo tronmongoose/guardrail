@@ -97,11 +97,7 @@ export default function NewProgramPage() {
   const [vibePrompt, setVibePrompt] = useState("");
   const [videoHints, setVideoHints] = useState("");
   const [skinId, setSkinId] = useState("classic-minimal");
-  const [intentResult, setIntentResult] = useState<{
-    groups: { clipIndexes: number[]; title: string; combinable: boolean }[];
-    sectionBoundaries: number[];
-    summary: string;
-  } | null>(null);
+  const [generationQueued, setGenerationQueued] = useState(false);
 
   // Autosave: persist form state to localStorage + debounced DB save
   const autosaveData = useMemo<AutosaveData>(() => ({
@@ -249,7 +245,8 @@ export default function NewProgramPage() {
       case "program":
         return programTitle.trim().length > 0 && targetTransformation.trim().length > 0;
       case "videos":
-        return videos.length > 0;
+        // Allow proceeding as soon as files are selected — uploads continue in background
+        return videos.length > 0 || pendingUploads.filter(p => !p.error).length > 0;
       case "structure":
         return true;
       case "generate":
@@ -257,7 +254,7 @@ export default function NewProgramPage() {
       default:
         return false;
     }
-  }, [step, name, programTitle, targetTransformation, videos.length]);
+  }, [step, name, programTitle, targetTransformation, videos.length, pendingUploads]);
 
   const handleNext = async () => {
     setError(null);
@@ -294,34 +291,19 @@ export default function NewProgramPage() {
     }
 
     if (step === "videos") {
-      // If intent has already been reviewed, advance
-      if (intentResult) {
-        setStep("structure");
-        return;
-      }
-
-      // Call the AI intent parser before advancing
-      setSaving(true);
-      try {
-        const res = await fetch(`/api/programs/${programId}/intent`, {
+      // Fire intent analysis in background so videoGroups/sectionBoundaries are ready
+      // for generation — don't block the creator on this call.
+      if (programId && videos.length > 0) {
+        fetch(`/api/programs/${programId}/intent`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             videoIds: videos.map((v) => v.id),
             intentText: videoHints.trim(),
           }),
-        });
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to analyze videos");
-        }
-        const result = await res.json();
-        setIntentResult(result);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to analyze videos");
-      } finally {
-        setSaving(false);
+        }).catch(() => {}); // best-effort, non-blocking
       }
+      setStep("structure");
       return;
     }
 
@@ -396,6 +378,106 @@ export default function NewProgramPage() {
     return `${m}:${s.toString().padStart(2, "0")}`;
   };
 
+  // Upload a single file — extracted so handleFilesSelected and retryUpload can share it
+  const uploadSingleFile = useCallback(async (item: PendingUpload, currentProgramId: string) => {
+    const UPLOAD_TIMEOUT_MS = 3 * 60 * 1000; // 3 min max per file
+
+    // Clear any previous error and reset progress before starting
+    setPendingUploads((prev) =>
+      prev.map((p) => (p.localId === item.localId ? { ...p, progress: 0, error: undefined } : p))
+    );
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+    // Monotonic high-water mark: progress bar can NEVER go backward.
+    // @vercel/blob retries up to 10x on failure; each XHR retry resets event.loaded to 0,
+    // which would cause the bar to oscillate without this gate.
+    let highWater = 0;
+    const advance = (pct: number) => {
+      const next = Math.min(89, Math.round(pct));
+      if (next > highWater) {
+        highWater = next;
+        setPendingUploads((prev) =>
+          prev.map((p) => (p.localId === item.localId ? { ...p, progress: highWater } : p))
+        );
+      }
+    };
+
+    // Simulation: ensures the bar inches forward even during retries or slow uploads,
+    // so it never looks frozen. Asymptotically approaches 85%.
+    const simId = setInterval(() => advance(highWater + (85 - highWater) * 0.015), 250);
+
+    // Sanitize filename to avoid blob key issues with special characters
+    const sanitize = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const blobKey = `${crypto.randomUUID()}-${sanitize(item.file.name)}`;
+
+    // Explicit MIME type — browser detection is unreliable for video
+    const getMime = (name: string) => {
+      const lower = name.toLowerCase();
+      if (lower.endsWith(".mov")) return "video/quicktime";
+      if (lower.endsWith(".webm")) return "video/webm";
+      return "video/mp4";
+    };
+
+    let blob: Awaited<ReturnType<typeof upload>>;
+    try {
+      // multipart: true splits the file into 8 MB chunks with 6 concurrent connections.
+      // Each chunk retries independently on failure, eliminating mid-transfer stalls.
+      blob = await upload(blobKey, item.file, {
+        access: "public",
+        handleUploadUrl: `/api/programs/${currentProgramId}/videos/upload`,
+        abortSignal: controller.signal,
+        multipart: true,
+        contentType: getMime(item.file.name),
+        onUploadProgress: ({ percentage }) => advance(percentage * 0.89),
+      });
+    } catch (err) {
+      if (controller.signal.aborted) {
+        throw new Error("Upload timed out — check your connection and tap Retry.");
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+      clearInterval(simId);
+    }
+
+    // Jump to 92% while registering with the API
+    setPendingUploads((prev) =>
+      prev.map((p) => (p.localId === item.localId ? { ...p, progress: 92 } : p))
+    );
+
+    try {
+      const res = await fetch(`/api/programs/${currentProgramId}/videos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: blob.url, source: "upload", title: item.file.name }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to register video");
+      }
+
+      const video = await res.json();
+      setVideos((prev) => [...prev, video]);
+      setPendingUploads((prev) => prev.filter((p) => p.localId !== item.localId));
+    } catch (err) {
+      setPendingUploads((prev) =>
+        prev.map((p) =>
+          p.localId === item.localId
+            ? { ...p, error: err instanceof Error ? err.message : "Upload failed" }
+            : p
+        )
+      );
+    }
+  }, []);
+
+  const retryUpload = useCallback((item: PendingUpload) => {
+    if (!programId) return;
+    uploadSingleFile(item, programId);
+  }, [programId, uploadSingleFile]);
+
   const handleFilesSelected = async (files: File[]) => {
     if (!programId) return;
 
@@ -432,45 +514,9 @@ export default function NewProgramPage() {
       );
     });
 
-    // Upload sequentially
-    for (const item of pending) {
-      try {
-        const blob = await upload(item.file.name, item.file, {
-          access: "private",
-          handleUploadUrl: `/api/programs/${programId}/videos/upload`,
-          onUploadProgress: ({ percentage }) => {
-            setPendingUploads((prev) =>
-              prev.map((p) =>
-                p.localId === item.localId ? { ...p, progress: Math.round(percentage) } : p
-              )
-            );
-          },
-        });
-
-        const res = await fetch(`/api/programs/${programId}/videos`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: blob.url, source: "upload", title: item.file.name }),
-        });
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => ({}));
-          throw new Error(data.error || "Failed to register video");
-        }
-
-        const video = await res.json();
-        setVideos((prev) => [...prev, video]);
-        setPendingUploads((prev) => prev.filter((p) => p.localId !== item.localId));
-      } catch (err) {
-        setPendingUploads((prev) =>
-          prev.map((p) =>
-            p.localId === item.localId
-              ? { ...p, error: err instanceof Error ? err.message : "Upload failed" }
-              : p
-          )
-        );
-      }
-    }
+    // Upload all files in parallel — Continue is already enabled via canProceed()
+    // uploadSingleFile handles timeout + error per file
+    await Promise.allSettled(pending.map((item) => uploadSingleFile(item, programId)));
 
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -490,6 +536,17 @@ export default function NewProgramPage() {
 
   const handleGenerate = async () => {
     if (!programId) return;
+
+    // Safety check: block if uploads are still in progress
+    const uploadsInProgress = pendingUploads.filter(p => !p.error).length;
+    if (uploadsInProgress > 0) {
+      setError(`${uploadsInProgress} upload${uploadsInProgress !== 1 ? "s are" : " is"} still finishing — please wait a moment and try again.`);
+      return;
+    }
+    if (videos.length === 0) {
+      setError("No videos were uploaded successfully. Please go back and add your videos.");
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -535,14 +592,17 @@ export default function NewProgramPage() {
         throw new Error(error.detail || error.error || "Failed to start generation");
       }
 
-      // Track generation
+      // Track generation (toast fires if they stay or navigate back)
       startGeneration(programId);
 
       // Clear autosave data — draft is now generating
       clear();
 
-      // Go directly to edit page so user sees their program being built
-      router.push(`/programs/${programId}/edit`);
+      // Show "we'll email you" confirmation, then redirect to dashboard
+      setGenerationQueued(true);
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 2500);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setSaving(false);
@@ -688,37 +748,8 @@ export default function NewProgramPage() {
           </div>
         )}
 
-        {/* Step: Videos — intent review card */}
-        {step === "videos" && intentResult && (
-          <div className="space-y-6">
-            <div className="text-center">
-              <h1 className="text-3xl font-bold text-white mb-2">Here's what AI decided</h1>
-              <p className="text-gray-400">Review before we build your structure</p>
-            </div>
-
-            <div className="bg-surface-card rounded-xl border border-surface-border border-l-4 border-l-neon-cyan p-6">
-              <p className="text-white text-sm leading-relaxed">{intentResult.summary}</p>
-            </div>
-
-            <div className="flex flex-col gap-3">
-              <button
-                onClick={() => setStep("structure")}
-                className="w-full btn-neon py-3 rounded-xl text-surface-dark font-semibold"
-              >
-                Looks good, continue →
-              </button>
-              <button
-                onClick={() => setIntentResult(null)}
-                className="text-sm text-gray-400 hover:text-white transition text-center"
-              >
-                Let me adjust
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Step: Videos — input mode */}
-        {step === "videos" && !intentResult && (
+        {/* Step: Videos */}
+        {step === "videos" && (
           <div className="space-y-6">
             <div className="text-center">
               <h1 className="text-3xl font-bold text-white mb-2">
@@ -838,8 +869,46 @@ export default function NewProgramPage() {
               )}
 
               {/* Video list (shared between both modes) */}
-              {videos.length > 0 ? (
+              {(videos.length > 0 || pendingUploads.length > 0) ? (
                 <div className="space-y-2">
+                  {/* In-progress and failed uploads */}
+                  {pendingUploads.map((item) => (
+                    <div
+                      key={item.localId}
+                      className="flex items-center gap-3 p-3 bg-surface-dark rounded-lg border border-surface-border"
+                    >
+                      <div className="w-16 h-9 rounded bg-surface-border flex-shrink-0 flex items-center justify-center">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-white truncate">{item.file.name.replace(/\.[^/.]+$/, "")}</p>
+                        {item.error ? (
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <p className="text-xs text-red-400 flex-1 truncate">{item.error}</p>
+                            <button
+                              onClick={() => retryUpload(item)}
+                              className="text-xs text-neon-cyan hover:underline flex-shrink-0"
+                            >
+                              Retry
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <div className="flex-1 h-1 bg-surface-border rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-neon-cyan rounded-full transition-all duration-200"
+                                style={{ width: `${item.progress}%` }}
+                              />
+                            </div>
+                            <span className="text-xs text-gray-500 tabular-nums w-8 text-right">{item.progress}%</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {/* Completed videos */}
                   {videos.map((video) => (
                     <div
                       key={video.id}
@@ -879,11 +948,16 @@ export default function NewProgramPage() {
               )}
 
               <p className="text-xs text-gray-500">
-                {videos.length} video{videos.length !== 1 ? "s" : ""} added
+                {videos.length > 0 && `${videos.length} video${videos.length !== 1 ? "s" : ""} ready`}
+                {videos.length > 0 && pendingUploads.filter(p => !p.error).length > 0 && " · "}
+                {pendingUploads.filter(p => !p.error).length > 0 &&
+                  `${pendingUploads.filter(p => !p.error).length} uploading`}
+                {videos.length === 0 && pendingUploads.filter(p => !p.error).length === 0 &&
+                  `${videos.length} videos added`}
               </p>
 
-              {/* Hints section — shown once at least one video is added */}
-              {videos.length > 0 && (
+              {/* Hints section — shown once at least one video is added or uploading */}
+              {(videos.length > 0 || pendingUploads.length > 0) && (
                 <div className="rounded-xl bg-white/5 px-4 py-4 space-y-2">
                   <label className="text-sm font-medium text-gray-200 block">
                     Anything we should know about these videos?
@@ -917,6 +991,16 @@ export default function NewProgramPage() {
                 How should learners progress?
               </p>
             </div>
+
+            {/* Upload progress badge — uploads continue while creator fills out this step */}
+            {pendingUploads.filter(p => !p.error).length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-400">
+                <svg className="w-3.5 h-3.5 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Uploading {pendingUploads.filter(p => !p.error).length} video{pendingUploads.filter(p => !p.error).length !== 1 ? "s" : ""} in the background…
+              </div>
+            )}
 
             <div className="bg-surface-card border border-surface-border rounded-xl p-6 space-y-6">
               {/* Pacing — shown first so duration language updates instantly */}
@@ -1112,6 +1196,16 @@ export default function NewProgramPage() {
               </p>
             </div>
 
+            {/* Upload progress badge — uploads may still be finishing */}
+            {pendingUploads.filter(p => !p.error).length > 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-400">
+                <svg className="w-3.5 h-3.5 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Still uploading {pendingUploads.filter(p => !p.error).length} video{pendingUploads.filter(p => !p.error).length !== 1 ? "s" : ""}… please wait before generating.
+              </div>
+            )}
+
             <div className="bg-surface-card border border-surface-border rounded-xl p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
@@ -1138,23 +1232,42 @@ export default function NewProgramPage() {
 
               <div className="border-t border-surface-border pt-4">
                 <p className="text-xs text-gray-500">
-                  Generation takes a few seconds. You can edit everything after.
+                  Runs in the background — we&apos;ll email you when your program is ready.
                 </p>
               </div>
             </div>
 
+            {generationQueued && (
+              <div className="p-4 bg-neon-cyan/10 border border-neon-cyan/30 rounded-xl">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-neon-cyan flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-white">Generating in the background!</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {clerkUser?.primaryEmailAddress?.emailAddress
+                        ? <>We&apos;ll email <span className="text-gray-300">{clerkUser.primaryEmailAddress.emailAddress}</span> when your program is ready.</>
+                        : "We'll email you when your program is ready."}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">Redirecting to your dashboard…</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={handleGenerate}
-              disabled={saving}
+              disabled={saving || generationQueued}
               className="w-full btn-neon py-4 rounded-xl text-surface-dark font-bold text-lg disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {saving ? (
                 <>
                   <Spinner size="sm" />
-                  Creating your program...
+                  Starting generation…
                 </>
               ) : (
-                "Generate Program"
+                "Generate in Background →"
               )}
             </button>
           </div>
@@ -1168,7 +1281,7 @@ export default function NewProgramPage() {
         )}
 
         {/* Navigation */}
-        {step !== "generate" && !(step === "videos" && intentResult) && (
+        {step !== "generate" && (
           <div className="flex justify-between mt-8">
             {step !== "welcome" ? (
               <button

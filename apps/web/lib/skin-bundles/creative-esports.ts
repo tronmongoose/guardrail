@@ -1,7 +1,7 @@
 /**
  * Token bundle for the "Esports" skin (creative-esports).
- * Deep indigo-black with electric yellow-to-orange gradient, heavy w800 typography.
- * Source: Figma file P94190iyrjqLvtprXiLTKY, Page 12 (node TBD — placeholder until fetched)
+ * Deep indigo-black with electric blue-to-purple gradient, heavy w800 typography.
+ * Source: Figma file P94190iyrjqLvtprXiLTKY, Page 12 (node 1:4841)
  */
 
 import { SkinId } from "@guide-rail/shared";

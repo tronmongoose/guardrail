@@ -138,3 +138,4 @@ export const SKIN_TOKENS: Record<SkinId, SkinTokens> = {
 export function getSkinTokens(skinId: string): SkinTokens {
   return SKIN_TOKENS[skinId as SkinId] ?? SKIN_TOKENS["classic-minimal"];
 }
+

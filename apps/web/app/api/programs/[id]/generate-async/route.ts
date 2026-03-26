@@ -8,6 +8,10 @@ import { ProgramDraftSchema } from "@guide-rail/shared";
 import type { VideoAnalysisOutput } from "@guide-rail/shared";
 import { Prisma } from "@prisma/client";
 import { aiLogger, createTimer } from "@/lib/logger";
+import { generateSkinFromVibe } from "@/lib/generate-skin";
+import { sendProgramReadyEmail } from "@/lib/email";
+
+export const maxDuration = 300; // Vercel Pro: keep function alive while background job runs
 
 const HF_MODEL = process.env.HF_EMBEDDING_MODEL || "sentence-transformers/all-MiniLM-L6-v2";
 
@@ -40,7 +44,7 @@ export async function POST(
   }
 
   // Check for existing pending/processing job
-  const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes without progress = stale
+  const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes without progress = stale
 
   const existingJob = await prisma.generationJob.findFirst({
     where: {
@@ -105,7 +109,7 @@ export async function POST(
  * Updates job status/progress as it runs.
  * Processes both YouTube videos and uploaded artifacts (PDFs, DOCXs, etc.).
  */
-const JOB_TIMEOUT_MS = 8 * 60 * 1000; // 8 minutes (headroom before frontend 10-min timeout)
+const JOB_TIMEOUT_MS = 12 * 60 * 1000; // 12 minutes (within Vercel Pro 300s maxDuration)
 
 async function processGenerationJob(jobId: string, programId: string) {
   const timer = createTimer();
@@ -153,13 +157,13 @@ async function processGenerationJob(jobId: string, programId: string) {
 
     if (videosNeedingAnalysis.length > 0 && process.env.GOOGLE_AI_API_KEY) {
       console.info(`[generate-async] Running Gemini analysis for ${videosNeedingAnalysis.length} video(s)`);
-      const ANALYSIS_CONCURRENCY = 2;
+      const ANALYSIS_CONCURRENCY = 3;
 
       for (let i = 0; i < videosNeedingAnalysis.length; i += ANALYSIS_CONCURRENCY) {
         checkDeadline("video_analysis");
         const batch = videosNeedingAnalysis.slice(i, i + ANALYSIS_CONCURRENCY);
         const results = await Promise.allSettled(
-          batch.map(async (v) => {
+          batch.map(async (v, batchIdx) => {
             // Detect whether this is a direct upload (non-YouTube URL) or a YouTube video
             const isUpload = !v.url.includes("youtube.com") && !v.url.includes("youtu.be");
             const analysis = isUpload
@@ -194,6 +198,13 @@ async function processGenerationJob(jobId: string, programId: string) {
               },
             });
 
+            // Per-video heartbeat: touch the job so stale detector doesn't fire mid-analysis
+            const videosDone = i + batchIdx + 1;
+            await prisma.generationJob.update({
+              where: { id: jobId },
+              data: { progress: Math.round((videosDone / videosNeedingAnalysis.length) * 10) },
+            });
+
             // Create virtual segments — honours creator-set count or falls back to auto (10+ min)
             if (analysis.durationSeconds) {
               await maybeSegmentVideo(
@@ -211,6 +222,7 @@ async function processGenerationJob(jobId: string, programId: string) {
           else console.warn(`[generate-async] Gemini analysis failed for a video:`, r.reason);
         }
 
+        // Ensure progress reflects the full batch even if individual heartbeats raced
         const analysisProgress = Math.round(((i + batch.length) / videosNeedingAnalysis.length) * 10);
         await prisma.generationJob.update({
           where: { id: jobId },
@@ -652,6 +664,66 @@ async function processGenerationJob(jobId: string, programId: string) {
 
     console.info(`[generate-async] Persisted: ${sessionCount} sessions, ${actionCount} actions, ${compositeCount} composite sessions`);
 
+    // ── Step 5: Custom Skin Generation (93-100%) ──
+    // Only runs when the creator selected "Build My Own" in the skin picker (skinId = "auto-generate")
+    if (program.skinId === "auto-generate") {
+      checkDeadline("generating_skin");
+      await prisma.generationJob.update({
+        where: { id: jobId },
+        data: { stage: "generating_skin", progress: 93 },
+      });
+
+      try {
+        const skinTokens = await generateSkinFromVibe({
+          title: program.title,
+          targetTransformation: program.targetTransformation,
+          vibePrompt: program.vibePrompt,
+          niche: null,
+        });
+
+        if (skinTokens) {
+          const customSkin = await prisma.customSkin.upsert({
+            where: {
+              // If there's already a custom skin for this program, update it
+              id: program.customSkinId ?? "__none__",
+            },
+            create: {
+              creatorId: program.creatorId,
+              name: program.title,
+              tokens: skinTokens as unknown as Prisma.InputJsonValue,
+            },
+            update: {
+              name: program.title,
+              tokens: skinTokens as unknown as Prisma.InputJsonValue,
+            },
+          });
+
+          await prisma.program.update({
+            where: { id: programId },
+            data: {
+              customSkinId: customSkin.id,
+              skinId: "classic-minimal", // clear sentinel; custom skin takes precedence
+            },
+          });
+
+          console.info(`[generate-async] Custom skin generated and linked: ${customSkin.id}`);
+        } else {
+          // Stub mode or unsupported provider — reset sentinel to catalog fallback
+          await prisma.program.update({
+            where: { id: programId },
+            data: { skinId: "classic-minimal" },
+          });
+        }
+      } catch (skinErr) {
+        // Skin generation failure is non-fatal — log and fall back to catalog skin
+        console.error("[generate-async] Skin generation failed (non-fatal):", skinErr);
+        await prisma.program.update({
+          where: { id: programId },
+          data: { skinId: "classic-minimal" },
+        });
+      }
+    }
+
     // Mark complete
     await prisma.generationJob.update({
       where: { id: jobId },
@@ -662,6 +734,24 @@ async function processGenerationJob(jobId: string, programId: string) {
         completedAt: new Date(),
       },
     });
+
+    // Notify creator via email (best-effort, non-blocking)
+    try {
+      const creator = await prisma.user.findUnique({
+        where: { id: program.creatorId },
+        select: { email: true, name: true },
+      });
+      if (creator?.email) {
+        await sendProgramReadyEmail(
+          creator.email,
+          creator.name ?? "there",
+          program.title ?? "Your Program",
+          programId,
+        );
+      }
+    } catch (err) {
+      console.error("[generate-async] Failed to send completion email:", err);
+    }
 
   } catch (err) {
     console.error("[generate-async] Job failed:", err);

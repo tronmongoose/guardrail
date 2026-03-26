@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getEntitlement } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { LearnerTimeline } from "./timeline";
-import { getSkinTokens } from "@/lib/skin-bundles/registry";
+import { resolveTokens } from "@/lib/resolve-tokens";
 import { getTokenCSSVars } from "@/lib/skin-bridge";
 import { SkinThemeProvider } from "@/components/skins/SkinThemeProvider";
 
@@ -74,7 +74,7 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
     }
   }
 
-  const tokens = getSkinTokens(program.skinId);
+  const tokens = await resolveTokens(program);
   const skinCSSVars = getTokenCSSVars(tokens);
 
   return (

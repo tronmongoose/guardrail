@@ -1,7 +1,7 @@
 /**
  * Token bundle for the "Dancefloor" skin (music-dancefloor).
- * Deep purple-black with electric blue-to-cyan gradient, Inter w700 typography, electric glows.
- * Source: Figma file P94190iyrjqLvtprXiLTKY, Page 29 (node TBD — placeholder until fetched)
+ * Deep purple-black with electric cyan-to-indigo gradient, Inter w700 typography, electric glows.
+ * Source: Figma file P94190iyrjqLvtprXiLTKY, Page 29 (node 1:12348)
  */
 
 import { SkinId } from "@guide-rail/shared";
@@ -12,7 +12,7 @@ const FONT = "'Inter', system-ui, sans-serif";
 export const musicDancefloorTokens: SkinTokens = {
   id: SkinId.MusicDancefloor,
   name: "Dancefloor",
-  description: "Warm amber lights on a dark dance floor",
+  description: "Electric cyan and indigo beats on deep purple-black",
 
   color: {
     background: {

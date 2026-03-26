@@ -13,6 +13,7 @@ import {
 import { ProgramWizard } from "@/components/wizard/ProgramWizard";
 import { SkinPicker } from "@/components/skins/SkinPicker";
 import { getSkinTokens } from "@/lib/skin-bundles/registry";
+import type { SkinTokens } from "@guide-rail/shared";
 import { tokensToSkin, getTokenCSSVars } from "@/lib/skin-bridge";
 import { ProgramOverviewPreview } from "@/components/preview/ProgramOverviewPreview";
 import { SessionPreview } from "@/components/preview/SessionPreview";
@@ -46,6 +47,8 @@ interface Program {
   targetTransformation: string | null;
   vibePrompt: string | null;
   skinId: string;
+  customSkinId: string | null;
+  customSkin: { id: string; tokens: unknown } | null;
   transitionMode: "NONE" | "SIMPLE" | "BRANDED";
   durationWeeks: number;
   pacingMode: "DRIP_BY_WEEK" | "UNLOCK_ON_COMPLETE";
@@ -384,12 +387,27 @@ export default function ProgramEditPage() {
     }
   }
 
-  async function handleSkinChange(skinId: string) {
+  async function handleGenerateSkin(): Promise<string | null> {
+    const res = await fetch(`/api/programs/${id}/skin`, { method: "POST" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.customSkinId) return null;
+    await load();
+    return `custom:${data.customSkinId}`;
+  }
+
+  async function handleSkinChange(rawSkinId: string) {
+    const patchFields =
+      rawSkinId === "auto-generate"
+        ? { skinId: "auto-generate", customSkinId: null }
+        : rawSkinId.startsWith("custom:")
+        ? { customSkinId: rawSkinId.replace("custom:", ""), skinId: "classic-minimal" }
+        : { skinId: rawSkinId, customSkinId: null };
     try {
       const res = await fetch(`/api/programs/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ skinId }),
+        body: JSON.stringify(patchFields),
       });
       if (!res.ok) throw new Error("Failed to update skin");
       await load();
@@ -513,7 +531,9 @@ export default function ProgramEditPage() {
     );
   }
 
-  const previewTokens = getSkinTokens(program.skinId);
+  const previewTokens: SkinTokens = program.customSkin?.tokens
+    ? (program.customSkin.tokens as SkinTokens)
+    : getSkinTokens(program.skinId);
   const previewSkin = tokensToSkin(previewTokens);
   const previewCssVars = getTokenCSSVars(previewTokens);
   const previewSelectedSession = previewSelectedSessionId
@@ -1272,7 +1292,12 @@ export default function ProgramEditPage() {
         <div className="max-w-2xl mx-auto py-8 px-4" style={{ background: "#0a0a0f", minHeight: "calc(100vh - 112px)" }}>
           <div className="space-y-3">
             <h2 className="text-base font-semibold text-white">Theme</h2>
-            <SkinPicker value={program.skinId} onChange={handleSkinChange} thumbnailUrl={program.videos[0]?.thumbnailUrl ?? null} />
+            <SkinPicker
+              value={program.customSkinId ? `custom:${program.customSkinId}` : program.skinId}
+              onChange={handleSkinChange}
+              onGenerateSkin={handleGenerateSkin}
+              thumbnailUrl={program.videos[0]?.thumbnailUrl ?? null}
+            />
           </div>
         </div>
       )}
@@ -1286,7 +1311,7 @@ export default function ProgramEditPage() {
               <div className="flex items-center gap-3">
                 <span className="text-sm text-gray-400">Preview</span>
                 <span className="text-xs px-2 py-0.5 bg-gray-800 rounded text-gray-500">
-                  {previewSkin.name}
+                  {program.customSkin ? "AI Custom Skin" : previewSkin.name}
                 </span>
               </div>
               <div className="flex items-center gap-4">

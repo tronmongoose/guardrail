@@ -11,6 +11,8 @@ interface SkinPreviewPanelProps {
   skinId: string;
   viewMode?: "desktop" | "mobile";
   thumbnailUrl?: string | null;
+  /** Optional token override — when provided, skips the catalog lookup. Used for custom AI-generated skins. */
+  tokens?: SkinTokens;
 }
 
 // ── Section header (sticky) ───────────────────────────────────────────────────
@@ -1271,8 +1273,8 @@ function DesignTokensSection({ tokens }: { tokens: SkinTokens }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl }: SkinPreviewPanelProps) {
-  const tokens = useMemo(() => getSkinTokens(skinId), [skinId]);
+export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, tokens: tokenOverride }: SkinPreviewPanelProps) {
+  const tokens = useMemo(() => tokenOverride ?? getSkinTokens(skinId), [skinId, tokenOverride]);
   const cssVars = useMemo(() => getTokenCSSVars(tokens), [tokens]);
   const entry = getSkinCatalogEntry(skinId);
 

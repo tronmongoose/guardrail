@@ -21,6 +21,7 @@ export async function GET(
       where: { id },
       include: {
         creator: { select: { name: true } },
+        customSkin: { select: { id: true, name: true, tokens: true } },
         videos: { orderBy: { createdAt: "asc" } },
         drafts: { orderBy: { createdAt: "desc" }, take: 5 },
         weeks: {
@@ -115,7 +116,16 @@ export async function PATCH(
   if (body.targetAudience !== undefined) data.targetAudience = body.targetAudience;
   if (body.targetTransformation !== undefined) data.targetTransformation = body.targetTransformation;
   if (body.vibePrompt !== undefined) data.vibePrompt = body.vibePrompt;
-  if (body.skinId !== undefined) data.skinId = body.skinId;
+  if (body.skinId !== undefined) {
+    data.skinId = body.skinId;
+    // Setting a catalog skin clears any custom skin
+    if (body.customSkinId === undefined) data.customSkinId = null;
+  }
+  if (body.customSkinId !== undefined) {
+    // Setting a custom skin ID — skinId becomes the catalog fallback
+    data.customSkinId = body.customSkinId;
+    if (body.skinId === undefined) data.skinId = "classic-minimal";
+  }
   if (body.pacingMode !== undefined) {
     // Map from shared schema format to Prisma enum format
     const pacingModeMap: Record<string, string> = {

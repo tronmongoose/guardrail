@@ -12,7 +12,7 @@
 import type { VideoAnalysisOutput } from "@guide-rail/shared";
 import { VideoAnalysisOutputSchema } from "@guide-rail/shared";
 
-const GEMINI_TIMEOUT_MS = 180_000; // 3 minutes — video analysis can be slow
+const GEMINI_TIMEOUT_MS = 300_000; // 5 minutes — uploaded videos need more headroom
 const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 const DEFAULT_MODEL = "gemini-2.5-flash-preview-05-20";
 

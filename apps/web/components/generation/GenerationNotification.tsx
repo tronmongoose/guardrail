@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useGenerationSteps } from "./useGenerationSteps";
 import { GenerationSteps } from "./GenerationSteps";
+import { SkinPreviewPanel } from "@/components/skins/SkinPreviewPanel";
+import type { SkinTokens } from "@guide-rail/shared";
 
 interface GenerationJob {
   jobId: string;
@@ -30,6 +32,8 @@ export function GenerationNotification({
   const isOnEditPage = pathname === `/programs/${programId}/edit`;
   const [job, setJob] = useState<GenerationJob | null>(null);
   const [dismissed, setDismissed] = useState(false);
+  const [skinModal, setSkinModal] = useState<{ tokens: SkinTokens; customSkinId: string } | null>(null);
+  const [skinChecked, setSkinChecked] = useState(false);
 
   const pollStatus = useCallback(async () => {
     try {
@@ -75,6 +79,68 @@ export function GenerationNotification({
       return () => clearTimeout(timer);
     }
   }, [job?.status, isOnEditPage, programId, handleDismiss]);
+
+  // After completion, check if a custom skin was generated and show preview modal
+  useEffect(() => {
+    if (job?.status !== "COMPLETED" || skinChecked) return;
+    setSkinChecked(true);
+    fetch(`/api/programs/${programId}`)
+      .then((r) => r.json())
+      .then((prog: { customSkin?: { id: string; tokens: SkinTokens } | null }) => {
+        if (prog.customSkin?.tokens) {
+          setSkinModal({ tokens: prog.customSkin.tokens, customSkinId: prog.customSkin.id });
+        }
+      })
+      .catch(() => {});
+  }, [job?.status, programId, skinChecked]);
+
+  if (skinModal) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col" style={{ maxHeight: "90vh" }}>
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Here&apos;s your custom skin</h2>
+              <p className="text-sm text-gray-500 mt-0.5">Generated from your vibe — apply it or pick a different theme.</p>
+            </div>
+            <button
+              onClick={() => setSkinModal(null)}
+              className="text-gray-400 hover:text-gray-600 transition ml-4"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Preview */}
+          <div className="flex-1 overflow-hidden" style={{ height: 420 }}>
+            <SkinPreviewPanel skinId="custom" tokens={skinModal.tokens} viewMode="desktop" />
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50">
+            <button
+              onClick={() => setSkinModal(null)}
+              className="flex-1 px-4 py-2.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition"
+            >
+              Use This Skin
+            </button>
+            <button
+              onClick={() => {
+                setSkinModal(null);
+                router.push(`/programs/${programId}/edit?tab=theme`);
+              }}
+              className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
+            >
+              Choose a Different Skin
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (dismissed || !job) return null;
 

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getEntitlement } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
-import { getSkinTokens } from "@/lib/skin-bundles/registry";
+import { resolveTokens } from "@/lib/resolve-tokens";
 import { SkinThemeProvider } from "@/components/skins/SkinThemeProvider";
 import { SessionViewer } from "./viewer";
 
@@ -80,7 +80,7 @@ export default async function SessionPage({
     }
   }
 
-  const tokens = getSkinTokens(program.skinId);
+  const tokens = await resolveTokens(program);
 
   // Build clip playlist: use CompositeSession clips if available,
   // otherwise fall back to WATCH actions' videos

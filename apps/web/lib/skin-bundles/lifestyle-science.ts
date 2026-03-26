@@ -12,7 +12,7 @@ const FONT = "'Inter', system-ui, sans-serif";
 export const lifestyleScienceTokens: SkinTokens = {
   id: SkinId.LifestyleScience,
   name: "Science Lab",
-  description: "Clinical precision on warm stone",
+  description: "Clinical white and teal for precision-minded creators",
 
   color: {
     background: {

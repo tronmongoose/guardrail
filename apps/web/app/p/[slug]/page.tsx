@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { EnrollButton } from "./enroll-button";
-import { getSkinTokens } from "@/lib/skin-bundles/registry";
+import { resolveTokens } from "@/lib/resolve-tokens";
 import { getTokenCSSVars } from "@/lib/skin-bridge";
 import { getActionTypeBg, ACTION_TYPE_LABELS } from "@/lib/action-type-styles";
 import type { Metadata } from "next";
@@ -87,7 +87,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
     // Not logged in — that's fine
   }
 
-  const tokens = getSkinTokens(program.skinId);
+  const tokens = await resolveTokens(program);
   const skinCSSVars = getTokenCSSVars(tokens);
 
   const priceDisplay =

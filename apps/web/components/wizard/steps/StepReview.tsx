@@ -7,15 +7,17 @@ import type { WizardState } from "../ProgramWizard";
 
 interface StepReviewProps {
   state: WizardState;
+  programId: string;
   skinId: string;
   onSkinChange: (skinId: string) => void;
+  onGenerateSkin: () => Promise<string | null>;
   transitionMode: TransitionMode;
   onTransitionModeChange: (mode: TransitionMode) => void;
   isGenerating: boolean;
   onGenerate: () => void;
 }
 
-export function StepReview({ state, skinId, onSkinChange, transitionMode, onTransitionModeChange, isGenerating, onGenerate }: StepReviewProps) {
+export function StepReview({ state, programId, skinId, onSkinChange, onGenerateSkin, transitionMode, onTransitionModeChange, isGenerating, onGenerate }: StepReviewProps) {
   const totalContent = state.content.videos.length + state.content.artifacts.length;
   const firstThumbnail = state.content.videos[0]?.thumbnailUrl ?? null;
 
@@ -50,7 +52,7 @@ export function StepReview({ state, skinId, onSkinChange, transitionMode, onTran
       </div>
 
       {/* Skin picker — hero feature */}
-      <SkinPicker value={skinId} onChange={onSkinChange} thumbnailUrl={firstThumbnail} />
+      <SkinPicker value={skinId} onChange={onSkinChange} thumbnailUrl={firstThumbnail} onGenerateSkin={onGenerateSkin} />
 
       {/* Transition style */}
       <TransitionStylePicker value={transitionMode} onChange={onTransitionModeChange} />
@@ -91,14 +93,14 @@ export function StepReview({ state, skinId, onSkinChange, transitionMode, onTran
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
-              Generating your program...
+              Starting generation…
             </span>
           ) : (
-            "Generate Program Structure"
+            "Generate in Background →"
           )}
         </button>
         <p className="text-center text-xs text-gray-500 mt-3">
-          AI will analyze your content and build out weeks, sessions, and actions.
+          Runs in the background — we&apos;ll email you when your program is ready.
         </p>
       </div>
     </div>

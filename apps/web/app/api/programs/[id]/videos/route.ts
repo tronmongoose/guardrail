@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
+
+export const maxDuration = 300; // Keep function alive for post-response Gemini analysis
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { parseYouTubeVideoId, fetchYouTubeOEmbed, fetchYouTubeTranscript } from "@guide-rail/shared";
@@ -44,14 +46,16 @@ export async function POST(
       },
     });
 
-    // Fire-and-forget Gemini analysis for uploaded video via Files API
+    // Run Gemini analysis after the response is sent — after() guarantees completion on Vercel
     const mimeType = url.toLowerCase().endsWith(".mov") ? "video/quicktime" : "video/mp4";
-    analyzeUploadedVideoWithGemini(url, title, mimeType)
-      .then(async (analysis) => {
+    const videoId = video.id;
+    after(async () => {
+      try {
+        const analysis = await analyzeUploadedVideoWithGemini(url, title, mimeType);
         await prisma.videoAnalysis.upsert({
-          where: { youtubeVideoId: video.id },
+          where: { youtubeVideoId: videoId },
           create: {
-            youtubeVideoId: video.id,
+            youtubeVideoId: videoId,
             summary: analysis.summary,
             fullTranscript: analysis.fullTranscript ?? null,
             segments: analysis.segments as unknown as Prisma.InputJsonValue,
@@ -74,11 +78,11 @@ export async function POST(
         if (analysis.durationSeconds) {
           await maybeSegmentVideo(prisma, video, analysis.topics, analysis.durationSeconds);
         }
-        console.log(`[gemini] Upload analysis saved for "${title}" (record ${video.id})`);
-      })
-      .catch((err) => {
+        console.log(`[gemini] Upload analysis saved for "${title}" (record ${videoId})`);
+      } catch (err) {
         console.error(`[gemini] Upload analysis failed for "${title}":`, err);
-      });
+      }
+    });
 
     return NextResponse.json(video);
   }
@@ -202,9 +206,15 @@ export async function GET(
 
   const videos = await prisma.youTubeVideo.findMany({
     where: { programId, isSegment: false },
-    include: { _count: { select: { segments: true } } },
+    include: {
+      _count: { select: { segments: true } },
+      analysis: { select: { id: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
 
-  return NextResponse.json(videos);
+  // Return analysis as a boolean flag to keep payload small
+  return NextResponse.json(
+    videos.map(({ analysis, ...v }) => ({ ...v, hasAnalysis: analysis !== null }))
+  );
 }

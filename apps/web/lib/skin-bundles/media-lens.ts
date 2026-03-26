@@ -12,7 +12,7 @@ const FONT = "'Inter', system-ui, sans-serif";
 export const mediaLensTokens: SkinTokens = {
   id: SkinId.MediaLens,
   name: "Wild Lens",
-  description: "Dark editorial with bold red serif energy",
+  description: "Deep forest green with vivid emerald for nature photography",
 
   color: {
     background: {

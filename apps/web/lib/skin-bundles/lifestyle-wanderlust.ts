@@ -12,7 +12,7 @@ const FONT = "'Inter', system-ui, sans-serif";
 export const lifestyleWanderlustTokens: SkinTokens = {
   id: SkinId.LifestyleWanderlust,
   name: "Wanderlust",
-  description: "Rose-tinted adventure and discovery",
+  description: "Open-sky blues and teal for travel and exploration",
 
   color: {
     background: {

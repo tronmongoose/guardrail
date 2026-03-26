@@ -119,3 +119,59 @@ The GuideRail Team
 
   return sendEmail({ to: email, subject, text, html });
 }
+
+/**
+ * Send "your program is ready" notification to the creator when generation completes.
+ */
+export async function sendProgramReadyEmail(
+  to: string,
+  firstName: string,
+  programTitle: string,
+  programId: string,
+): Promise<boolean> {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.guiderail.app";
+  const editUrl = `${appUrl}/programs/${programId}/edit`;
+
+  const text = `
+Hi ${firstName}!
+
+Great news — your program "${programTitle}" has been generated and is ready for you to review.
+
+Open it here: ${editUrl}
+
+You can edit the curriculum, set your price, and publish whenever you're ready.
+
+The GuideRail Team
+`.trim();
+
+  const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
+    .container { max-width: 560px; margin: 0 auto; padding: 32px 20px; }
+    .button { display: inline-block; padding: 12px 24px; background-color: #06b6d4; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; }
+    .footer { margin-top: 40px; font-size: 12px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2 style="color:#0f172a">Your program is ready, ${firstName}!</h2>
+    <p style="color:#374151">
+      <strong>"${programTitle}"</strong> has been generated. Open it to review your curriculum,
+      set your price, and publish to learners.
+    </p>
+    <p style="margin: 28px 0;">
+      <a href="${editUrl}" class="button">View Your Program →</a>
+    </p>
+    <p class="footer">
+      GuideRail &middot; <a href="${editUrl}" style="color:#9ca3af">${editUrl}</a>
+    </p>
+  </div>
+</body>
+</html>
+`.trim();
+
+  return sendEmail({ to, subject: `Your program "${programTitle}" is ready!`, text, html });
+}
