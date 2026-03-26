@@ -373,17 +373,26 @@ export function StepContent({
     // @vercel/blob retries up to 10x on failure; each XHR retry resets event.loaded to 0,
     // which would cause the bar to oscillate without this gate.
     let highWater = 0;
+    let lastProgressAt = Date.now();
     const advance = (pct: number) => {
       const next = Math.min(89, Math.round(pct));
       if (next > highWater) {
         highWater = next;
+        lastProgressAt = Date.now();
         updateState(highWater, "Uploading");
       }
     };
 
     // Simulation: ensures the bar inches forward even during retries or slow uploads,
-    // so it never looks frozen. Asymptotically approaches 85%, leaving room for "Saving".
-    const simId = setInterval(() => advance(highWater + (85 - highWater) * 0.015), 250);
+    // so it never looks frozen. Targets 88%, leaving the final 1% for "Saving".
+    // Also acts as the inactivity detector: if progress hasn't moved for 45s, abort early.
+    const simId = setInterval(() => {
+      if (Date.now() - lastProgressAt > 45_000) {
+        controller.abort();
+        return;
+      }
+      advance(highWater + (88 - highWater) * 0.015);
+    }, 250);
 
     const blobName = `${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
 
@@ -395,13 +404,14 @@ export function StepContent({
         abortSignal: controller.signal,
         contentType: file.type || getVideoMimeType(file.name),
         onUploadProgress: ({ percentage }) => {
-          // percentage is cumulative 0-100; scale to 0-89 and push through the gate.
-          advance(percentage * 0.89);
+          // percentage is cumulative 0-100; scale to 0-75 so the simulation keeps
+          // animating from 75% → 88% while Vercel finalizes the upload server-side.
+          advance(percentage * 0.75);
         },
       });
     } catch (err) {
       if (controller.signal.aborted) {
-        throw new Error(`${file.name}: Upload timed out after 10 minutes`);
+        throw new Error(`${file.name}: Upload timed out — check your connection and retry.`);
       }
       throw err;
     } finally {

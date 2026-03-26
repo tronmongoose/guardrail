@@ -123,6 +123,7 @@ export default function NewProgramPage() {
           durationWeeks: data.durationWeeks,
           pacingMode: data.pacingMode,
           vibePrompt: data.vibePrompt,
+          videoHints: data.videoHints,
           skinId: data.skinId,
         }),
       });
@@ -394,10 +395,12 @@ export default function NewProgramPage() {
     // @vercel/blob retries up to 10x on failure; each XHR retry resets event.loaded to 0,
     // which would cause the bar to oscillate without this gate.
     let highWater = 0;
+    let lastProgressAt = Date.now();
     const advance = (pct: number) => {
       const next = Math.min(89, Math.round(pct));
       if (next > highWater) {
         highWater = next;
+        lastProgressAt = Date.now();
         setPendingUploads((prev) =>
           prev.map((p) => (p.localId === item.localId ? { ...p, progress: highWater } : p))
         );
@@ -405,8 +408,15 @@ export default function NewProgramPage() {
     };
 
     // Simulation: ensures the bar inches forward even during retries or slow uploads,
-    // so it never looks frozen. Asymptotically approaches 85%.
-    const simId = setInterval(() => advance(highWater + (85 - highWater) * 0.015), 250);
+    // so it never looks frozen. Targets 88%, leaving the final 1% for "registering" jump.
+    // Also acts as the inactivity detector: if progress hasn't moved for 45s, abort early.
+    const simId = setInterval(() => {
+      if (Date.now() - lastProgressAt > 45_000) {
+        controller.abort();
+        return;
+      }
+      advance(highWater + (88 - highWater) * 0.015);
+    }, 250);
 
     // Sanitize filename to avoid blob key issues with special characters
     const sanitize = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -426,7 +436,7 @@ export default function NewProgramPage() {
         handleUploadUrl: `/api/programs/${currentProgramId}/videos/upload`,
         abortSignal: controller.signal,
         contentType: item.file.type || getMime(item.file.name),
-        onUploadProgress: ({ percentage }) => advance(percentage * 0.89),
+        onUploadProgress: ({ percentage }) => advance(percentage * 0.75),
       });
 
       // Jump to 92% while registering with the API
@@ -558,6 +568,7 @@ export default function NewProgramPage() {
           pacingMode,
           vibePrompt,
           videoHints,
+          skinId,
         }),
       });
 
