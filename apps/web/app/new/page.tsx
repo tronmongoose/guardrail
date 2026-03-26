@@ -420,11 +420,10 @@ export default function NewProgramPage() {
       return "video/mp4";
     };
 
-    let blob: Awaited<ReturnType<typeof upload>>;
     try {
       // multipart: true splits the file into 8 MB chunks with 6 concurrent connections.
       // Each chunk retries independently on failure, eliminating mid-transfer stalls.
-      blob = await upload(blobKey, item.file, {
+      const blob = await upload(blobKey, item.file, {
         access: "public",
         handleUploadUrl: `/api/programs/${currentProgramId}/videos/upload`,
         abortSignal: controller.signal,
@@ -432,22 +431,12 @@ export default function NewProgramPage() {
         contentType: getMime(item.file.name),
         onUploadProgress: ({ percentage }) => advance(percentage * 0.89),
       });
-    } catch (err) {
-      if (controller.signal.aborted) {
-        throw new Error("Upload timed out — check your connection and tap Retry.");
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeoutId);
-      clearInterval(simId);
-    }
 
-    // Jump to 92% while registering with the API
-    setPendingUploads((prev) =>
-      prev.map((p) => (p.localId === item.localId ? { ...p, progress: 92 } : p))
-    );
+      // Jump to 92% while registering with the API
+      setPendingUploads((prev) =>
+        prev.map((p) => (p.localId === item.localId ? { ...p, progress: 92 } : p))
+      );
 
-    try {
       const res = await fetch(`/api/programs/${currentProgramId}/videos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -463,13 +452,18 @@ export default function NewProgramPage() {
       setVideos((prev) => [...prev, video]);
       setPendingUploads((prev) => prev.filter((p) => p.localId !== item.localId));
     } catch (err) {
+      const message = controller.signal.aborted
+        ? "Upload timed out — check your connection and tap Retry."
+        : err instanceof Error ? err.message : "Upload failed";
+      console.error("[upload] Failed for", item.file.name, "—", message);
       setPendingUploads((prev) =>
         prev.map((p) =>
-          p.localId === item.localId
-            ? { ...p, error: err instanceof Error ? err.message : "Upload failed" }
-            : p
+          p.localId === item.localId ? { ...p, error: message } : p
         )
       );
+    } finally {
+      clearTimeout(timeoutId);
+      clearInterval(simId);
     }
   }, []);
 
