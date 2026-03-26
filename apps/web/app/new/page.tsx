@@ -421,13 +421,11 @@ export default function NewProgramPage() {
     };
 
     try {
-      // multipart: true splits the file into 8 MB chunks with 6 concurrent connections.
-      // Each chunk retries independently on failure, eliminating mid-transfer stalls.
       const blob = await upload(blobKey, item.file, {
         access: "public",
         handleUploadUrl: `/api/programs/${currentProgramId}/videos/upload`,
         abortSignal: controller.signal,
-        multipart: true,
+        multipart: process.env.NODE_ENV === "production", // CORS-blocked on localhost; enabled in prod for chunked retry
         contentType: getMime(item.file.name),
         onUploadProgress: ({ percentage }) => advance(percentage * 0.89),
       });

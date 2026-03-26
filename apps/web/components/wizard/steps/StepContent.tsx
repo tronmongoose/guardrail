@@ -393,7 +393,7 @@ export function StepContent({
         access: "public",
         handleUploadUrl: `/api/programs/${programId}/videos/upload`,
         abortSignal: controller.signal,
-        multipart: true,                           // 8 MB chunks, 6 concurrent — each retries independently
+        multipart: process.env.NODE_ENV === "production", // CORS-blocked on localhost; enabled in prod for chunked retry
         contentType: getVideoMimeType(file.name),  // explicit MIME override; browser detection is unreliable
         onUploadProgress: ({ percentage }) => {
           // percentage is cumulative 0-100; scale to 0-89 and push through the gate.
