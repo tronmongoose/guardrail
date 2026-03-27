@@ -375,12 +375,11 @@ export function StepContent({
     let highWater = 0;
     let uploadStarted = false; // true once the first onUploadProgress event fires
     let lastProgressAt = Date.now();
+    let simPct = 0; // float accumulator — avoids integer stalling at ~55%
     const advance = (pct: number) => {
       const next = Math.min(89, Math.round(pct));
       if (next > highWater) {
         highWater = next;
-        uploadStarted = true;
-        lastProgressAt = Date.now();
         updateState(highWater, "Uploading");
       }
     };
@@ -397,7 +396,8 @@ export function StepContent({
         controller.abort();
         return;
       }
-      advance(highWater + (88 - highWater) * 0.015);
+      simPct += (88 - simPct) * 0.015;
+      advance(simPct);
     }, 250);
 
     const blobName = `${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
@@ -410,8 +410,11 @@ export function StepContent({
         abortSignal: controller.signal,
         contentType: file.type || getVideoMimeType(file.name),
         onUploadProgress: ({ percentage }) => {
+          // Always reset the inactivity timer on real progress, regardless of highWater.
           // percentage is cumulative 0-100; scale to 0-75 so the simulation keeps
           // animating from 75% → 88% while Vercel finalizes the upload server-side.
+          uploadStarted = true;
+          lastProgressAt = Date.now();
           advance(percentage * 0.75);
         },
       });

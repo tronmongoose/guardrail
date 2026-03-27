@@ -397,12 +397,11 @@ export default function NewProgramPage() {
     let highWater = 0;
     let uploadStarted = false; // true once the first onUploadProgress event fires
     let lastProgressAt = Date.now();
+    let simPct = 0; // float accumulator — avoids integer stalling at ~55%
     const advance = (pct: number) => {
       const next = Math.min(89, Math.round(pct));
       if (next > highWater) {
         highWater = next;
-        uploadStarted = true;
-        lastProgressAt = Date.now();
         setPendingUploads((prev) =>
           prev.map((p) => (p.localId === item.localId ? { ...p, progress: highWater } : p))
         );
@@ -421,7 +420,8 @@ export default function NewProgramPage() {
         controller.abort();
         return;
       }
-      advance(highWater + (88 - highWater) * 0.015);
+      simPct += (88 - simPct) * 0.015;
+      advance(simPct);
     }, 250);
 
     // Sanitize filename to avoid blob key issues with special characters
@@ -442,7 +442,12 @@ export default function NewProgramPage() {
         handleUploadUrl: `/api/programs/${currentProgramId}/videos/upload`,
         abortSignal: controller.signal,
         contentType: item.file.type || getMime(item.file.name),
-        onUploadProgress: ({ percentage }) => advance(percentage * 0.75),
+        onUploadProgress: ({ percentage }) => {
+          // Always reset the inactivity timer on real progress, regardless of highWater.
+          uploadStarted = true;
+          lastProgressAt = Date.now();
+          advance(percentage * 0.75);
+        },
       });
 
       // Jump to 92% while registering with the API

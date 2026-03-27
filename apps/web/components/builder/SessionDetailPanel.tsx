@@ -323,7 +323,7 @@ export function SessionDetailPanel({
       const blob = await upload(uniqueName, file, {
         access: "public",
         handleUploadUrl: `/api/programs/${programId}/videos/upload`,
-        multipart: true,
+
         contentType: getVideoMimeType(file.name),
         onUploadProgress: ({ percentage }) => {
           const next = Math.min(89, Math.round(percentage * 0.89));
