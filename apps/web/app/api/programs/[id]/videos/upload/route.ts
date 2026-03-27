@@ -47,7 +47,9 @@ export async function POST(
       },
       // DB record creation is handled client-side via POST /api/programs/[id]/videos
       // after the upload completes, so nothing needed here.
-      onUploadCompleted: async () => {},
+      onUploadCompleted: async ({ blob, tokenPayload }) => {
+        console.log('onUploadCompleted called', blob.url, tokenPayload);
+      },
     });
 
     return NextResponse.json(jsonResponse);
