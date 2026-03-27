@@ -11,6 +11,7 @@ const isPublicRoute = createRouteMatcher([
   "/api/webhooks/(.*)",
   "/api/promo-codes/validate",
   "/api/health",
+  "/api/programs/(.*)/videos/upload", // Vercel Blob completion webhook is unauthenticated
   "/sign-in(.*)",
   "/sign-up(.*)",
 ]);
