@@ -367,15 +367,13 @@ export function StepContent({
     updateState(0, "Uploading");
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3 * 60 * 1000); // 3-minute timeout
+    const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000); // 10-minute hard timeout
 
     // Monotonic high-water mark: progress bar can NEVER go backward.
     // @vercel/blob retries up to 10x on failure; each XHR retry resets event.loaded to 0,
     // which would cause the bar to oscillate without this gate.
     let highWater = 0;
-    let uploadStarted = false; // true once the first onUploadProgress event fires
-    let lastProgressAt = Date.now();
-    let simPct = 0; // float accumulator — avoids integer stalling at ~55%
+    let simPct = 0; // float accumulator for smooth simulation
     const advance = (pct: number) => {
       const next = Math.min(89, Math.round(pct));
       if (next > highWater) {
@@ -384,18 +382,10 @@ export function StepContent({
       }
     };
 
-    // Simulation: ensures the bar inches forward even during retries or slow uploads,
-    // so it never looks frozen. Targets 88%, leaving the final 1% for "Saving".
-    // Inactivity detector uses two phases:
-    //   - Before first progress event: 90s grace (token request + connection setup can be slow)
-    //   - After first progress event:  60s inactivity = stalled transfer, abort and retry
+    // Simulation: inches the bar forward visually so it never looks frozen.
+    // Targets 88%, leaving the final 1% for "Saving". Hard timeout above is
+    // the safety net — no separate inactivity detector needed.
     const simId = setInterval(() => {
-      const inactiveMs = Date.now() - lastProgressAt;
-      const threshold = uploadStarted ? 60_000 : 90_000;
-      if (inactiveMs > threshold) {
-        controller.abort();
-        return;
-      }
       simPct += (88 - simPct) * 0.015;
       advance(simPct);
     }, 250);
@@ -410,11 +400,8 @@ export function StepContent({
         abortSignal: controller.signal,
         contentType: file.type || getVideoMimeType(file.name),
         onUploadProgress: ({ percentage }) => {
-          // Always reset the inactivity timer on real progress, regardless of highWater.
           // percentage is cumulative 0-100; scale to 0-75 so the simulation keeps
           // animating from 75% → 88% while Vercel finalizes the upload server-side.
-          uploadStarted = true;
-          lastProgressAt = Date.now();
           advance(percentage * 0.75);
         },
       });
