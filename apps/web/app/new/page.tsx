@@ -395,11 +395,13 @@ export default function NewProgramPage() {
     // @vercel/blob retries up to 10x on failure; each XHR retry resets event.loaded to 0,
     // which would cause the bar to oscillate without this gate.
     let highWater = 0;
+    let uploadStarted = false; // true once the first onUploadProgress event fires
     let lastProgressAt = Date.now();
     const advance = (pct: number) => {
       const next = Math.min(89, Math.round(pct));
       if (next > highWater) {
         highWater = next;
+        uploadStarted = true;
         lastProgressAt = Date.now();
         setPendingUploads((prev) =>
           prev.map((p) => (p.localId === item.localId ? { ...p, progress: highWater } : p))
@@ -409,9 +411,13 @@ export default function NewProgramPage() {
 
     // Simulation: ensures the bar inches forward even during retries or slow uploads,
     // so it never looks frozen. Targets 88%, leaving the final 1% for "registering" jump.
-    // Also acts as the inactivity detector: if progress hasn't moved for 45s, abort early.
+    // Inactivity detector uses two phases:
+    //   - Before first progress event: 90s grace (token request + connection setup can be slow)
+    //   - After first progress event:  60s inactivity = stalled transfer, abort and retry
     const simId = setInterval(() => {
-      if (Date.now() - lastProgressAt > 45_000) {
+      const inactiveMs = Date.now() - lastProgressAt;
+      const threshold = uploadStarted ? 60_000 : 90_000;
+      if (inactiveMs > threshold) {
         controller.abort();
         return;
       }
