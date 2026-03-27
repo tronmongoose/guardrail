@@ -1,8 +1,12 @@
--- CreateEnum
-CREATE TYPE "ProgramTransitionMode" AS ENUM ('NONE', 'SIMPLE', 'BRANDED');
+-- CreateEnum (idempotent — enum may already exist if a previous deploy partially ran)
+DO $$ BEGIN
+  CREATE TYPE "ProgramTransitionMode" AS ENUM ('NONE', 'SIMPLE', 'BRANDED');
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
 
--- AlterTable
-ALTER TABLE "Program" ADD COLUMN "transitionMode" "ProgramTransitionMode" NOT NULL DEFAULT 'NONE';
+-- AlterTable (idempotent)
+ALTER TABLE "Program" ADD COLUMN IF NOT EXISTS "transitionMode" "ProgramTransitionMode" NOT NULL DEFAULT 'NONE';
 
--- AlterTable
-ALTER TABLE "Session" ADD COLUMN "hideTransition" BOOLEAN NOT NULL DEFAULT false;
+-- AlterTable (idempotent)
+ALTER TABLE "Session" ADD COLUMN IF NOT EXISTS "hideTransition" BOOLEAN NOT NULL DEFAULT false;
