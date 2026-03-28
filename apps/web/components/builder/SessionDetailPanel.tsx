@@ -321,7 +321,7 @@ export function SessionDetailPanel({
     try {
       const uniqueName = `${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
       const blob = await upload(uniqueName, file, {
-        access: "public",
+        access: "private",
         handleUploadUrl: `/api/programs/${programId}/videos/upload`,
 
         contentType: getVideoMimeType(file.name),

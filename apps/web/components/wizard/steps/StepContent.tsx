@@ -395,7 +395,7 @@ export function StepContent({
     let blob: Awaited<ReturnType<typeof upload>>;
     try {
       blob = await upload(blobName, file, {
-        access: "public",
+        access: "private",
         handleUploadUrl: `/api/programs/${programId}/videos/upload`,
         abortSignal: controller.signal,
         contentType: file.type || getVideoMimeType(file.name),

@@ -428,7 +428,7 @@ export default function NewProgramPage() {
 
     try {
       const blob = await upload(blobKey, item.file, {
-        access: "public",
+        access: "private",
         handleUploadUrl: `/api/programs/${currentProgramId}/videos/upload`,
         abortSignal: controller.signal,
         contentType: item.file.type || getMime(item.file.name),
