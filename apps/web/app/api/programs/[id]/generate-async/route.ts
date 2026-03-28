@@ -564,97 +564,97 @@ async function processGenerationJob(jobId: string, programId: string) {
       },
     });
 
-    // Delete existing structure and create new
+    // Delete existing structure and create new — using sequential queries instead of
+    // an interactive transaction to avoid Neon PgBouncer transaction timeout issues.
     let sessionCount = 0;
     let actionCount = 0;
     let compositeCount = 0;
 
-    await prisma.$transaction(async (tx) => {
-      await tx.week.deleteMany({ where: { programId } });
+    // Clear old structure first
+    await prisma.week.deleteMany({ where: { programId } });
 
-      for (const week of validated.data.weeks) {
-        const createdWeek = await tx.week.create({
+    for (const week of validated.data.weeks) {
+      const createdWeek = await prisma.week.create({
+        data: {
+          programId,
+          title: week.title,
+          summary: week.summary,
+          weekNumber: week.weekNumber,
+        },
+      });
+
+      for (const session of week.sessions) {
+        sessionCount++;
+        const createdSession = await prisma.session.create({
           data: {
-            programId,
-            title: week.title,
-            summary: week.summary,
-            weekNumber: week.weekNumber,
+            weekId: createdWeek.id,
+            title: session.title,
+            summary: session.summary,
+            keyTakeaways: session.keyTakeaways ?? [],
+            orderIndex: session.orderIndex,
           },
         });
 
-        for (const session of week.sessions) {
-          sessionCount++;
-          const createdSession = await tx.session.create({
+        for (const action of session.actions) {
+          actionCount++;
+          await prisma.action.create({
             data: {
-              weekId: createdWeek.id,
+              sessionId: createdSession.id,
+              title: action.title,
+              type: action.type.toUpperCase() as "WATCH" | "READ" | "DO" | "REFLECT",
+              instructions: action.instructions,
+              reflectionPrompt: action.reflectionPrompt,
+              orderIndex: action.orderIndex,
+              youtubeVideoId: action.youtubeVideoId,
+            },
+          });
+        }
+
+        // Persist CompositeSession + clips + overlays if present
+        if (session.clips && session.clips.length > 0) {
+          compositeCount++;
+          const compositeSession = await prisma.compositeSession.create({
+            data: {
+              sessionId: createdSession.id,
               title: session.title,
-              summary: session.summary,
-              keyTakeaways: session.keyTakeaways ?? [],
-              orderIndex: session.orderIndex,
+              description: session.summary,
+              autoAdvance: true,
             },
           });
 
-          for (const action of session.actions) {
-            actionCount++;
-            await tx.action.create({
+          for (const clip of session.clips) {
+            await prisma.sessionClip.create({
               data: {
-                sessionId: createdSession.id,
-                title: action.title,
-                type: action.type.toUpperCase() as "WATCH" | "READ" | "DO" | "REFLECT",
-                instructions: action.instructions,
-                reflectionPrompt: action.reflectionPrompt,
-                orderIndex: action.orderIndex,
-                youtubeVideoId: action.youtubeVideoId,
+                compositeSessionId: compositeSession.id,
+                youtubeVideoId: clip.youtubeVideoId,
+                startSeconds: clip.startSeconds ?? null,
+                endSeconds: clip.endSeconds ?? null,
+                orderIndex: clip.orderIndex,
+                transitionType: (clip.transitionType ?? "NONE") as "NONE" | "FADE" | "CROSSFADE" | "SLIDE_LEFT",
+                transitionDurationMs: clip.transitionDurationMs ?? 500,
+                chapterTitle: clip.chapterTitle ?? null,
+                chapterDescription: clip.chapterDescription ?? null,
               },
             });
           }
 
-          // Persist CompositeSession + clips + overlays if present
-          if (session.clips && session.clips.length > 0) {
-            compositeCount++;
-            const compositeSession = await tx.compositeSession.create({
+          for (const overlay of session.overlays ?? []) {
+            await prisma.sessionOverlay.create({
               data: {
-                sessionId: createdSession.id,
-                title: session.title,
-                description: session.summary,
-                autoAdvance: true,
+                compositeSessionId: compositeSession.id,
+                type: overlay.type as "TITLE_CARD" | "CHAPTER_TITLE" | "KEY_POINTS" | "LOWER_THIRD" | "CTA" | "OUTRO",
+                content: overlay.content as unknown as Prisma.InputJsonValue,
+                clipOrderIndex: overlay.clipOrderIndex ?? null,
+                triggerAtSeconds: overlay.triggerAtSeconds ?? null,
+                durationMs: overlay.durationMs ?? 5000,
+                position: (overlay.position ?? "CENTER") as "CENTER" | "BOTTOM" | "TOP" | "LOWER_THIRD",
+                orderIndex: overlay.orderIndex,
               },
             });
-
-            for (const clip of session.clips) {
-              await tx.sessionClip.create({
-                data: {
-                  compositeSessionId: compositeSession.id,
-                  youtubeVideoId: clip.youtubeVideoId,
-                  startSeconds: clip.startSeconds ?? null,
-                  endSeconds: clip.endSeconds ?? null,
-                  orderIndex: clip.orderIndex,
-                  transitionType: (clip.transitionType ?? "NONE") as "NONE" | "FADE" | "CROSSFADE" | "SLIDE_LEFT",
-                  transitionDurationMs: clip.transitionDurationMs ?? 500,
-                  chapterTitle: clip.chapterTitle ?? null,
-                  chapterDescription: clip.chapterDescription ?? null,
-                },
-              });
-            }
-
-            for (const overlay of session.overlays ?? []) {
-              await tx.sessionOverlay.create({
-                data: {
-                  compositeSessionId: compositeSession.id,
-                  type: overlay.type as "TITLE_CARD" | "CHAPTER_TITLE" | "KEY_POINTS" | "LOWER_THIRD" | "CTA" | "OUTRO",
-                  content: overlay.content as unknown as Prisma.InputJsonValue,
-                  clipOrderIndex: overlay.clipOrderIndex ?? null,
-                  triggerAtSeconds: overlay.triggerAtSeconds ?? null,
-                  durationMs: overlay.durationMs ?? 5000,
-                  position: (overlay.position ?? "CENTER") as "CENTER" | "BOTTOM" | "TOP" | "LOWER_THIRD",
-                  orderIndex: overlay.orderIndex,
-                },
-              });
-            }
           }
         }
       }
-    }, { timeout: 30000 });
+    }
 
     aiLogger.generationSuccess(programId, timer.elapsed(), {
       weekCount: validated.data.weeks.length,
