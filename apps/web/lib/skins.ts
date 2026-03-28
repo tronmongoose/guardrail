@@ -7,6 +7,8 @@
  */
 
 import type { SkinId } from "@guide-rail/shared";
+import { getSkinTokens } from "@/lib/skin-bundles/registry";
+import { tokensToSkin } from "@/lib/skin-bridge";
 
 export interface Skin {
   id: string;
@@ -138,7 +140,8 @@ export const SKIN_IDS = Object.keys(SKINS) as (keyof typeof SKINS)[];
  * This returns the legacy Skin interface. Kept for builder preview components.
  */
 export function getSkin(skinId: string): Skin {
-  return SKINS[skinId as SkinId] ?? SKINS["default"]!;
+  if (SKINS[skinId]) return SKINS[skinId];
+  return tokensToSkin(getSkinTokens(skinId));
 }
 
 /**

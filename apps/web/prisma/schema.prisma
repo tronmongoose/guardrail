@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 // --- User (linked to Clerk) ---
@@ -88,7 +89,7 @@ model Program {
   targetAudience       String?   @db.Text  // "Who it's for" / industry
   targetTransformation String?   @db.Text  // 1-2 sentence transformation goal
   vibePrompt           String?   @db.Text  // AI generation style guidance
-  skinId               String    @default("default")
+  skinId               String    @default("classic-minimal")
   customSkinId         String?
   customSkin           CustomSkin? @relation(fields: [customSkinId], references: [id])
   transitionMode       ProgramTransitionMode @default(NONE)
