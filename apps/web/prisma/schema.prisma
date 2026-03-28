@@ -277,6 +277,8 @@ model YouTubeVideo {
   description     String?
   durationSeconds Int?     // Video duration in seconds
   transcript      String?  @db.Text  // Auto-fetched captions/transcript
+  muxAssetId      String?   // Mux video asset ID
+  muxPlaybackId   String?   // Mux playback ID for HLS streaming
   programId       String
   program         Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
   createdAt       DateTime @default(now())

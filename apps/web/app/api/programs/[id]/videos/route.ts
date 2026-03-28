@@ -4,10 +4,13 @@ import { getOrCreateUser } from "@/lib/auth";
 export const maxDuration = 300; // Keep function alive for post-response Gemini analysis
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import Mux from "@mux/mux-node";
 import { parseYouTubeVideoId, fetchYouTubeOEmbed, fetchYouTubeTranscript } from "@guide-rail/shared";
 import { analyzeVideoWithGemini, analyzeUploadedVideoWithGemini } from "@guide-rail/ai";
 import { maybeSegmentVideo } from "@/lib/video-segmentation";
 import { videoLogger, createTimer } from "@/lib/logger";
+
+const mux = new Mux();
 
 export async function POST(
   req: NextRequest,
@@ -46,10 +49,29 @@ export async function POST(
       },
     });
 
-    // Run Gemini analysis after the response is sent — after() guarantees completion on Vercel
+    // Run Mux transcoding + Gemini analysis after the response is sent
     const mimeType = url.toLowerCase().endsWith(".mov") ? "video/quicktime" : "video/mp4";
     const videoId = video.id;
     after(async () => {
+      // Kick off Mux transcoding (non-blocking, runs in parallel with Gemini)
+      if (process.env.MUX_TOKEN_ID) {
+        try {
+          const asset = await mux.video.assets.create({
+            inputs: [{ url }],
+            playback_policy: ["public"],
+            video_quality: "basic",
+          });
+          const playbackId = asset.playback_ids?.[0]?.id;
+          await prisma.youTubeVideo.update({
+            where: { id: videoId },
+            data: { muxAssetId: asset.id, muxPlaybackId: playbackId ?? null },
+          });
+          console.log(`[mux] Asset created for "${title}" — asset=${asset.id} playback=${playbackId}`);
+        } catch (muxErr) {
+          console.error(`[mux] Asset creation failed for "${title}":`, muxErr);
+        }
+      }
+
       try {
         const analysis = await analyzeUploadedVideoWithGemini(url, title, mimeType);
         await prisma.videoAnalysis.upsert({

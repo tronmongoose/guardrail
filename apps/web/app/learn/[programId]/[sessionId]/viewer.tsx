@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
+import MuxPlayer from "@mux/mux-player-react";
 import { VideoPlayer } from "@/components/viewer/VideoPlayer";
 import { ChapterRail } from "@/components/viewer/ChapterRail";
 import { ActionsPanel, type ViewerAction } from "@/components/viewer/ActionsPanel";
@@ -20,7 +21,9 @@ import { SimpleTransitionScreen } from "@/components/viewer/SimpleTransitionScre
 export interface ViewerClip {
   id: string;
   youtubeVideoId: string;
-  /** Set for uploaded (Vercel Blob) videos — use HTML5 <video> instead of YouTube iframe */
+  /** Mux playback ID for HLS streaming — preferred for uploaded videos */
+  muxPlaybackId?: string;
+  /** Fallback for uploaded videos without Mux transcoding */
   blobUrl?: string;
   title: string;
   chapterTitle: string;
@@ -204,7 +207,21 @@ export function SessionViewer({
         <div className="flex flex-1 flex-col">
           {hasClips ? (
             <div className="relative w-full">
-              {currentClip.blobUrl ? (
+              {currentClip.muxPlaybackId ? (
+                <MuxPlayer
+                  key={currentClip.id}
+                  playbackId={currentClip.muxPlaybackId}
+                  metadata={{ video_title: currentClip.title }}
+                  className="w-full aspect-video bg-black"
+                  streamType="on-demand"
+                  onEnded={handleClipEnd}
+                  onTimeUpdate={(e) => {
+                    const target = e.target as HTMLMediaElement;
+                    if (target?.currentTime != null) handleTimeUpdate(target.currentTime);
+                  }}
+                  onLoadedMetadata={handlePlayerReady}
+                />
+              ) : currentClip.blobUrl ? (
                 <video
                   key={currentClip.id}
                   src={currentClip.blobUrl}

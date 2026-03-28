@@ -123,6 +123,7 @@ export default async function SessionPage({
         clips={finalClips.map((c) => ({
           id: c.id,
           youtubeVideoId: c.youtubeVideo.videoId,
+          muxPlaybackId: c.youtubeVideo.muxPlaybackId ?? undefined,
           blobUrl: c.youtubeVideo.url.includes("blob.vercel-storage.com")
             ? c.youtubeVideo.url
             : undefined,
