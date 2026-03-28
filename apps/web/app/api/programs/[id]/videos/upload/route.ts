@@ -10,14 +10,11 @@ export async function POST(
   const { id: programId } = await params;
   const body = (await req.json()) as HandleUploadBody;
 
-  console.log("[blob-upload] POST received", { programId, bodyType: body.type, hasToken: !!process.env.BLOB_READ_WRITE_TOKEN });
-
   try {
     const jsonResponse = await handleUpload({
       body,
       request: req,
-      onBeforeGenerateToken: async (pathname) => {
-        console.log("[blob-upload] onBeforeGenerateToken", { pathname, programId });
+      onBeforeGenerateToken: async () => {
         const user = await getOrCreateUser();
         if (!user) throw new Error("Unauthorized");
 
@@ -50,15 +47,12 @@ export async function POST(
       },
       // DB record creation is handled client-side via POST /api/programs/[id]/videos
       // after the upload completes, so nothing needed here.
-      onUploadCompleted: async ({ blob, tokenPayload }) => {
-        console.log('onUploadCompleted called', blob.url, tokenPayload);
-      },
+      onUploadCompleted: async () => {},
     });
 
-    console.log("[blob-upload] handleUpload response", JSON.stringify(jsonResponse).slice(0, 200));
     return NextResponse.json(jsonResponse);
   } catch (err) {
-    console.error("[blob-upload-token] Failed for program", programId, "—", (err as Error).message, (err as Error).stack);
+    console.error("[blob-upload-token] Failed for program", programId, "—", (err as Error).message);
     return NextResponse.json(
       { error: (err as Error).message },
       { status: 400 }

@@ -564,13 +564,11 @@ async function processGenerationJob(jobId: string, programId: string) {
       },
     });
 
-    // Delete existing structure and create new — using sequential queries instead of
-    // an interactive transaction to avoid Neon PgBouncer transaction timeout issues.
+    // Sequential queries (no $transaction) to avoid Neon PgBouncer timeout issues.
     let sessionCount = 0;
     let actionCount = 0;
     let compositeCount = 0;
 
-    // Clear old structure first
     await prisma.week.deleteMany({ where: { programId } });
 
     for (const week of validated.data.weeks) {
@@ -595,10 +593,10 @@ async function processGenerationJob(jobId: string, programId: string) {
           },
         });
 
-        for (const action of session.actions) {
-          actionCount++;
-          await prisma.action.create({
-            data: {
+        if (session.actions.length > 0) {
+          actionCount += session.actions.length;
+          await prisma.action.createMany({
+            data: session.actions.map((action) => ({
               sessionId: createdSession.id,
               title: action.title,
               type: action.type.toUpperCase() as "WATCH" | "READ" | "DO" | "REFLECT",
@@ -606,11 +604,10 @@ async function processGenerationJob(jobId: string, programId: string) {
               reflectionPrompt: action.reflectionPrompt,
               orderIndex: action.orderIndex,
               youtubeVideoId: action.youtubeVideoId,
-            },
+            })),
           });
         }
 
-        // Persist CompositeSession + clips + overlays if present
         if (session.clips && session.clips.length > 0) {
           compositeCount++;
           const compositeSession = await prisma.compositeSession.create({
@@ -622,25 +619,23 @@ async function processGenerationJob(jobId: string, programId: string) {
             },
           });
 
-          for (const clip of session.clips) {
-            await prisma.sessionClip.create({
-              data: {
-                compositeSessionId: compositeSession.id,
-                youtubeVideoId: clip.youtubeVideoId,
-                startSeconds: clip.startSeconds ?? null,
-                endSeconds: clip.endSeconds ?? null,
-                orderIndex: clip.orderIndex,
-                transitionType: (clip.transitionType ?? "NONE") as "NONE" | "FADE" | "CROSSFADE" | "SLIDE_LEFT",
-                transitionDurationMs: clip.transitionDurationMs ?? 500,
-                chapterTitle: clip.chapterTitle ?? null,
-                chapterDescription: clip.chapterDescription ?? null,
-              },
-            });
-          }
+          await prisma.sessionClip.createMany({
+            data: session.clips.map((clip) => ({
+              compositeSessionId: compositeSession.id,
+              youtubeVideoId: clip.youtubeVideoId,
+              startSeconds: clip.startSeconds ?? null,
+              endSeconds: clip.endSeconds ?? null,
+              orderIndex: clip.orderIndex,
+              transitionType: (clip.transitionType ?? "NONE") as "NONE" | "FADE" | "CROSSFADE" | "SLIDE_LEFT",
+              transitionDurationMs: clip.transitionDurationMs ?? 500,
+              chapterTitle: clip.chapterTitle ?? null,
+              chapterDescription: clip.chapterDescription ?? null,
+            })),
+          });
 
-          for (const overlay of session.overlays ?? []) {
-            await prisma.sessionOverlay.create({
-              data: {
+          if (session.overlays && session.overlays.length > 0) {
+            await prisma.sessionOverlay.createMany({
+              data: session.overlays.map((overlay) => ({
                 compositeSessionId: compositeSession.id,
                 type: overlay.type as "TITLE_CARD" | "CHAPTER_TITLE" | "KEY_POINTS" | "LOWER_THIRD" | "CTA" | "OUTRO",
                 content: overlay.content as unknown as Prisma.InputJsonValue,
@@ -649,7 +644,7 @@ async function processGenerationJob(jobId: string, programId: string) {
                 durationMs: overlay.durationMs ?? 5000,
                 position: (overlay.position ?? "CENTER") as "CENTER" | "BOTTOM" | "TOP" | "LOWER_THIRD",
                 orderIndex: overlay.orderIndex,
-              },
+              })),
             });
           }
         }
