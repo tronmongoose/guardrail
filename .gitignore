@@ -6,3 +6,4 @@ dist/
 *.tsbuildinfo
 .vercel
 .mcp.json
+.env*.local

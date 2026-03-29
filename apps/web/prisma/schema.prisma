@@ -177,9 +177,17 @@ model Action {
   youtubeVideoId   String?
   youtubeVideo     YouTubeVideo? @relation(fields: [youtubeVideoId], references: [id])
 
+  // Mux-hosted video fields
+  muxUploadId   String?  // Mux direct upload ID (temporary until asset is ready)
+  muxAssetId    String?  // Mux asset ID (set via video.upload.asset_created webhook)
+  muxPlaybackId String?  // Mux playback ID (set via video.asset.ready webhook)
+  muxStatus     String?  // "waiting" | "ready" | "errored"
+
   progress         LearnerProgress[]
 
   @@index([sessionId])
+  @@index([muxUploadId])
+  @@index([muxAssetId])
 }
 
 enum ActionType {

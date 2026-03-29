@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import MuxPlayer from "@mux/mux-player-react";
 import { VideoPlayer } from "@/components/viewer/VideoPlayer";
+import { MuxVideoPlayer } from "@/components/viewer/MuxVideoPlayer";
 import { ChapterRail } from "@/components/viewer/ChapterRail";
 import { ActionsPanel, type ViewerAction } from "@/components/viewer/ActionsPanel";
 import { TransitionOverlay, type TransitionStyle } from "@/components/viewer/TransitionOverlay";
@@ -21,10 +21,11 @@ import { SimpleTransitionScreen } from "@/components/viewer/SimpleTransitionScre
 export interface ViewerClip {
   id: string;
   youtubeVideoId: string;
-  /** Mux playback ID for HLS streaming — preferred for uploaded videos */
-  muxPlaybackId?: string;
-  /** Fallback for uploaded videos without Mux transcoding */
+  /** Fallback for uploaded videos without Mux transcoding (Vercel Blob) */
   blobUrl?: string;
+  /** Mux playback ID — set once video.asset.ready fires. "ready" = playable; "waiting" = processing; "errored" = failed */
+  muxPlaybackId?: string;
+  muxStatus?: string;
   title: string;
   chapterTitle: string;
   chapterDescription?: string;
@@ -208,20 +209,57 @@ export function SessionViewer({
           {hasClips ? (
             <div className="relative w-full">
               {currentClip.muxPlaybackId ? (
-                <MuxPlayer
+                // Mux-hosted video (ready)
+                <MuxVideoPlayer
                   key={currentClip.id}
                   playbackId={currentClip.muxPlaybackId}
-                  metadata={{ video_title: currentClip.title }}
-                  className="w-full aspect-video bg-black"
-                  streamType="on-demand"
-                  onEnded={handleClipEnd}
-                  onTimeUpdate={(e) => {
-                    const target = e.target as HTMLMediaElement;
-                    if (target?.currentTime != null) handleTimeUpdate(target.currentTime);
-                  }}
-                  onLoadedMetadata={handlePlayerReady}
+                  title={currentClip.title}
+                  className="w-full"
                 />
+              ) : currentClip.muxStatus === "waiting" ? (
+                // Mux video still processing
+                <div
+                  className="flex aspect-video w-full items-center justify-center gap-3"
+                  style={{ backgroundColor: "var(--token-color-bg-elevated)" }}
+                >
+                  <svg
+                    className="h-5 w-5 animate-spin opacity-60"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                  <p
+                    className="text-sm"
+                    style={{ color: "var(--token-color-text-secondary)" }}
+                  >
+                    Video processing, check back shortly.
+                  </p>
+                </div>
+              ) : currentClip.muxStatus === "errored" ? (
+                // Mux processing error
+                <div
+                  className="flex aspect-video w-full items-center justify-center"
+                  style={{ backgroundColor: "var(--token-color-bg-elevated)" }}
+                >
+                  <p className="text-sm" style={{ color: "var(--token-color-error, #ef4444)" }}>
+                    Video processing failed. Please contact your coach.
+                  </p>
+                </div>
               ) : currentClip.blobUrl ? (
+                // Legacy Vercel Blob video
                 <video
                   key={currentClip.id}
                   src={currentClip.blobUrl}
@@ -234,6 +272,7 @@ export function SessionViewer({
                   onTimeUpdate={(e) => handleTimeUpdate(e.currentTarget.currentTime)}
                 />
               ) : (
+                // YouTube video (default)
                 <VideoPlayer
                   videoId={currentClip.youtubeVideoId}
                   startSeconds={currentClip.startSeconds}

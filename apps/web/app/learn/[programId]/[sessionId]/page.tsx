@@ -92,12 +92,12 @@ export default async function SessionPage({
   const fallbackClips =
     clips.length === 0
       ? session.actions
-          .filter((a) => a.type === "WATCH" && a.youtubeVideo)
+          .filter((a) => a.type === "WATCH" && (a.youtubeVideo || a.muxPlaybackId || a.muxStatus))
           .map((a, i) => ({
             id: `fallback-${a.id}`,
             compositeSessionId: "",
-            youtubeVideoId: a.youtubeVideo!.id,
-            youtubeVideo: a.youtubeVideo!,
+            youtubeVideoId: a.youtubeVideo?.id ?? "",
+            youtubeVideo: a.youtubeVideo ?? { id: "", videoId: "", url: "", title: a.title, thumbnailUrl: null, durationSeconds: null, muxPlaybackId: null },
             startSeconds: null,
             endSeconds: null,
             orderIndex: i,
@@ -105,6 +105,9 @@ export default async function SessionPage({
             transitionDurationMs: 0,
             chapterTitle: a.title,
             chapterDescription: null,
+            // Mux fields threaded from the Action record
+            muxPlaybackId: a.muxPlaybackId ?? undefined,
+            muxStatus: a.muxStatus ?? undefined,
           }))
       : [];
 
@@ -123,7 +126,12 @@ export default async function SessionPage({
         clips={finalClips.map((c) => ({
           id: c.id,
           youtubeVideoId: c.youtubeVideo.videoId,
-          muxPlaybackId: c.youtubeVideo.muxPlaybackId ?? undefined,
+          // Action-level Mux fields take priority; fall back to YouTubeVideo-level for composite clips
+          muxPlaybackId:
+            (c as { muxPlaybackId?: string }).muxPlaybackId ??
+            c.youtubeVideo.muxPlaybackId ??
+            undefined,
+          muxStatus: (c as { muxStatus?: string }).muxStatus,
           blobUrl: c.youtubeVideo.url.includes("blob.vercel-storage.com")
             ? c.youtubeVideo.url
             : undefined,
