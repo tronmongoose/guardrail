@@ -185,45 +185,21 @@ export function StepContent({
   // Segment counts — refreshed after videos change (Gemini analysis is async/fire-and-forget)
   const [segmentCounts, setSegmentCounts] = useState<Record<string, number>>({});
 
-  // Creator-directed split counts: videoId → desired number of sessions
-  const [videoSplitCounts, setVideoSplitCounts] = useState<Record<string, number>>(() => {
-    const initial: Record<string, number> = {};
-    for (const v of videos) {
-      if (v.desiredSegmentCount && v.desiredSegmentCount > 1) {
-        initial[v.id] = v.desiredSegmentCount;
-      }
-    }
-    return initial;
-  });
-
-  const handleSetSplit = async (videoId: string, count: number) => {
-    setVideoSplitCounts((prev) => ({ ...prev, [videoId]: count }));
-    await fetch(`/api/programs/${programId}/videos/${videoId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ desiredSegmentCount: count }),
-    }).catch(() => {/* best-effort */});
-  };
-
   useEffect(() => {
     if (videos.length === 0) return;
 
     const poll = () =>
       fetch(`/api/programs/${programId}/videos`)
         .then((r) => r.ok ? r.json() : [])
-        .then((data: Array<{ id: string; desiredSegmentCount?: number; _count: { segments: number }; hasAnalysis?: boolean }>) => {
+        .then((data: Array<{ id: string; _count: { segments: number }; hasAnalysis?: boolean }>) => {
           const counts: Record<string, number> = {};
-          const splitCounts: Record<string, number> = {};
           const ready: Record<string, boolean> = {};
           for (const v of data) {
             if (v._count?.segments > 0) counts[v.id] = v._count.segments;
-            if (v.desiredSegmentCount && v.desiredSegmentCount > 1) splitCounts[v.id] = v.desiredSegmentCount;
             ready[v.id] = !!v.hasAnalysis;
           }
           setSegmentCounts(counts);
           setAnalysisReady(ready);
-          // Restore server-persisted split counts without overwriting any local changes
-          setVideoSplitCounts((prev) => ({ ...splitCounts, ...prev }));
           return ready;
         })
         .catch(() => ({} as Record<string, boolean>));
@@ -884,28 +860,6 @@ export function StepContent({
                     <span className="block text-sm text-white truncate">
                       {video.title || video.videoId}
                     </span>
-                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                      <span className="text-xs text-gray-500">Sessions:</span>
-                      {[1, 2, 3, 4].map((n) => (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => handleSetSplit(video.id, n)}
-                          className={`w-6 h-6 text-xs rounded transition font-medium
-                            ${(videoSplitCounts[video.id] ?? 1) === n
-                              ? "bg-neon-cyan text-black"
-                              : "bg-surface-border text-gray-400 hover:text-white"
-                            }`}
-                        >
-                          {n}
-                        </button>
-                      ))}
-                      {(videoSplitCounts[video.id] ?? 1) > 1 && video.durationSeconds && (
-                        <span className="text-xs text-gray-500">
-                          ≈ {formatDuration(Math.round(video.durationSeconds / (videoSplitCounts[video.id] ?? 1)))} each
-                        </span>
-                      )}
-                    </div>
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0 mt-0.5">
                     {segmentCounts[video.id] > 0 && (
@@ -976,7 +930,7 @@ export function StepContent({
               onChange={handleFileUpload}
               disabled={isExtracting}
               multiple
-              className="hidden"
+              style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden", pointerEvents: "none" }}
             />
           </label>
 
@@ -1052,26 +1006,6 @@ export function StepContent({
                       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400">
                         Uploaded
                       </span>
-                      <span className="text-xs text-gray-500">Sessions:</span>
-                      {[1, 2, 3, 4].map((n) => (
-                        <button
-                          key={n}
-                          type="button"
-                          onClick={() => handleSetSplit(video.id, n)}
-                          className={`w-6 h-6 text-xs rounded transition font-medium
-                            ${(videoSplitCounts[video.id] ?? 1) === n
-                              ? "bg-neon-cyan text-black"
-                              : "bg-surface-border text-gray-400 hover:text-white"
-                            }`}
-                        >
-                          {n}
-                        </button>
-                      ))}
-                      {(videoSplitCounts[video.id] ?? 1) > 1 && video.durationSeconds && (
-                        <span className="text-xs text-gray-500">
-                          ≈ {formatDuration(Math.round(video.durationSeconds / (videoSplitCounts[video.id] ?? 1)))} each
-                        </span>
-                      )}
                     </div>
                   </div>
                   <button

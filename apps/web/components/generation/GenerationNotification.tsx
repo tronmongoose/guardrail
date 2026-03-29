@@ -144,6 +144,11 @@ export function GenerationNotification({
 
   if (dismissed || !job) return null;
 
+  // The edit page renders its own full GenerationProgress panel — hide the floating notification
+  // while the job is running so both indicators don't appear at once. It becomes useful again
+  // once the job finishes (COMPLETED / FAILED) and the banner needs to surface on other pages.
+  if (isOnEditPage && (job.status === "PENDING" || job.status === "PROCESSING")) return null;
+
   // Don't show if completed more than 10 seconds ago
   if (job.status === "COMPLETED" && job.completedAt) {
     const completedAt = new Date(job.completedAt);
