@@ -38,9 +38,11 @@ export async function POST(req: NextRequest) {
   switch (eventType) {
     case "video.upload.asset_created": {
       // Bridge: the upload has been ingested and an asset has been created.
-      // Link the Mux asset ID to the Action or YouTubeVideo that holds the upload ID.
-      const uploadId: string = event.data?.upload_id ?? "";
-      const assetId: string = event.data?.id ?? "";
+      // The event.data is a Mux Upload object:
+      //   event.data.id        = the upload ID  (matches YouTubeVideo.muxUploadId / Action.muxUploadId)
+      //   event.data.asset_id  = the new asset ID to store as muxAssetId
+      const uploadId: string = event.data?.id ?? "";
+      const assetId: string = event.data?.asset_id ?? "";
 
       if (!uploadId || !assetId) {
         logger.warn({
