@@ -123,6 +123,7 @@ export function MuxUploader({
             ref={inputRef}
             type="file"
             accept="video/mp4,video/quicktime,video/webm,video/x-matroska,video/mpeg,video/x-msvideo"
+            multiple={false}
             className="sr-only"
             onChange={handleFileChange}
           />

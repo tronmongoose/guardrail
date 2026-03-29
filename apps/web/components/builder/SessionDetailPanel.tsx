@@ -603,6 +603,7 @@ export function SessionDetailPanel({
               ref={uploadInputRef}
               type="file"
               accept=".mp4,.webm,.mov"
+              multiple={false}
               style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden", pointerEvents: "none" }}
               onChange={(e) => {
                 const file = e.target.files?.[0];
