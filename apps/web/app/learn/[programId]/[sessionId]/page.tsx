@@ -131,7 +131,16 @@ export default async function SessionPage({
             (c as { muxPlaybackId?: string }).muxPlaybackId ??
             c.youtubeVideo.muxPlaybackId ??
             undefined,
-          muxStatus: (c as { muxStatus?: string }).muxStatus,
+          // For composite clips, muxStatus lives on the Action record (direct uploads) but
+          // NOT on YouTubeVideo. Derive it from YouTubeVideo fields so the viewer can show
+          // the correct state (ready → MuxVideoPlayer, waiting → spinner, undefined → YouTube).
+          muxStatus:
+            (c as { muxStatus?: string }).muxStatus ??
+            (c.youtubeVideo.muxPlaybackId
+              ? "ready"
+              : (c.youtubeVideo as { muxUploadId?: string | null }).muxUploadId != null
+              ? "waiting"
+              : undefined),
           blobUrl: c.youtubeVideo.url.includes("blob.vercel-storage.com")
             ? c.youtubeVideo.url
             : undefined,

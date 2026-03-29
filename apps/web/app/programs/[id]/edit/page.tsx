@@ -362,6 +362,12 @@ export default function ProgramEditPage() {
       const data = await res.json();
 
       if (!res.ok) {
+        // Handle platform access gate — redirect to upgrade page with promo code input
+        if (data.code === "PLATFORM_ACCESS_REQUIRED") {
+          setPublishing(false);
+          router.push("/onboarding/upgrade");
+          return;
+        }
         // Handle Stripe requirement for paid programs
         if (data.code === "STRIPE_REQUIRED") {
           setPublishing(false);

@@ -204,6 +204,17 @@ export function LearnerTimeline({
     }
   }
 
+  // Per-week completion percentages — same reactive dependency as the circular indicator
+  const weekCompletionMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const w of program.weeks) {
+      const actions = w.sessions.flatMap((s) => s.actions);
+      const done = actions.filter((a) => completedActions.has(a.id)).length;
+      map[w.id] = actions.length > 0 ? Math.round((done / actions.length) * 100) : 0;
+    }
+    return map;
+  }, [program.weeks, completedActions]);
+
   // SVG arc for progress circle
   const progressArc = useMemo(() => {
     const r = 18;
@@ -293,9 +304,9 @@ export function LearnerTimeline({
         {program.weeks.map((week) => {
           const isUnlocked = week.weekNumber <= unlockedWeekNumber;
           const weekActions = week.sessions.flatMap((s) => s.actions);
-          const weekCompletedCount = weekActions.filter((a) => completedActions.has(a.id)).length;
-          const isWeekComplete = weekActions.length > 0 && weekCompletedCount === weekActions.length;
-          const weekProgress = weekActions.length > 0 ? Math.round((weekCompletedCount / weekActions.length) * 100) : 0;
+          const weekProgress = weekCompletionMap[week.id] ?? 0;
+          const weekCompletedCount = weekActions.length > 0 ? Math.round((weekProgress / 100) * weekActions.length) : 0;
+          const isWeekComplete = weekActions.length > 0 && weekProgress === 100;
 
           return (
             <section key={week.id}>
