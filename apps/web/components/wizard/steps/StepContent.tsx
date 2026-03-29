@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { parseYouTubeVideoId } from "@guide-rail/shared";
-import { upload } from "@vercel/blob/client";
 import { extractAudioChunks } from "@/lib/audio-extract";
 import { ContentLegalNotice } from "../ContentLegalNotice";
 
@@ -14,6 +13,7 @@ interface Video {
   thumbnailUrl: string | null;
   durationSeconds?: number | null;
   desiredSegmentCount?: number;
+  muxUploadId?: string | null;
   _count?: { segments: number };
 }
 
@@ -34,7 +34,11 @@ interface StepContentProps {
 }
 
 function isUploadedVideo(video: Video): boolean {
-  return !!(video.url?.includes("blob.vercel-storage.com"));
+  return !!(
+    video.url?.includes("blob.vercel-storage.com") ||
+    video.url?.startsWith("mux-upload://") ||
+    video.muxUploadId
+  );
 }
 
 type ContentTab = "youtube" | "upload";
@@ -353,10 +357,6 @@ export function StepContent({
     return "video/mp4";
   }
 
-  function sanitizeFilename(name: string): string {
-    return name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  }
-
   const uploadVideoBlob = async (file: File): Promise<Video | null> => {
     const updateState = (progress: number, phase: string, status: "extracting" | "transcribing" = "extracting") => {
       setExtractionStates((prev) =>
@@ -366,61 +366,55 @@ export function StepContent({
 
     updateState(0, "Uploading");
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000); // 10-minute hard timeout
+    // Step 1: Get a Mux direct upload URL
+    const tokenRes = await fetch("/api/mux/upload-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
 
-    // Monotonic high-water mark: progress bar can NEVER go backward.
-    // @vercel/blob retries up to 10x on failure; each XHR retry resets event.loaded to 0,
-    // which would cause the bar to oscillate without this gate.
-    let highWater = 0;
-    let simPct = 0; // float accumulator for smooth simulation
-    const advance = (pct: number) => {
-      const next = Math.min(89, Math.round(pct));
-      if (next > highWater) {
-        highWater = next;
-        updateState(highWater, "Uploading");
-      }
+    if (!tokenRes.ok) {
+      const data = await tokenRes.json().catch(() => ({}));
+      throw new Error(data.error ?? "Failed to get upload URL");
+    }
+
+    const { uploadId, uploadUrl } = (await tokenRes.json()) as {
+      uploadId: string;
+      uploadUrl: string;
     };
 
-    // Simulation: inches the bar forward visually so it never looks frozen.
-    // Targets 88%, leaving the final 1% for "Saving". Hard timeout above is
-    // the safety net — no separate inactivity detector needed.
-    const simId = setInterval(() => {
-      simPct += (88 - simPct) * 0.015;
-      advance(simPct);
-    }, 250);
+    // Step 2: PUT the file directly to Mux — never touches the Next.js server.
+    // Use XHR so we get granular upload progress events.
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
 
-    const blobName = `${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
-
-    let blob: Awaited<ReturnType<typeof upload>>;
-    try {
-      blob = await upload(blobName, file, {
-        access: "private",
-        handleUploadUrl: `/api/programs/${programId}/videos/upload`,
-        abortSignal: controller.signal,
-        contentType: file.type || getVideoMimeType(file.name),
-        onUploadProgress: ({ percentage }) => {
-          // percentage is cumulative 0-100; scale to 0-75 so the simulation keeps
-          // animating from 75% → 88% while Vercel finalizes the upload server-side.
-          advance(percentage * 0.75);
-        },
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) {
+          // Scale to 0-88 so the bar doesn't jump straight to 100 before "Saving"
+          updateState(Math.round((event.loaded / event.total) * 88), "Uploading");
+        }
       });
-    } catch (err) {
-      if (controller.signal.aborted) {
-        throw new Error(`${file.name}: Upload timed out — check your connection and retry.`);
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeoutId);
-      clearInterval(simId);
-    }
+
+      xhr.addEventListener("load", () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`Upload failed with status ${xhr.status}`));
+      });
+
+      xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+      xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
+
+      xhr.open("PUT", uploadUrl);
+      xhr.setRequestHeader("Content-Type", file.type || getVideoMimeType(file.name));
+      xhr.send(file);
+    });
 
     updateState(92, "Saving");
 
+    // Step 3: Create the video record linked to the Mux upload ID
     const res = await fetch(`/api/programs/${programId}/videos`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: blob.url, source: "upload", title: file.name }),
+      body: JSON.stringify({ source: "mux-upload", muxUploadId: uploadId, title: file.name }),
     });
 
     if (!res.ok) {

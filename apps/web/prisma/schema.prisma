@@ -285,6 +285,7 @@ model YouTubeVideo {
   description     String?
   durationSeconds Int?     // Video duration in seconds
   transcript      String?  @db.Text  // Auto-fetched captions/transcript
+  muxUploadId     String?   // Mux direct upload ID (set when creator uploads via wizard)
   muxAssetId      String?   // Mux video asset ID
   muxPlaybackId   String?   // Mux playback ID for HLS streaming
   programId       String
@@ -308,6 +309,7 @@ model YouTubeVideo {
 
   @@unique([programId, videoId])
   @@index([parentVideoId])
+  @@index([muxUploadId])
 }
 
 // --- Video Analysis (Gemini-generated structured analysis) ---

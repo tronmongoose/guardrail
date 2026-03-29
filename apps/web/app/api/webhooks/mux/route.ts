@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   switch (eventType) {
     case "video.upload.asset_created": {
       // Bridge: the upload has been ingested and an asset has been created.
-      // Link the Mux asset ID to the Action that holds the upload ID.
+      // Link the Mux asset ID to the Action or YouTubeVideo that holds the upload ID.
       const uploadId: string = event.data?.upload_id ?? "";
       const assetId: string = event.data?.id ?? "";
 
@@ -51,27 +51,46 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      // Check Action first (lesson-level uploads)
       const action = await prisma.action.findFirst({
         where: { muxUploadId: uploadId },
       });
 
-      if (!action) {
-        logger.warn({
-          operation: "mux.webhook.upload_asset_created.no_action_found",
+      if (action) {
+        await prisma.action.update({
+          where: { id: action.id },
+          data: { muxAssetId: assetId },
+        });
+        logger.info({
+          operation: "mux.webhook.upload_asset_created",
+          actionId: action.id,
           uploadId,
           assetId,
         });
         break;
       }
 
-      await prisma.action.update({
-        where: { id: action.id },
-        data: { muxAssetId: assetId },
+      // Check YouTubeVideo (wizard program-level uploads)
+      const ytVideo = await prisma.youTubeVideo.findFirst({
+        where: { muxUploadId: uploadId },
       });
 
-      logger.info({
-        operation: "mux.webhook.upload_asset_created",
-        actionId: action.id,
+      if (ytVideo) {
+        await prisma.youTubeVideo.update({
+          where: { id: ytVideo.id },
+          data: { muxAssetId: assetId },
+        });
+        logger.info({
+          operation: "mux.webhook.upload_asset_created.youtube_video",
+          youtubeVideoId: ytVideo.id,
+          uploadId,
+          assetId,
+        });
+        break;
+      }
+
+      logger.warn({
+        operation: "mux.webhook.upload_asset_created.no_record_found",
         uploadId,
         assetId,
       });
@@ -92,31 +111,53 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      // Check Action first (lesson-level uploads)
       const action = await prisma.action.findFirst({
         where: { muxAssetId: assetId },
       });
 
-      if (!action) {
-        logger.warn({
-          operation: "mux.webhook.asset_ready.no_action_found",
+      if (action) {
+        await prisma.action.update({
+          where: { id: action.id },
+          data: {
+            muxPlaybackId: playbackId,
+            muxStatus: "ready",
+          },
+        });
+        logger.info({
+          operation: "mux.webhook.asset_ready",
+          actionId: action.id,
           assetId,
+          playbackId,
         });
         break;
       }
 
-      await prisma.action.update({
-        where: { id: action.id },
-        data: {
-          muxPlaybackId: playbackId,
-          muxStatus: "ready",
-        },
+      // Check YouTubeVideo (wizard program-level uploads)
+      const ytVideo = await prisma.youTubeVideo.findFirst({
+        where: { muxAssetId: assetId },
       });
 
-      logger.info({
-        operation: "mux.webhook.asset_ready",
-        actionId: action.id,
+      if (ytVideo) {
+        await prisma.youTubeVideo.update({
+          where: { id: ytVideo.id },
+          data: {
+            muxPlaybackId: playbackId,
+            url: `https://stream.mux.com/${playbackId}`,
+          },
+        });
+        logger.info({
+          operation: "mux.webhook.asset_ready.youtube_video",
+          youtubeVideoId: ytVideo.id,
+          assetId,
+          playbackId,
+        });
+        break;
+      }
+
+      logger.warn({
+        operation: "mux.webhook.asset_ready.no_record_found",
         assetId,
-        playbackId,
       });
       break;
     }
@@ -130,18 +171,31 @@ export async function POST(req: NextRequest) {
         where: { muxAssetId: assetId },
       });
 
-      if (!action) break;
+      if (action) {
+        await prisma.action.update({
+          where: { id: action.id },
+          data: { muxStatus: "errored" },
+        });
+        logger.warn({
+          operation: "mux.webhook.asset_errored",
+          actionId: action.id,
+          assetId,
+        });
+        break;
+      }
 
-      await prisma.action.update({
-        where: { id: action.id },
-        data: { muxStatus: "errored" },
+      // Also handle YouTubeVideo errored state (best-effort log only)
+      const ytVideo = await prisma.youTubeVideo.findFirst({
+        where: { muxAssetId: assetId },
       });
 
-      logger.warn({
-        operation: "mux.webhook.asset_errored",
-        actionId: action.id,
-        assetId,
-      });
+      if (ytVideo) {
+        logger.warn({
+          operation: "mux.webhook.asset_errored.youtube_video",
+          youtubeVideoId: ytVideo.id,
+          assetId,
+        });
+      }
       break;
     }
 

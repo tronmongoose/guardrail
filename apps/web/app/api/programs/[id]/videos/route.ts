@@ -34,7 +34,23 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { url, source, title: uploadedTitle } = await req.json();
+  const { url, source, title: uploadedTitle, muxUploadId } = await req.json();
+
+  // Handle Mux direct uploads (browser uploads directly to Mux, no Blob involved)
+  if (source === "mux-upload") {
+    const rawName = (uploadedTitle as string | undefined) || "Uploaded Video";
+    const title = rawName.replace(/\.[^/.]+$/, ""); // strip extension
+    const video = await prisma.youTubeVideo.create({
+      data: {
+        videoId: crypto.randomUUID(),
+        url: `mux-upload://${muxUploadId}`, // sentinel URL replaced by webhook when asset is ready
+        title,
+        programId,
+        muxUploadId,
+      },
+    });
+    return NextResponse.json(video);
+  }
 
   // Handle direct file uploads (from Vercel Blob)
   if (source === "upload") {
