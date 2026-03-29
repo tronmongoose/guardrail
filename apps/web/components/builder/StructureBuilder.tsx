@@ -78,6 +78,7 @@ export interface YouTubeVideoData {
   title: string | null;
   thumbnailUrl: string | null;
   url: string;
+  muxUploadId?: string | null;
 }
 
 interface StructureBuilderProps {

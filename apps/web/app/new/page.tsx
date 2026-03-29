@@ -10,7 +10,6 @@ import { useGeneration } from "@/components/generation";
 import { useAutosave } from "@/hooks/useAutosave";
 import { useBeforeUnload } from "@/hooks/useBeforeUnload";
 import { ContentLegalNotice } from "@/components/wizard/ContentLegalNotice";
-import { upload } from "@vercel/blob/client";
 import { SkinPicker } from "@/components/skins/SkinPicker";
 
 /**
@@ -381,19 +380,12 @@ export default function NewProgramPage() {
 
   // Upload a single file — extracted so handleFilesSelected and retryUpload can share it
   const uploadSingleFile = useCallback(async (item: PendingUpload, currentProgramId: string) => {
-    const UPLOAD_TIMEOUT_MS = 10 * 60 * 1000; // 10 min max per file
-
     // Clear any previous error and reset progress before starting
     setPendingUploads((prev) =>
       prev.map((p) => (p.localId === item.localId ? { ...p, progress: 0, error: undefined } : p))
     );
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
-
     // Monotonic high-water mark: progress bar can NEVER go backward.
-    // @vercel/blob retries up to 10x on failure; each XHR retry resets event.loaded to 0,
-    // which would cause the bar to oscillate without this gate.
     let highWater = 0;
     let simPct = 0; // float accumulator for smooth simulation
     const advance = (pct: number) => {
@@ -407,18 +399,11 @@ export default function NewProgramPage() {
     };
 
     // Simulation: inches the bar forward visually so it never looks frozen.
-    // Targets 88%, leaving the final 1% for the "registering" jump.
-    // Hard timeout above is the safety net — no separate inactivity detector needed.
     const simId = setInterval(() => {
       simPct += (88 - simPct) * 0.015;
       advance(simPct);
     }, 250);
 
-    // Sanitize filename to avoid blob key issues with special characters
-    const sanitize = (name: string) => name.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const blobKey = `${crypto.randomUUID()}-${sanitize(item.file.name)}`;
-
-    // Explicit MIME type — browser detection is unreliable for video
     const getMime = (name: string) => {
       const lower = name.toLowerCase();
       if (lower.endsWith(".mov")) return "video/quicktime";
@@ -427,14 +412,44 @@ export default function NewProgramPage() {
     };
 
     try {
-      const blob = await upload(blobKey, item.file, {
-        access: "private",
-        handleUploadUrl: `/api/programs/${currentProgramId}/videos/upload`,
-        abortSignal: controller.signal,
-        contentType: item.file.type || getMime(item.file.name),
-        onUploadProgress: ({ percentage }) => {
-          advance(percentage * 0.75);
-        },
+      // Step 1: Get a Mux direct upload URL
+      const tokenRes = await fetch("/api/mux/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      if (!tokenRes.ok) {
+        const data = await tokenRes.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to get upload URL");
+      }
+
+      const { uploadId, uploadUrl } = (await tokenRes.json()) as {
+        uploadId: string;
+        uploadUrl: string;
+      };
+
+      // Step 2: PUT file directly to Mux — never touches the Next.js server.
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener("progress", (event) => {
+          if (event.lengthComputable) {
+            advance(Math.round((event.loaded / event.total) * 88));
+          }
+        });
+
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed with status ${xhr.status}`));
+        });
+
+        xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+        xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
+
+        xhr.open("PUT", uploadUrl);
+        xhr.setRequestHeader("Content-Type", item.file.type || getMime(item.file.name));
+        xhr.send(item.file);
       });
 
       // Jump to 92% while registering with the API
@@ -445,7 +460,7 @@ export default function NewProgramPage() {
       const res = await fetch(`/api/programs/${currentProgramId}/videos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: blob.url, source: "upload", title: item.file.name }),
+        body: JSON.stringify({ source: "mux-upload", muxUploadId: uploadId, title: item.file.name }),
       });
 
       if (!res.ok) {
@@ -457,9 +472,7 @@ export default function NewProgramPage() {
       setVideos((prev) => [...prev, video]);
       setPendingUploads((prev) => prev.filter((p) => p.localId !== item.localId));
     } catch (err) {
-      const message = controller.signal.aborted
-        ? "Upload timed out — check your connection and tap Retry."
-        : err instanceof Error ? err.message : "Upload failed";
+      const message = err instanceof Error ? err.message : "Upload failed";
       console.error("[upload] Failed for", item.file.name, "—", message);
       setPendingUploads((prev) =>
         prev.map((p) =>
@@ -467,7 +480,6 @@ export default function NewProgramPage() {
         )
       );
     } finally {
-      clearTimeout(timeoutId);
       clearInterval(simId);
     }
   }, []);

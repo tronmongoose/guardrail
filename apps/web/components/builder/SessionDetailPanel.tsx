@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { upload } from "@vercel/blob/client";
 import {
   DndContext,
   closestCenter,
@@ -23,7 +22,11 @@ import { AiAssistButton } from "@/components/ui/AiAssistButton";
 import type { SessionData, YouTubeVideoData, WeekData } from "./StructureBuilder";
 
 function isUploadedVideo(video: YouTubeVideoData): boolean {
-  return video.url.includes("blob.vercel-storage.com");
+  return (
+    video.url.includes("blob.vercel-storage.com") ||
+    video.url.startsWith("mux-upload://") ||
+    !!video.muxUploadId
+  );
 }
 
 // Extracts a thumbnail from an uploaded video URL by loading it into a hidden
@@ -301,10 +304,6 @@ export function SessionDetailPanel({
     return "video/mp4";
   }
 
-  function sanitizeFilename(name: string): string {
-    return name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  }
-
   async function handleVideoUpload(file: File) {
     setUploadError(null);
     setUploadProgress(0);
@@ -319,19 +318,48 @@ export function SessionDetailPanel({
     }, 250);
 
     try {
-      const uniqueName = `${crypto.randomUUID()}-${sanitizeFilename(file.name)}`;
-      const blob = await upload(uniqueName, file, {
-        access: "private",
-        handleUploadUrl: `/api/programs/${programId}/videos/upload`,
+      // Step 1: Get a Mux direct upload URL
+      const tokenRes = await fetch("/api/mux/upload-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
 
-        contentType: getVideoMimeType(file.name),
-        onUploadProgress: ({ percentage }) => {
-          const next = Math.min(89, Math.round(percentage * 0.89));
-          if (next > highWater) {
-            highWater = next;
-            setUploadProgress(highWater);
+      if (!tokenRes.ok) {
+        const data = await tokenRes.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to get upload URL");
+      }
+
+      const { uploadId, uploadUrl } = (await tokenRes.json()) as {
+        uploadId: string;
+        uploadUrl: string;
+      };
+
+      // Step 2: PUT file directly to Mux — never touches the Next.js server.
+      await new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener("progress", (event) => {
+          if (event.lengthComputable) {
+            const next = Math.min(89, Math.round((event.loaded / event.total) * 89));
+            if (next > highWater) {
+              highWater = next;
+              setUploadProgress(highWater);
+            }
           }
-        },
+        });
+
+        xhr.addEventListener("load", () => {
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(`Upload failed with status ${xhr.status}`));
+        });
+
+        xhr.addEventListener("error", () => reject(new Error("Network error during upload")));
+        xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
+
+        xhr.open("PUT", uploadUrl);
+        xhr.setRequestHeader("Content-Type", getVideoMimeType(file.name));
+        xhr.send(file);
       });
 
       clearInterval(simId);
@@ -340,7 +368,7 @@ export function SessionDetailPanel({
       const res = await fetch(`/api/programs/${programId}/videos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: blob.url, source: "upload", title: file.name }),
+        body: JSON.stringify({ source: "mux-upload", muxUploadId: uploadId, title: file.name }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
