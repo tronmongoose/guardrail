@@ -162,67 +162,66 @@ async function processGenerationJob(jobId: string, programId: string) {
       for (let i = 0; i < videosNeedingAnalysis.length; i += ANALYSIS_CONCURRENCY) {
         checkDeadline("video_analysis");
         const batch = videosNeedingAnalysis.slice(i, i + ANALYSIS_CONCURRENCY);
-        const results = await Promise.allSettled(
-          batch.map(async (v, batchIdx) => {
-            // Detect whether this is a direct upload (non-YouTube URL) or a YouTube video
-            const isUpload = !v.url.includes("youtube.com") && !v.url.includes("youtu.be");
-            const analysis = isUpload
-              ? await analyzeUploadedVideoWithGemini(
+        // ── Run all AI calls in the batch concurrently — NO DB access during AI ──
+        // Connections are released before analysis begins; DB writes happen after.
+        const aiResults = await Promise.allSettled(
+          batch.map((v) => {
+            const isUpload = !v.url.includes("youtube.com") && !v.url.includes("youtu.be") && !v.url.startsWith("mux-upload://");
+            return isUpload
+              ? analyzeUploadedVideoWithGemini(
                   v.url,
                   v.title ?? "Untitled",
                   v.url.toLowerCase().endsWith(".mov") ? "video/quicktime" : "video/mp4",
                 )
-              : await analyzeVideoWithGemini(v.videoId, v.title ?? "Untitled", v.durationSeconds ?? undefined);
-
-            await prisma.videoAnalysis.upsert({
-              where: { youtubeVideoId: v.id },
-              create: {
-                youtubeVideoId: v.id,
-                summary: analysis.summary,
-                fullTranscript: analysis.fullTranscript ?? null,
-                segments: analysis.segments as unknown as Prisma.InputJsonValue,
-                topics: analysis.topics as unknown as Prisma.InputJsonValue,
-                keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
-                people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
-                durationSeconds: analysis.durationSeconds ?? null,
-              },
-              update: {
-                summary: analysis.summary,
-                fullTranscript: analysis.fullTranscript ?? null,
-                segments: analysis.segments as unknown as Prisma.InputJsonValue,
-                topics: analysis.topics as unknown as Prisma.InputJsonValue,
-                keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
-                people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
-                durationSeconds: analysis.durationSeconds ?? null,
-                analyzedAt: new Date(),
-              },
-            });
-
-            // Per-video heartbeat: touch the job so stale detector doesn't fire mid-analysis
-            const videosDone = i + batchIdx + 1;
-            await prisma.generationJob.update({
-              where: { id: jobId },
-              data: { progress: Math.round((videosDone / videosNeedingAnalysis.length) * 10) },
-            });
-
-            // Create virtual segments — honours creator-set count or falls back to auto (10+ min)
-            if (analysis.durationSeconds) {
-              await maybeSegmentVideo(
-                prisma, v, analysis.topics, analysis.durationSeconds,
-                v.desiredSegmentCount ?? 1,
-              );
-            }
-
-            return analysis;
+              : analyzeVideoWithGemini(v.videoId, v.title ?? "Untitled", v.durationSeconds ?? undefined);
           }),
         );
 
-        for (const r of results) {
-          if (r.status === "fulfilled") analysisCount++;
-          else console.warn(`[generate-async] Gemini analysis failed for a video:`, r.reason);
+        // ── Write results after AI completes — connections acquired only for writes ──
+        for (let j = 0; j < batch.length; j++) {
+          const v = batch[j];
+          const result = aiResults[j];
+          if (result.status === "rejected") {
+            console.warn(`[generate-async] Gemini analysis failed for "${v.title}":`, result.reason);
+            continue;
+          }
+          const analysis = result.value;
+          analysisCount++;
+
+          await prisma.videoAnalysis.upsert({
+            where: { youtubeVideoId: v.id },
+            create: {
+              youtubeVideoId: v.id,
+              summary: analysis.summary,
+              fullTranscript: analysis.fullTranscript ?? null,
+              segments: analysis.segments as unknown as Prisma.InputJsonValue,
+              topics: analysis.topics as unknown as Prisma.InputJsonValue,
+              keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
+              people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
+              durationSeconds: analysis.durationSeconds ?? null,
+            },
+            update: {
+              summary: analysis.summary,
+              fullTranscript: analysis.fullTranscript ?? null,
+              segments: analysis.segments as unknown as Prisma.InputJsonValue,
+              topics: analysis.topics as unknown as Prisma.InputJsonValue,
+              keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
+              people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
+              durationSeconds: analysis.durationSeconds ?? null,
+              analyzedAt: new Date(),
+            },
+          });
+
+          // Create virtual segments after analysis is written
+          if (analysis.durationSeconds) {
+            await maybeSegmentVideo(
+              prisma, v, analysis.topics, analysis.durationSeconds,
+              v.desiredSegmentCount ?? 1,
+            );
+          }
         }
 
-        // Ensure progress reflects the full batch even if individual heartbeats raced
+        // Single batch heartbeat — one DB call per batch instead of one per video
         const analysisProgress = Math.round(((i + batch.length) / videosNeedingAnalysis.length) * 10);
         await prisma.generationJob.update({
           where: { id: jobId },
@@ -462,14 +461,13 @@ async function processGenerationJob(jobId: string, programId: string) {
       aiLogger.extractionStart(programId, allForExtraction.length);
       const extractionTimer = createTimer();
 
+      // Progress callback is intentionally synchronous (no DB call) — holding a
+      // Prisma connection open across an LLM call exhausts the pool.
+      // A single DB write happens after all extraction completes (line below).
       const llmDigests = await extractContentDigests(
         allForExtraction,
-        async (completed, total) => {
-          const extractionProgress = 35 + Math.round((completed / total) * 20);
-          await prisma.generationJob.update({
-            where: { id: jobId },
-            data: { progress: extractionProgress },
-          });
+        (completed, total) => {
+          console.info(`[generate-async] Extraction progress: ${completed}/${total}`);
         },
       );
       enrichedDigests.push(...llmDigests);

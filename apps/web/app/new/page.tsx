@@ -841,7 +841,7 @@ export default function NewProgramPage() {
                     type="file"
                     multiple
                     accept="video/mp4,video/quicktime,.mp4,.mov"
-                    className="hidden"
+                    style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden", pointerEvents: "none" }}
                     onChange={(e) => {
                       const files = Array.from(e.target.files ?? []);
                       if (files.length > 0) handleFilesSelected(files);
