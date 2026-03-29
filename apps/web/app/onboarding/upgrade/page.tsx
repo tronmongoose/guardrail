@@ -22,10 +22,15 @@ export default function UpgradePage() {
   const [selectedPrice, setSelectedPrice] = useState<number | null>(null);
   const [customPrice, setCustomPrice] = useState("");
 
+  // Promo code state
+  const [showPromo, setShowPromo] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+
   const envFeeCents = parseInt(process.env.NEXT_PUBLIC_PLATFORM_ACCESS_FEE_CENTS ?? "0", 10);
   const isFree = envFeeCents === 0;
 
-  // Effective chosen amount in dollars (null = nothing selected yet, or free)
   const chosenDollars = isFree
     ? 0
     : selectedPrice !== null
@@ -82,6 +87,37 @@ export default function UpgradePage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setLoading(false);
+    }
+  };
+
+  const handleRedeemPromo = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isSignedIn) {
+      router.push("/sign-in");
+      return;
+    }
+
+    setPromoLoading(true);
+    setPromoError(null);
+
+    try {
+      const res = await fetch("/api/platform/redeem-promo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: promoCode }),
+      });
+
+      const data: { success?: boolean; error?: string } = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Invalid promo code");
+      }
+
+      // Access granted — redirect to dashboard
+      window.location.href = "/dashboard";
+    } catch (err) {
+      setPromoError(err instanceof Error ? err.message : "Something went wrong");
+      setPromoLoading(false);
     }
   };
 
@@ -190,14 +226,52 @@ export default function UpgradePage() {
             <p className="text-sm text-red-500">{error}</p>
           )}
 
-          {/* Back link */}
-          <button
-            type="button"
-            onClick={() => router.push("/onboarding")}
-            className="text-xs text-gray-400 hover:text-gray-600 underline transition"
-          >
-            Have a promo code? Go back to onboarding
-          </button>
+          {/* Promo code section */}
+          <div className="border-t border-gray-100 pt-4">
+            {!showPromo ? (
+              <button
+                type="button"
+                onClick={() => setShowPromo(true)}
+                className="text-xs text-gray-400 hover:text-gray-600 underline transition"
+              >
+                Have a promo code?
+              </button>
+            ) : (
+              <form onSubmit={handleRedeemPromo} className="space-y-2">
+                <p className="text-xs font-medium text-gray-600 text-left">Enter promo code</p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={promoCode}
+                    onChange={(e) => {
+                      setPromoCode(e.target.value.toUpperCase());
+                      setPromoError(null);
+                    }}
+                    placeholder="e.g. JOURNEY"
+                    autoFocus
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm font-mono uppercase tracking-wider focus:outline-none focus:ring-2 focus:ring-neon-cyan/40 focus:border-neon-cyan"
+                  />
+                  <button
+                    type="submit"
+                    disabled={promoLoading || !promoCode.trim()}
+                    className="px-4 py-2 rounded-lg bg-neon-cyan text-surface-dark text-sm font-semibold disabled:opacity-50 flex items-center gap-1.5 transition-opacity"
+                  >
+                    {promoLoading ? <Spinner size="sm" color="pink" /> : "Apply"}
+                  </button>
+                </div>
+                {promoError && (
+                  <p className="text-xs text-red-500 text-left">{promoError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setShowPromo(false); setPromoCode(""); setPromoError(null); }}
+                  className="text-xs text-gray-400 hover:text-gray-500 transition"
+                >
+                  Cancel
+                </button>
+              </form>
+            )}
+          </div>
         </div>
       </div>
     </div>
