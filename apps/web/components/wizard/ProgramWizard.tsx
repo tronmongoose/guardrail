@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { WizardProgress } from "./WizardProgress";
 import { StepBasics } from "./steps/StepBasics";
 import { StepDuration } from "./steps/StepDuration";
@@ -96,7 +95,6 @@ export function ProgramWizard({
   onComplete,
   onCancel,
 }: ProgramWizardProps) {
-  const router = useRouter();
   const { startGeneration } = useGeneration();
   const [currentStep, setCurrentStep] = useState(0);
   const [state, setState] = useState<WizardState>(() => {
@@ -307,8 +305,8 @@ export function ProgramWizard({
       // Register with notification system
       startGeneration(programId);
 
-      // Immediately navigate to the program editor (which shows the generation screen)
-      router.push(`/programs/${programId}/edit`);
+      // Hand control back to the edit page — it will hide the wizard and show GenerationProgress
+      onComplete();
     } catch (error) {
       console.error("Generation error:", error);
       alert(`Generation failed: ${error instanceof Error ? error.message : "Unknown error"}`);
