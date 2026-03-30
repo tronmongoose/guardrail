@@ -39,17 +39,29 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (!process.env.MUX_TOKEN_ID || !process.env.MUX_TOKEN_SECRET) {
+    console.error("[mux/upload-url] MUX_TOKEN_ID or MUX_TOKEN_SECRET not configured");
+    return NextResponse.json({ error: "Mux is not configured on this server" }, { status: 503 });
+  }
+
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL || "https://journeyline.app";
 
-  const mux = getMux();
-  const upload = await mux.video.uploads.create({
-    cors_origin: appUrl,
-    new_asset_settings: {
-      playback_policy: ["public"],
-      mp4_support: "capped-1080p",
-    },
-  });
+  let upload: { id: string; url: string };
+  try {
+    const mux = getMux();
+    upload = await mux.video.uploads.create({
+      cors_origin: appUrl,
+      new_asset_settings: {
+        playback_policy: ["public"],
+        mp4_support: "capped-1080p",
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[mux/upload-url] Mux API error:", message);
+    return NextResponse.json({ error: `Mux API error: ${message}` }, { status: 502 });
+  }
 
   // Persist the uploadId to the action so the webhook can link it to the right record
   if (actionId) {
