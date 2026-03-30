@@ -123,37 +123,56 @@ export default async function SessionPage({
           summary: session.summary,
           keyTakeaways: session.keyTakeaways,
         }}
-        clips={finalClips.map((c) => ({
-          id: c.id,
-          youtubeVideoId: c.youtubeVideo.videoId,
-          // Action-level Mux fields take priority; fall back to YouTubeVideo-level for composite clips
-          muxPlaybackId:
+        clips={finalClips.map((c) => {
+          const ytVideo = c.youtubeVideo;
+
+          // muxPlaybackId is the single source of truth for player selection.
+          // Action-level fields take priority (direct Action uploads); fall back to
+          // YouTubeVideo-level fields (SessionDetailPanel / wizard uploads).
+          const muxPlaybackId =
             (c as { muxPlaybackId?: string }).muxPlaybackId ??
-            c.youtubeVideo.muxPlaybackId ??
-            undefined,
-          // For composite clips, muxStatus lives on the Action record (direct uploads) but
-          // NOT on YouTubeVideo. Derive it from YouTubeVideo fields so the viewer can show
-          // the correct state (ready → MuxVideoPlayer, waiting → spinner, undefined → YouTube).
-          muxStatus:
+            ytVideo.muxPlaybackId ??
+            undefined;
+
+          // muxUploadId lives on YouTubeVideo for panel/wizard uploads.
+          const muxUploadId = (ytVideo as { muxUploadId?: string | null }).muxUploadId;
+
+          // Derive muxStatus from muxPlaybackId (authoritative) rather than from url.
+          const muxStatus =
             (c as { muxStatus?: string }).muxStatus ??
-            (c.youtubeVideo.muxPlaybackId
+            (muxPlaybackId
               ? "ready"
-              : (c.youtubeVideo as { muxUploadId?: string | null }).muxUploadId != null
+              : muxUploadId != null
               ? "waiting"
-              : undefined),
-          blobUrl: c.youtubeVideo.url.includes("blob.vercel-storage.com")
-            ? c.youtubeVideo.url
-            : undefined,
-          title: c.youtubeVideo.title ?? c.chapterTitle ?? "Untitled",
-          chapterTitle: c.chapterTitle ?? c.youtubeVideo.title ?? "Untitled",
-          chapterDescription: c.chapterDescription ?? undefined,
-          thumbnailUrl: c.youtubeVideo.thumbnailUrl ?? undefined,
-          startSeconds: c.startSeconds ?? undefined,
-          endSeconds: c.endSeconds ?? undefined,
-          durationSeconds: c.youtubeVideo.durationSeconds ?? undefined,
-          transitionType: c.transitionType,
-          transitionDurationMs: c.transitionDurationMs,
-        }))}
+              : undefined);
+
+          // Only set blobUrl when the video has no Mux context at all.
+          // Never set it for in-progress Mux uploads (muxUploadId set) or
+          // completed ones (muxPlaybackId set) — those must render via MuxVideoPlayer.
+          const blobUrl =
+            !muxPlaybackId &&
+            !muxUploadId &&
+            ytVideo.url.includes("blob.vercel-storage.com")
+              ? ytVideo.url
+              : undefined;
+
+          return {
+            id: c.id,
+            youtubeVideoId: ytVideo.videoId,
+            muxPlaybackId,
+            muxStatus,
+            blobUrl,
+            title: ytVideo.title ?? c.chapterTitle ?? "Untitled",
+            chapterTitle: c.chapterTitle ?? ytVideo.title ?? "Untitled",
+            chapterDescription: c.chapterDescription ?? undefined,
+            thumbnailUrl: ytVideo.thumbnailUrl ?? undefined,
+            startSeconds: c.startSeconds ?? undefined,
+            endSeconds: c.endSeconds ?? undefined,
+            durationSeconds: ytVideo.durationSeconds ?? undefined,
+            transitionType: c.transitionType,
+            transitionDurationMs: c.transitionDurationMs,
+          };
+        })}
         overlays={overlays.map((o) => ({
           id: o.id,
           type: o.type,
