@@ -145,6 +145,7 @@ export async function POST(req: NextRequest) {
           where: { id: ytVideo.id },
           data: {
             muxPlaybackId: playbackId,
+            muxStatus: "ready",
             url: `https://stream.mux.com/${playbackId}`,
           },
         });
@@ -186,12 +187,16 @@ export async function POST(req: NextRequest) {
         break;
       }
 
-      // Also handle YouTubeVideo errored state (best-effort log only)
+      // Also handle YouTubeVideo errored state
       const ytVideo = await prisma.youTubeVideo.findFirst({
         where: { muxAssetId: assetId },
       });
 
       if (ytVideo) {
+        await prisma.youTubeVideo.update({
+          where: { id: ytVideo.id },
+          data: { muxStatus: "errored" },
+        });
         logger.warn({
           operation: "mux.webhook.asset_errored.youtube_video",
           youtubeVideoId: ytVideo.id,

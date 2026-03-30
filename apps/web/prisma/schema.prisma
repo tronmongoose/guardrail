@@ -288,6 +288,7 @@ model YouTubeVideo {
   muxUploadId     String?   // Mux direct upload ID (set when creator uploads via wizard)
   muxAssetId      String?   // Mux video asset ID
   muxPlaybackId   String?   // Mux playback ID for HLS streaming
+  muxStatus       String?   // "waiting" | "ready" | "errored"
   programId       String
   program         Program  @relation(fields: [programId], references: [id], onDelete: Cascade)
   createdAt       DateTime @default(now())
