@@ -77,12 +77,11 @@ export async function POST(
             playback_policy: ["public"],
             video_quality: "basic",
           });
-          const playbackId = asset.playback_ids?.[0]?.id;
           await prisma.youTubeVideo.update({
             where: { id: videoId },
-            data: { muxAssetId: asset.id, muxPlaybackId: playbackId ?? null },
+            data: { muxAssetId: asset.id },
           });
-          console.log(`[mux] Asset created for "${title}" — asset=${asset.id} playback=${playbackId}`);
+          console.log(`[mux] Asset created for "${title}" — asset=${asset.id} (playback ID set via webhook)`);
         } catch (muxErr) {
           console.error(`[mux] Asset creation failed for "${title}":`, muxErr);
         }
