@@ -52,10 +52,12 @@ export async function POST(req: NextRequest) {
     const mux = getMux();
     upload = await mux.video.uploads.create({
       cors_origin: appUrl,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       new_asset_settings: {
         playback_policy: ["public"],
         mp4_support: "capped-1080p",
-      },
+        auto_generated_captions: [{ language_code: "en" }],
+      } as any,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
