@@ -7,6 +7,7 @@ import { StepBasics } from "./steps/StepBasics";
 import { StepDuration } from "./steps/StepDuration";
 import { StepContent } from "./steps/StepContent";
 import { StepReview } from "./steps/StepReview";
+import { TransitionStylePicker } from "./TransitionStylePicker";
 import { useGeneration } from "@/components/generation";
 
 export interface WizardState {
@@ -57,6 +58,7 @@ const STEPS = [
   { label: "Content", description: "Videos & files" },
   { label: "Lessons flow", description: "Program length" },
   { label: "Theme", description: "Your look & vibe" },
+  { label: "Create", description: "Launch it" },
 ];
 
 const DEFAULT_STATE: WizardState = {
@@ -116,14 +118,12 @@ export function ProgramWizard({
   // Track how many videos existed at mount so we don't auto-generate on localStorage restores
   const initialVideoCount = useRef(state.content.videos.length);
 
-  // Auto-generate: when first new video is uploaded on the Content step, skip to generation
+  // Auto-advance to Theme step when the first new video is uploaded on the Content step
   useEffect(() => {
     if (currentStep !== 1) return;
     if (state.content.videos.length === 0) return;
     if (state.content.videos.length <= initialVideoCount.current) return;
-    if (isGenerating) return;
-    if (!state.basics.title.trim()) return;
-    handleGenerate();
+    setCurrentStep(3); // jump to Theme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.content.videos.length]);
 
@@ -207,6 +207,8 @@ export function ProgramWizard({
       case 2: // Duration
         return state.duration.weeks >= 2;
       case 3: // Theme (optional)
+        return true;
+      case 4: // Create
         return true;
       default:
         return false;
@@ -363,12 +365,71 @@ export function ProgramWizard({
               updateState("theme", { skinId: newId });
               return newId;
             }}
-            transitionMode={state.theme.transitionMode}
-            onTransitionModeChange={(transitionMode) => updateState("theme", { transitionMode })}
-            isGenerating={isGenerating}
-            onGenerate={handleGenerate}
           />
         );
+      case 4: {
+        const totalContent = state.content.videos.length + state.content.artifacts.length;
+        return (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-semibold text-white mb-1">Create Your Journeyline</h2>
+              <p className="text-gray-400 text-sm">
+                Choose a transition style, then generate your program.
+              </p>
+            </div>
+
+            <TransitionStylePicker
+              value={state.theme.transitionMode}
+              onChange={(transitionMode) => updateState("theme", { transitionMode })}
+            />
+
+            {totalContent === 0 && (
+              <div className="p-4 bg-neon-yellow/10 border border-neon-yellow/30 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-neon-yellow flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-neon-yellow">No content added</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Add at least one video or document to generate a program structure.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div>
+              <button
+                onClick={handleGenerate}
+                disabled={isGenerating || totalContent === 0}
+                className={`
+                  w-full py-4 rounded-xl font-semibold text-lg transition-all
+                  ${isGenerating || totalContent === 0
+                    ? "bg-surface-card border border-surface-border text-gray-500 cursor-not-allowed"
+                    : "btn-neon"
+                  }
+                `}
+              >
+                {isGenerating ? (
+                  <span className="flex items-center justify-center gap-3">
+                    <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Starting generation…
+                  </span>
+                ) : (
+                  "Generate Journeyline →"
+                )}
+              </button>
+              <p className="text-center text-xs text-gray-500 mt-3">
+                Runs in the background — we&apos;ll notify you when your program is ready.
+              </p>
+            </div>
+          </div>
+        );
+      }
       default:
         return null;
     }
