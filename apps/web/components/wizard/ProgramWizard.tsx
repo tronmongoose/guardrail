@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
 import { WizardProgress } from "./WizardProgress";
 import { StepBasics } from "./steps/StepBasics";
 import { StepDuration } from "./steps/StepDuration";
@@ -96,7 +95,6 @@ export function ProgramWizard({
   onCancel,
 }: ProgramWizardProps) {
   const router = useRouter();
-  const { user } = useUser();
   const { startGeneration } = useGeneration();
   const [currentStep, setCurrentStep] = useState(0);
   const [state, setState] = useState<WizardState>(() => {
@@ -114,7 +112,6 @@ export function ProgramWizard({
     return { ...DEFAULT_STATE, ...initialState };
   });
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generationQueued, setGenerationQueued] = useState(false);
 
   // Track analysis status for uploaded videos — used for the footer badge
   const [analysisStatus, setAnalysisStatus] = useState<Record<string, boolean>>({});
@@ -291,14 +288,11 @@ export function ProgramWizard({
       // Clear wizard state from localStorage
       localStorage.removeItem(getStorageKey(programId));
 
-      // Register with notification system (toast still fires if they stay or navigate back)
+      // Register with notification system
       startGeneration(programId);
 
-      // Show "we'll email you" confirmation, then redirect to dashboard after 2s
-      setGenerationQueued(true);
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 2500);
+      // Immediately navigate to the program editor (which shows the generation screen)
+      router.push(`/programs/${programId}/edit`);
     } catch (error) {
       console.error("Generation error:", error);
       alert(`Generation failed: ${error instanceof Error ? error.message : "Unknown error"}`);
@@ -423,35 +417,15 @@ export function ProgramWizard({
           );
         })()}
 
-        {/* "Generation queued" confirmation — shown briefly before redirect */}
-        {generationQueued && (
-          <div className="mb-4 p-4 bg-neon-cyan/10 border border-neon-cyan/30 rounded-xl">
-            <div className="flex items-start gap-3">
-              <svg className="w-5 h-5 text-neon-cyan flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div>
-                <p className="text-sm font-medium text-white">Generating in the background!</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {user?.primaryEmailAddress?.emailAddress
-                    ? <>We&apos;ll email <span className="text-gray-300">{user.primaryEmailAddress.emailAddress}</span> when your program is ready.</>
-                    : "We'll email you when your program is ready."}
-                </p>
-                <p className="text-xs text-gray-500 mt-2">Redirecting to your dashboard…</p>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Navigation */}
         <div className="flex items-center justify-between">
           <button
             onClick={handleBack}
-            disabled={currentStep === 0 || generationQueued}
+            disabled={currentStep === 0}
             className={`
               px-6 py-2.5 rounded-lg border transition
               ${
-                currentStep === 0 || generationQueued
+                currentStep === 0
                   ? "border-surface-border text-gray-600 cursor-not-allowed"
                   : "border-surface-border text-gray-300 hover:border-neon-cyan hover:text-neon-cyan"
               }

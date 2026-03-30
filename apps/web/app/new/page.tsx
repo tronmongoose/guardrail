@@ -610,11 +610,8 @@ export default function NewProgramPage() {
       // Clear autosave data — draft is now generating
       clear();
 
-      // Show "we'll email you" confirmation, then redirect to dashboard
-      setGenerationQueued(true);
-      setTimeout(() => {
-        router.push("/dashboard");
-      }, 2500);
+      // Immediately navigate to the program editor (which shows the generation screen)
+      router.push(`/programs/${programId}/edit`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
       setSaving(false);
