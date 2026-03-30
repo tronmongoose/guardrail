@@ -23,19 +23,40 @@ export async function GET() {
   const fixed: { id: string; table: string; oldPlaybackId: string | null; newPlaybackId: string }[] = [];
   const errors: { id: string; table: string; error: string }[] = [];
 
-  // Fix YouTubeVideo records
+  // Fix YouTubeVideo records — scan any record that has Mux fields set
   const videos = await prisma.youTubeVideo.findMany({
-    where: { muxAssetId: { not: null } },
-    select: { id: true, muxAssetId: true, muxPlaybackId: true },
+    where: {
+      OR: [
+        { muxAssetId: { not: null } },
+        { muxUploadId: { not: null } },
+        { muxPlaybackId: { not: null } },
+      ],
+    },
+    select: { id: true, muxAssetId: true, muxUploadId: true, muxPlaybackId: true },
   });
 
   for (const v of videos) {
-    if (!v.muxAssetId) continue;
-    // Skip if playback ID looks valid (47+ chars)
+    // Skip if playback ID already looks valid (40+ chars)
     if (v.muxPlaybackId && v.muxPlaybackId.length >= 40) continue;
 
     try {
-      const asset = await mux.video.assets.retrieve(v.muxAssetId);
+      let assetId = v.muxAssetId;
+
+      // If no assetId but we have uploadId, look up the upload to find the asset
+      if (!assetId && v.muxUploadId) {
+        const upload = await mux.video.uploads.retrieve(v.muxUploadId);
+        assetId = upload.asset_id ?? null;
+        if (assetId) {
+          await prisma.youTubeVideo.update({
+            where: { id: v.id },
+            data: { muxAssetId: assetId },
+          });
+        }
+      }
+
+      if (!assetId) continue;
+
+      const asset = await mux.video.assets.retrieve(assetId);
       const playbackId = asset.playback_ids?.[0]?.id;
       if (playbackId) {
         await prisma.youTubeVideo.update({
@@ -49,18 +70,40 @@ export async function GET() {
     }
   }
 
-  // Fix Action records
+  // Fix Action records — scan any Action that has Mux fields set
   const actions = await prisma.action.findMany({
-    where: { muxAssetId: { not: null } },
-    select: { id: true, muxAssetId: true, muxPlaybackId: true },
+    where: {
+      OR: [
+        { muxAssetId: { not: null } },
+        { muxUploadId: { not: null } },
+        { muxPlaybackId: { not: null } },
+      ],
+    },
+    select: { id: true, muxAssetId: true, muxUploadId: true, muxPlaybackId: true },
   });
 
   for (const a of actions) {
-    if (!a.muxAssetId) continue;
+    // Skip if playback ID already looks valid
     if (a.muxPlaybackId && a.muxPlaybackId.length >= 40) continue;
 
     try {
-      const asset = await mux.video.assets.retrieve(a.muxAssetId);
+      let assetId = a.muxAssetId;
+
+      // If no assetId but we have uploadId, look up the upload to find the asset
+      if (!assetId && a.muxUploadId) {
+        const upload = await mux.video.uploads.retrieve(a.muxUploadId);
+        assetId = upload.asset_id ?? null;
+        if (assetId) {
+          await prisma.action.update({
+            where: { id: a.id },
+            data: { muxAssetId: assetId },
+          });
+        }
+      }
+
+      if (!assetId) continue;
+
+      const asset = await mux.video.assets.retrieve(assetId);
       const playbackId = asset.playback_ids?.[0]?.id;
       if (playbackId) {
         await prisma.action.update({
