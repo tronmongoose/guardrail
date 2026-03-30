@@ -236,6 +236,16 @@ export default function NewProgramPage() {
     });
   }, [isLoaded, clerkUser, router]);
 
+  // Auto-generate: fires once upload finishes and all uploads are settled
+  useEffect(() => {
+    if (!generationQueued || step !== "videos") return;
+    if (pendingUploads.some((p) => !p.error)) return; // still uploading
+    if (videos.length === 0) return; // all uploads failed
+    setGenerationQueued(false);
+    handleGenerate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [generationQueued, pendingUploads, videos.length, step]);
+
   const currentStepIndex = STEPS.findIndex(s => s.key === step);
 
   const canProceed = useCallback((): boolean => {
@@ -530,6 +540,9 @@ export default function NewProgramPage() {
     await Promise.allSettled(pending.map((item) => uploadSingleFile(item, programId)));
 
     if (fileInputRef.current) fileInputRef.current.value = "";
+
+    // Queue auto-generation — the useEffect will fire once state settles
+    setGenerationQueued(true);
   };
 
   const handleRemoveVideo = async (videoId: string) => {
