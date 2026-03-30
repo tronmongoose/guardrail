@@ -113,6 +113,20 @@ export function ProgramWizard({
   });
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // Track how many videos existed at mount so we don't auto-generate on localStorage restores
+  const initialVideoCount = useRef(state.content.videos.length);
+
+  // Auto-generate: when first new video is uploaded on the Content step, skip to generation
+  useEffect(() => {
+    if (currentStep !== 1) return;
+    if (state.content.videos.length === 0) return;
+    if (state.content.videos.length <= initialVideoCount.current) return;
+    if (isGenerating) return;
+    if (!state.basics.title.trim()) return;
+    handleGenerate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.content.videos.length]);
+
   // Track analysis status for uploaded videos — used for the footer badge
   const [analysisStatus, setAnalysisStatus] = useState<Record<string, boolean>>({});
   const analysisPollerRef = useRef<ReturnType<typeof setInterval> | null>(null);
