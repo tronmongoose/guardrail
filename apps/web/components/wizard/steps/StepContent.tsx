@@ -929,11 +929,10 @@ export function StepContent({
               accept={ACCEPTED_FILE_TYPES}
               onChange={handleFileUpload}
               disabled={isExtracting}
-              multiple={false}
+              multiple={true}
               style={{ position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden", pointerEvents: "none" }}
             />
           </label>
-          <p className="text-sm text-center opacity-60">One video per step</p>
 
           {/* Per-file extraction progress */}
           {extractionStates.length > 0 && (

@@ -24,7 +24,7 @@ export async function sendEmail({ to, subject, text, html }: SendEmailOptions): 
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: process.env.EMAIL_FROM || "GuideRail <noreply@guiderail.app>",
+          from: process.env.EMAIL_FROM || "Journeyline <noreply@journeyline.ai>",
           to,
           subject,
           text,
@@ -46,15 +46,24 @@ export async function sendEmail({ to, subject, text, html }: SendEmailOptions): 
     }
   }
 
-  // Development mode: log email contents
+  // No RESEND_API_KEY — log email contents instead of sending.
+  // In production this means emails are silently dropped; warn loudly.
+  if (process.env.NODE_ENV === "production") {
+    logger.warn({
+      operation: "email.skipped_no_key",
+      to,
+      subject,
+      message: "RESEND_API_KEY is not set — email was NOT sent. Add it to your Vercel environment variables.",
+    });
+    return false;
+  }
+
   logger.info({
     operation: "email.dev_preview",
     to,
     subject,
     body: text,
   });
-
-  logger.info({ operation: "email.logged_dev", to, subject });
   return true;
 }
 
@@ -68,12 +77,12 @@ export async function sendMagicLinkEmail(
 ): Promise<boolean> {
   const subject = programTitle
     ? `Access your program: ${programTitle}`
-    : "Your GuideRail access link";
+    : "Your Journeyline access link";
 
   const text = `
 Hi there!
 
-${programTitle ? `You've enrolled in "${programTitle}".` : "Welcome to GuideRail!"}
+${programTitle ? `You've enrolled in "${programTitle}".` : "Welcome to Journeyline!"}
 
 Click the link below to access your learning experience:
 
@@ -82,7 +91,7 @@ ${magicLinkUrl}
 This link is valid for 24 hours and can only be used once.
 
 Happy learning!
-The GuideRail Team
+The Journeyline Team
 `.trim();
 
   const html = `
@@ -99,7 +108,7 @@ The GuideRail Team
 <body>
   <div class="container">
     <h2>Hi there!</h2>
-    <p>${programTitle ? `You've enrolled in <strong>${programTitle}</strong>.` : "Welcome to GuideRail!"}</p>
+    <p>${programTitle ? `You've enrolled in <strong>${programTitle}</strong>.` : "Welcome to Journeyline!"}</p>
     <p>Click the button below to access your learning experience:</p>
     <p style="margin: 30px 0;">
       <a href="${magicLinkUrl}" class="button">Access Your Program</a>
@@ -110,7 +119,7 @@ The GuideRail Team
     <p class="footer">
       This link is valid for 24 hours and can only be used once.<br>
       Happy learning!<br>
-      The GuideRail Team
+      The Journeyline Team
     </p>
   </div>
 </body>
@@ -129,7 +138,7 @@ export async function sendProgramReadyEmail(
   programTitle: string,
   programId: string,
 ): Promise<boolean> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.guiderail.app";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.journeyline.ai";
   const editUrl = `${appUrl}/programs/${programId}/edit`;
 
   const text = `
@@ -141,7 +150,7 @@ Open it here: ${editUrl}
 
 You can edit the curriculum, set your price, and publish whenever you're ready.
 
-The GuideRail Team
+The Journeyline Team
 `.trim();
 
   const html = `
@@ -166,7 +175,7 @@ The GuideRail Team
       <a href="${editUrl}" class="button">View Your Program →</a>
     </p>
     <p class="footer">
-      GuideRail &middot; <a href="${editUrl}" style="color:#9ca3af">${editUrl}</a>
+      Journeyline &middot; <a href="${editUrl}" style="color:#9ca3af">${editUrl}</a>
     </p>
   </div>
 </body>

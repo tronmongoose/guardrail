@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useGenerationSteps } from "./useGenerationSteps";
 import { GenerationSteps } from "./GenerationSteps";
@@ -35,40 +35,51 @@ export function GenerationNotification({
   const [skinModal, setSkinModal] = useState<{ tokens: SkinTokens; customSkinId: string } | null>(null);
   const [skinChecked, setSkinChecked] = useState(false);
 
-  const pollStatus = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/programs/${programId}/generate-async/status`);
-      if (res.ok) {
-        const data = await res.json();
-        setJob(data);
-
-        if (data.status === "COMPLETED") {
-          onComplete?.();
-        }
-      }
-    } catch (err) {
-      console.error("Failed to poll generation status:", err);
-    }
-  }, [programId, onComplete]);
+  // Keep callbacks in refs so they never need to be effect deps
+  const onCompleteRef = useRef(onComplete);
+  const onDismissRef = useRef(onDismiss);
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
+  useEffect(() => { onDismissRef.current = onDismiss; }, [onDismiss]);
 
   const handleDismiss = useCallback(() => {
     setDismissed(true);
-    onDismiss?.();
-  }, [onDismiss]);
+    onDismissRef.current?.();
+  }, []);
 
   useEffect(() => {
-    // Initial fetch
-    pollStatus();
+    let stopped = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
-    // Poll every 2 seconds while processing
-    const interval = setInterval(() => {
-      if (job?.status === "PENDING" || job?.status === "PROCESSING" || !job) {
-        pollStatus();
+    const poll = async () => {
+      if (stopped) return;
+      try {
+        const res = await fetch(`/api/programs/${programId}/generate-async/status`);
+        if (!res.ok || stopped) return;
+        const data: GenerationJob = await res.json();
+        setJob(data);
+
+        if (data.status === "COMPLETED") {
+          stopped = true;
+          if (interval) clearInterval(interval);
+          onCompleteRef.current?.();
+        } else if (data.status === "FAILED") {
+          stopped = true;
+          if (interval) clearInterval(interval);
+        }
+      } catch (err) {
+        console.error("Failed to poll generation status:", err);
       }
-    }, 2000);
+    };
 
-    return () => clearInterval(interval);
-  }, [pollStatus, job?.status]);
+    // Initial fetch, then poll every 2s until terminal status or unmount
+    poll();
+    interval = setInterval(poll, 2000);
+
+    return () => {
+      stopped = true;
+      if (interval) clearInterval(interval);
+    };
+  }, [programId]); // programId is the only stable dep needed
 
   // When on the edit page and generation completes: trigger a reload of program data via custom event,
   // then auto-dismiss the toast. This handles the case where the edit page's own polling isn't running.

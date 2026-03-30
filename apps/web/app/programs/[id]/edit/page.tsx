@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -68,9 +69,10 @@ const AMBIENT_HEADERS = [
   "Building something your learners will love",
 ];
 
-function GenerationProgress({ stage, progress, onCancel }: { stage: string | null; progress: number; onCancel?: () => void }) {
+function GenerationProgress({ stage, progress, onCancel, creatorEmail }: { stage: string | null; progress: number; onCancel?: () => void; creatorEmail?: string }) {
   const stepsData = useGenerationSteps({ stage, progress, status: "PROCESSING" });
   const [headerIndex, setHeaderIndex] = useState(0);
+  const [showAsyncMessage, setShowAsyncMessage] = useState(false);
 
   // Rotate ambient header every 8 seconds
   useEffect(() => {
@@ -78,6 +80,12 @@ function GenerationProgress({ stage, progress, onCancel }: { stage: string | nul
       setHeaderIndex((prev) => (prev + 1) % AMBIENT_HEADERS.length);
     }, 8000);
     return () => clearInterval(interval);
+  }, []);
+
+  // After 15s, fade in the "feel free to close the tab" message
+  useEffect(() => {
+    const timer = setTimeout(() => setShowAsyncMessage(true), 15_000);
+    return () => clearTimeout(timer);
   }, []);
 
   return (
@@ -106,9 +114,27 @@ function GenerationProgress({ stage, progress, onCancel }: { stage: string | nul
         variant="full"
       />
 
-      <p className="text-xs text-gray-600 mt-4">
-        Sit back and relax — this usually takes 20-45 seconds
-      </p>
+      {/* Async messaging — fades in after 15s */}
+      <div
+        className="mt-6 transition-opacity duration-1000"
+        style={{ opacity: showAsyncMessage ? 1 : 0 }}
+        aria-hidden={!showAsyncMessage}
+      >
+        <p className="text-sm text-gray-400">
+          This usually takes a few minutes — feel free to close this tab.
+        </p>
+        {creatorEmail && (
+          <p className="text-sm text-gray-500 mt-1">
+            We&apos;ll email you at <span className="text-gray-300">{creatorEmail}</span> the moment it&apos;s ready.
+          </p>
+        )}
+      </div>
+
+      {!showAsyncMessage && (
+        <p className="text-xs text-gray-600 mt-4">
+          Sit back and relax — this usually takes 20-45 seconds
+        </p>
+      )}
       {onCancel && (
         <button
           onClick={onCancel}
@@ -127,12 +153,14 @@ export default function ProgramEditPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const { activeGenerations } = useGeneration();
+  const { user } = useUser();
+  const creatorEmail = user?.primaryEmailAddress?.emailAddress;
 
   const [program, setProgram] = useState<Program | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(searchParams.get("wizard") === "true");
-  const [activeTab, setActiveTab] = useState<"curriculum" | "theme" | "settings" | "preview">("curriculum");
+  const [activeTab, setActiveTab] = useState<"details" | "curriculum" | "payments" | "preview">("details");
   const [previewView, setPreviewView] = useState<"overview" | "session">("overview");
   const [previewDeviceMode, setPreviewDeviceMode] = useState<"desktop" | "mobile">("desktop");
   const [previewSelectedSessionId, setPreviewSelectedSessionId] = useState<string | null>(null);
@@ -206,7 +234,7 @@ export default function ProgramEditPage() {
 
   // Load promo codes when settings tab opens
   useEffect(() => {
-    if (activeTab !== "settings" || promoCodesLoaded) return;
+    if (activeTab !== "payments" || promoCodesLoaded) return;
     fetch("/api/promo-codes")
       .then(r => r.ok ? r.json() : [])
       .then((data: PromoCodeItem[]) => {
@@ -779,7 +807,7 @@ export default function ProgramEditPage() {
           </button>
           <div className="h-6 w-px bg-gray-700 flex-shrink-0" />
           <button
-            onClick={() => setActiveTab("settings")}
+            onClick={() => setActiveTab("details")}
             className="text-base font-semibold text-white truncate hover:text-teal-400 transition cursor-pointer text-left"
             title="Click to edit program details"
           >
@@ -849,17 +877,17 @@ export default function ProgramEditPage() {
       {/* Tab Bar */}
       <div className="border-b border-gray-800" style={{ background: "#0a0a0f" }}>
         <div className="flex overflow-x-auto px-6">
-          {(["curriculum", "theme", "settings", "preview"] as const).map((tab) => (
+          {(["details", "curriculum", "payments", "preview"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-4 py-3 text-sm font-medium whitespace-nowrap capitalize transition border-b-2 ${
+              className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition border-b-2 ${
                 activeTab === tab
                   ? "text-white border-teal-500"
                   : "text-gray-500 border-transparent hover:text-gray-300"
               }`}
             >
-              {tab === "curriculum" ? "Curriculum" : tab === "theme" ? "Theme" : tab === "settings" ? "Settings" : "Preview"}
+              {tab === "details" ? "Program Details" : tab === "curriculum" ? "Curriculum" : tab === "payments" ? "Payments" : "Preview"}
             </button>
           ))}
         </div>
@@ -889,7 +917,7 @@ export default function ProgramEditPage() {
               </div>
             </div>
           ) : program.weeks.length === 0 && (asyncGenerating || !genStatusChecked || activeGenerations.includes(id)) ? (
-            <GenerationProgress stage={asyncStage} progress={asyncProgress} onCancel={cancelGeneration} />
+            <GenerationProgress stage={asyncStage} progress={asyncProgress} onCancel={cancelGeneration} creatorEmail={creatorEmail} />
           ) : program.weeks.length === 0 ? (
             <div className="max-w-lg mx-auto mt-16 text-center">
               <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-pink-900/30 border border-pink-700/50 flex items-center justify-center">
@@ -946,8 +974,8 @@ export default function ProgramEditPage() {
         </main>
       )}
 
-      {/* === Settings Tab === */}
-      {activeTab === "settings" && (
+      {/* === Program Details Tab === */}
+      {activeTab === "details" && (
         <div className="max-w-2xl mx-auto py-8 px-4" style={{ background: "#0a0a0f", minHeight: "calc(100vh - 112px)" }}>
           <form
             onSubmit={async (e) => {
@@ -1085,7 +1113,34 @@ export default function ProgramEditPage() {
             </div>
           </form>
 
-          <div className="space-y-8 mt-8 pt-8 border-t border-gray-800">
+          {/* Theme selector — below save/regenerate buttons */}
+          <div className="space-y-3 mt-8 pt-8 border-t border-gray-800">
+            <h2 className="text-base font-semibold text-white">Theme</h2>
+            <SkinPicker
+              value={program.customSkinId ? `custom:${program.customSkinId}` : program.skinId}
+              onChange={handleSkinChange}
+              onGenerateSkin={handleGenerateSkin}
+              thumbnailUrl={(() => {
+                const muxId =
+                  program.videos[0]?.muxPlaybackId ??
+                  program.weeks
+                    .flatMap((w) => w.sessions)
+                    .flatMap((s) => s.actions)
+                    .find((a) => a.muxPlaybackId)?.muxPlaybackId;
+                return (
+                  program.videos[0]?.thumbnailUrl ??
+                  (muxId ? `https://image.mux.com/${muxId}/thumbnail.jpg?time=2` : null)
+                );
+              })()}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* === Payments Tab === */}
+      {activeTab === "payments" && (
+        <div className="max-w-2xl mx-auto py-8 px-4" style={{ background: "#0a0a0f", minHeight: "calc(100vh - 112px)" }}>
+          <div className="space-y-8">
             <div className="space-y-4">
               <div>
                 <h2 className="text-base font-semibold text-white mb-1">Price</h2>
@@ -1289,21 +1344,6 @@ export default function ProgramEditPage() {
                 </div>
               )}
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* === Theme Tab === */}
-      {activeTab === "theme" && (
-        <div className="max-w-2xl mx-auto py-8 px-4" style={{ background: "#0a0a0f", minHeight: "calc(100vh - 112px)" }}>
-          <div className="space-y-3">
-            <h2 className="text-base font-semibold text-white">Theme</h2>
-            <SkinPicker
-              value={program.customSkinId ? `custom:${program.customSkinId}` : program.skinId}
-              onChange={handleSkinChange}
-              onGenerateSkin={handleGenerateSkin}
-              thumbnailUrl={program.videos[0]?.thumbnailUrl ?? null}
-            />
           </div>
         </div>
       )}

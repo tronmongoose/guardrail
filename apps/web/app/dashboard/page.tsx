@@ -87,6 +87,7 @@ function DashboardContent() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("stripe") === "success") {
@@ -108,8 +109,10 @@ function DashboardContent() {
       fetch("/api/programs").then((r) => r.json()),
       fetch("/api/user/onboarding").then((r) => r.json()),
       fetch("/api/user/metrics").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/admin/check").then((r) => r.json()).catch(() => ({ isAdmin: false })),
     ])
-      .then(([programsData, userData, metricsData]) => {
+      .then(([programsData, userData, metricsData, adminData]) => {
+        if (adminData?.isAdmin) setIsAdmin(true);
         // Platform access gate
         const hasAccess = userData.platformPromoGranted || userData.platformPaymentComplete;
         if (!hasAccess) {
@@ -200,6 +203,14 @@ function DashboardContent() {
           Journeyline
         </Link>
         <div className="flex items-center gap-4">
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="text-xs px-2 py-1 rounded-full bg-pink-900/40 text-pink-400 font-medium hover:bg-pink-900/60 transition"
+            >
+              Admin
+            </Link>
+          )}
           <Link
             href="/dashboard/settings"
             className="text-sm text-gray-400 hover:text-white transition"

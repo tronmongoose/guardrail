@@ -57,7 +57,17 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
       include: {
         creator: true,
         weeks: {
-          include: { sessions: { include: { actions: true } } },
+          include: {
+            sessions: {
+              include: {
+                actions: {
+                  include: {
+                    youtubeVideo: { select: { thumbnailUrl: true, muxPlaybackId: true } },
+                  },
+                },
+              },
+            },
+          },
           orderBy: { weekNumber: "asc" },
         },
       },
@@ -109,6 +119,18 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
     .flatMap((w) => w.sessions)
     .filter((s) => (s.keyTakeaways && s.keyTakeaways.length > 0) || s.summary)
     .slice(0, 3);
+
+  // Helper: derive thumbnail URL for a session from its first WATCH action.
+  // Checks action.muxPlaybackId directly (uploaded videos) before falling back to youtubeVideo.
+  function getSessionThumbnail(session: typeof featureCards[number]): string | null {
+    const watch = session.actions.find((a) => a.type === "WATCH");
+    if (!watch) return null;
+    const muxId = watch.muxPlaybackId ?? watch.youtubeVideo?.muxPlaybackId;
+    if (muxId) {
+      return `https://image.mux.com/${muxId}/thumbnail.jpg?time=2&width=640`;
+    }
+    return watch.youtubeVideo?.thumbnailUrl ?? null;
+  }
 
   const hasWhoSection = !!(program.targetAudience || program.outcomeStatement);
 
@@ -483,10 +505,12 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
           {/* Right: feature cards */}
           {featureCards.length > 0 && (
             <div className="flex flex-col gap-4">
-              {featureCards.map((session) => (
+              {featureCards.map((session) => {
+                const thumbUrl = getSessionThumbnail(session);
+                return (
                 <div
                   key={session.id}
-                  className="p-5"
+                  className="overflow-hidden"
                   style={{
                     borderRadius: "var(--token-radius-lg)",
                     backgroundColor: "var(--token-color-bg-elevated)",
@@ -494,6 +518,17 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
                     boxShadow: "var(--token-shadow-md)",
                   }}
                 >
+                  {thumbUrl && (
+                    <div style={{ position: "relative", width: "100%", aspectRatio: "16/9", overflow: "hidden" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={thumbUrl}
+                        alt=""
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    </div>
+                  )}
+                  <div className="p-5">
                   <p
                     className="mb-2"
                     style={{
@@ -535,8 +570,10 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
                       {session.summary}
                     </p>
                   )}
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
