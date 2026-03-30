@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getEntitlement } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { resolveTokens } from "@/lib/resolve-tokens";
+import { isMuxSigningConfigured, signMuxPlaybackId } from "@/lib/mux";
 import { SkinThemeProvider } from "@/components/skins/SkinThemeProvider";
 import { SessionViewer } from "./viewer";
 
@@ -113,6 +114,35 @@ export default async function SessionPage({
 
   const finalClips = clips.length > 0 ? clips : fallbackClips;
 
+  // Pre-generate signed JWT tokens for every unique Mux playback ID so the
+  // player can stream signed assets without any client-side API calls.
+  // Tokens are scoped to 12 hours and generated on every page render.
+  const muxPlaybackTokens: Record<string, string> = {};
+  if (isMuxSigningConfigured()) {
+    const playbackIds = [
+      ...new Set(
+        finalClips
+          .map((c) => {
+            const pid =
+              (c as { muxPlaybackId?: string }).muxPlaybackId ??
+              c.youtubeVideo?.muxPlaybackId ??
+              null;
+            return pid;
+          })
+          .filter((id): id is string => !!id)
+      ),
+    ];
+    await Promise.all(
+      playbackIds.map(async (pid) => {
+        try {
+          muxPlaybackTokens[pid] = await signMuxPlaybackId(pid);
+        } catch {
+          // Non-critical — if signing fails the player falls back gracefully.
+        }
+      })
+    );
+  }
+
   return (
     <SkinThemeProvider tokens={tokens}>
       <SessionViewer
@@ -161,6 +191,7 @@ export default async function SessionPage({
             youtubeVideoId: ytVideo.videoId,
             muxPlaybackId,
             muxStatus,
+            muxToken: muxPlaybackId ? muxPlaybackTokens[muxPlaybackId] : undefined,
             blobUrl,
             title: ytVideo.title ?? c.chapterTitle ?? "Untitled",
             chapterTitle: c.chapterTitle ?? ytVideo.title ?? "Untitled",

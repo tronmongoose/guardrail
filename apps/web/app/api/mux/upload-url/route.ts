@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
-import { getMux } from "@/lib/mux";
+import { getMux, isMuxSigningConfigured } from "@/lib/mux";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
@@ -56,7 +56,9 @@ export async function POST(req: NextRequest) {
       cors_origin: appUrl,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       new_asset_settings: {
-        playback_policy: ["public"],
+        // Use signed policy when signing keys are present so video content is
+        // protected. Falls back to public for environments without signing keys.
+        playback_policy: [isMuxSigningConfigured() ? "signed" : "public"],
         mp4_support: "capped-1080p",
         auto_generated_captions: [{ language_code: "en" }],
       } as any,

@@ -17,6 +17,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@guide-rail/ai": "workspace:*",
     "@guide-rail/shared": "workspace:*",
+    "@mux/ai": "^0.12.0",
     "@mux/mux-node": "^12.8.1",
     "@mux/mux-player-react": "^3.11.7",
     "@prisma/client": "^6.2.0",

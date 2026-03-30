@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getMux, isMuxConfigured } from "@/lib/mux";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { generateMuxVideoAnalysis } from "@/lib/mux-ai-analysis";
 
 export async function POST(req: NextRequest) {
   if (!isMuxConfigured()) {
@@ -219,6 +220,55 @@ export async function POST(req: NextRequest) {
           assetId,
         });
       }
+      break;
+    }
+
+    case "video.track.ready": {
+      // Fires when a text track (caption/subtitle) becomes available.
+      // We use this — rather than video.asset.ready — to trigger @mux/ai chapter
+      // generation because the caption track must exist before fetchTranscriptForAsset
+      // can succeed. Ensure "video.track.ready" is enabled in your Mux dashboard
+      // webhook settings alongside the other events.
+      const trackType: string = event.data?.type ?? "";
+      if (trackType !== "text") break; // only caption/subtitle tracks
+
+      const assetId: string = event.data?.asset_id ?? "";
+      if (!assetId) break;
+
+      const ytVideo = await prisma.youTubeVideo.findFirst({
+        where: { muxAssetId: assetId },
+        select: { id: true, muxPlaybackId: true },
+      });
+
+      if (!ytVideo) {
+        // This track belongs to an Action upload (lesson-level) — no AI analysis needed.
+        break;
+      }
+
+      if (!ytVideo.muxPlaybackId) {
+        // video.asset.ready hasn't fired yet; skip — transcript isn't accessible.
+        logger.warn({
+          operation: "mux.webhook.track_ready.no_playback_id",
+          assetId,
+          ytVideoId: ytVideo.id,
+        });
+        break;
+      }
+
+      logger.info({
+        operation: "mux.webhook.track_ready.queueing_analysis",
+        ytVideoId: ytVideo.id,
+        assetId,
+      });
+
+      // Fire and forget — webhook returns 200 immediately.
+      after(() =>
+        generateMuxVideoAnalysis({
+          assetId,
+          playbackId: ytVideo.muxPlaybackId!,
+          ytVideoId: ytVideo.id,
+        })
+      );
       break;
     }
 

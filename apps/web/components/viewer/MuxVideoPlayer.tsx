@@ -11,12 +11,15 @@ const MuxPlayer = dynamic(() => import("@mux/mux-player-react"), {
 
 interface MuxVideoPlayerProps {
   playbackId: string;
+  /** JWT signed tokens for protected playback IDs (policy: "signed"). */
+  tokens?: { playback: string };
   title?: string;
   className?: string;
 }
 
 export function MuxVideoPlayer({
   playbackId,
+  tokens,
   title,
   className = "",
 }: MuxVideoPlayerProps) {
@@ -31,6 +34,7 @@ export function MuxVideoPlayer({
     >
       <MuxPlayer
         playbackId={playbackId}
+        tokens={tokens}
         streamType="on-demand"
         metadata={{ video_title: title }}
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

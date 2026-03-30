@@ -26,6 +26,8 @@ export interface ViewerClip {
   /** Mux playback ID — set once video.asset.ready fires. "ready" = playable; "waiting" = processing; "errored" = failed */
   muxPlaybackId?: string;
   muxStatus?: string;
+  /** JWT playback token — required when the Mux asset uses "signed" policy. */
+  muxToken?: string;
   title: string;
   chapterTitle: string;
   chapterDescription?: string;
@@ -213,6 +215,7 @@ export function SessionViewer({
                 <MuxVideoPlayer
                   key={currentClip.id}
                   playbackId={currentClip.muxPlaybackId}
+                  tokens={currentClip.muxToken ? { playback: currentClip.muxToken } : undefined}
                   title={currentClip.title}
                   className="w-full"
                 />
