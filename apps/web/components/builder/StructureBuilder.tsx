@@ -26,6 +26,7 @@ export interface ActionData {
   reflectionPrompt: string | null;
   youtubeVideoId: string | null;
   youtubeVideo?: { videoId: string; thumbnailUrl: string | null } | null;
+  muxPlaybackId?: string | null;
   orderIndex: number;
 }
 
@@ -79,6 +80,7 @@ export interface YouTubeVideoData {
   thumbnailUrl: string | null;
   url: string;
   muxUploadId?: string | null;
+  muxPlaybackId?: string | null;
 }
 
 interface StructureBuilderProps {
