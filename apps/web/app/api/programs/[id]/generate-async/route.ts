@@ -44,7 +44,7 @@ export async function POST(
   }
 
   // Check for existing pending/processing job
-  const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes without progress = stale
+  const STALE_THRESHOLD_MS = 3 * 60 * 1000; // 3 minutes without progress = stale
 
   const existingJob = await prisma.generationJob.findFirst({
     where: {
