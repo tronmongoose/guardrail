@@ -103,6 +103,7 @@ export async function POST(req: NextRequest) {
       // Asset is fully processed and playable.
       const assetId: string = event.data?.id ?? "";
       const playbackId: string = event.data?.playback_ids?.[0]?.id ?? "";
+      const uploadId: string = event.data?.upload_id ?? "";
 
       if (!assetId || !playbackId) {
         logger.warn({
@@ -113,15 +114,21 @@ export async function POST(req: NextRequest) {
         break;
       }
 
-      // Check Action first (lesson-level uploads)
-      const action = await prisma.action.findFirst({
+      // Check Action first by muxAssetId, then fall back to muxUploadId
+      let action = await prisma.action.findFirst({
         where: { muxAssetId: assetId },
       });
+      if (!action && uploadId) {
+        action = await prisma.action.findFirst({
+          where: { muxUploadId: uploadId },
+        });
+      }
 
       if (action) {
         await prisma.action.update({
           where: { id: action.id },
           data: {
+            muxAssetId: assetId,
             muxPlaybackId: playbackId,
             muxStatus: "ready",
           },
@@ -131,19 +138,26 @@ export async function POST(req: NextRequest) {
           actionId: action.id,
           assetId,
           playbackId,
+          lookupBy: action.muxAssetId ? "assetId" : "uploadId",
         });
         break;
       }
 
-      // Check YouTubeVideo (wizard program-level uploads)
-      const ytVideo = await prisma.youTubeVideo.findFirst({
+      // Check YouTubeVideo by muxAssetId, then fall back to muxUploadId
+      let ytVideo = await prisma.youTubeVideo.findFirst({
         where: { muxAssetId: assetId },
       });
+      if (!ytVideo && uploadId) {
+        ytVideo = await prisma.youTubeVideo.findFirst({
+          where: { muxUploadId: uploadId },
+        });
+      }
 
       if (ytVideo) {
         await prisma.youTubeVideo.update({
           where: { id: ytVideo.id },
           data: {
+            muxAssetId: assetId,
             muxPlaybackId: playbackId,
             muxStatus: "ready",
             url: `https://stream.mux.com/${playbackId}`,
@@ -154,6 +168,7 @@ export async function POST(req: NextRequest) {
           youtubeVideoId: ytVideo.id,
           assetId,
           playbackId,
+          lookupBy: ytVideo.muxAssetId ? "assetId" : "uploadId",
         });
         break;
       }
@@ -161,6 +176,7 @@ export async function POST(req: NextRequest) {
       logger.warn({
         operation: "mux.webhook.asset_ready.no_record_found",
         assetId,
+        uploadId,
       });
       break;
     }
