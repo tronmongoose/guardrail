@@ -152,7 +152,9 @@ async function processGenerationJob(jobId: string, programId: string) {
     // ── Step 0: Video Analysis (0-10%) ──
     // Only analyze top-level (non-segment) videos; segment children inherit parent's analysis
     checkDeadline("video_analysis");
-    const videosNeedingAnalysis = program.videos.filter((v) => !v.isSegment && !v.analysis);
+    const videosNeedingAnalysis = program.videos.filter(
+      (v) => !v.isSegment && !v.analysis && !v.url.startsWith("mux-upload://")
+    );
     let analysisCount = 0;
 
     if (videosNeedingAnalysis.length > 0 && process.env.GOOGLE_AI_API_KEY) {
