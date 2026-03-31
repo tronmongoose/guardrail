@@ -44,8 +44,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Mux is not configured on this server" }, { status: 503 });
   }
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL || "https://journeyline.app";
+  // Use the request origin for CORS so uploads work on both production
+  // (app.journeyline.ai) and preview deployments (*.vercel.app).
+  const origin = req.headers.get("origin");
+  const appUrl = origin || process.env.NEXT_PUBLIC_APP_URL || "https://app.journeyline.ai";
 
   let upload: { id: string; url: string };
   try {
