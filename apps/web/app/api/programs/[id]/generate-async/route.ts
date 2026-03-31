@@ -253,8 +253,12 @@ async function processGenerationJob(jobId: string, programId: string) {
       allVideosWithAnalysis.filter((v) => v.isSegment && v.parentVideoId).map((v) => v.parentVideoId as string),
     );
     const videosForPipeline = allVideosWithAnalysis.filter(
-      (v) => v.isSegment || !segmentedParentIds.has(v.id),
+      (v) => (v.isSegment || !segmentedParentIds.has(v.id)) && !v.url.startsWith("mux-upload://"),
     );
+
+    // Mux direct uploads have no accessible content for AI processing — include them
+    // as minimal digests so the LLM knows they exist when building the program structure.
+    const muxOnlyVideos = allVideosWithAnalysis.filter((v) => v.url.startsWith("mux-upload://"));
 
     // For backwards-compat: keep using videosWithAnalysis name for analysis map building
     const videosWithAnalysis = videosForPipeline;
@@ -275,8 +279,9 @@ async function processGenerationJob(jobId: string, programId: string) {
       }
     }
 
-    // Update videoIdSet to reflect the pipeline videos (includes segment children)
+    // Update videoIdSet to reflect the pipeline videos (includes segment children + mux-only)
     for (const v of videosForPipeline) videoIdSet.add(v.id);
+    for (const v of muxOnlyVideos) videoIdSet.add(v.id);
 
     const hasVideoAnalysis = analysisMap.size > 0;
     console.info(`[generate-async] Video analysis: ${analysisMap.size}/${allVideosWithAnalysis.length} videos analyzed (${analysisCount} new), ${videosForPipeline.length} in pipeline`);
@@ -476,6 +481,20 @@ async function processGenerationJob(jobId: string, programId: string) {
       aiLogger.extractionSuccess(programId, extractionTimer.elapsed(), llmDigests.length);
     } else {
       console.info(`[generate-async] All videos have Gemini analysis — skipping LLM extraction`);
+    }
+
+    // Add minimal digests for Mux-only uploads (no transcript/analysis available)
+    for (const v of muxOnlyVideos) {
+      enrichedDigests.push({
+        contentId: v.id,
+        contentTitle: v.title ?? "Untitled",
+        contentType: "video",
+        keyConcepts: [v.title ?? "Video content"],
+        skillsIntroduced: [],
+        memorableExamples: [],
+        difficultyLevel: "intermediate",
+        summary: `Uploaded video: ${v.title ?? "Untitled"}`,
+      } as ContentDigest);
     }
 
     await prisma.generationJob.update({
