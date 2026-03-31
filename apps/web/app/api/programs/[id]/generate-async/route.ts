@@ -567,6 +567,9 @@ async function processGenerationJob(jobId: string, programId: string) {
     let actionCount = 0;
     let compositeCount = 0;
 
+    // Wake up Neon compute — may have suspended during the minutes-long AI stages above
+    await prisma.$queryRaw`SELECT 1`;
+
     await prisma.week.deleteMany({ where: { programId } });
 
     for (const week of validated.data.weeks) {
