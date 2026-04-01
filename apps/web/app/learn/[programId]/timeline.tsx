@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
+import { MuxVideoPlayer } from "@/components/viewer/MuxVideoPlayer";
 import { ACTION_TYPE_LABELS, getActionTypeColor, getActionTypeBgWithBorder } from "@/lib/action-type-styles";
 
 interface ActionProgress {
@@ -18,7 +19,7 @@ interface ActionData {
   type: string;
   instructions: string | null;
   reflectionPrompt: string | null;
-  youtubeVideo: { videoId: string; title: string | null; url: string } | null;
+  youtubeVideo: { videoId: string; title: string | null; url: string; muxPlaybackId: string | null } | null;
   progress: ActionProgress[];
 }
 
@@ -570,16 +571,21 @@ export function LearnerTimeline({
                                   </p>
                                 )}
 
-                                {/* Video embed — YouTube iframe or HTML5 video for uploads */}
+                                {/* Video embed */}
                                 {action.youtubeVideo && (
-                                  <div
-                                    className="aspect-video overflow-hidden"
-                                    style={{
-                                      borderRadius: "var(--token-comp-video-radius)",
-                                      border: "var(--token-comp-video-border)",
-                                    }}
-                                  >
-                                    {action.youtubeVideo.url.includes("blob.vercel-storage.com") ? (
+                                  action.youtubeVideo.muxPlaybackId ? (
+                                    <MuxVideoPlayer
+                                      playbackId={action.youtubeVideo.muxPlaybackId}
+                                      title={action.youtubeVideo.title || action.title}
+                                    />
+                                  ) : action.youtubeVideo.url.includes("blob.vercel-storage.com") ? (
+                                    <div
+                                      className="aspect-video overflow-hidden"
+                                      style={{
+                                        borderRadius: "var(--token-comp-video-radius)",
+                                        border: "var(--token-comp-video-border)",
+                                      }}
+                                    >
                                       <video
                                         src={action.youtubeVideo.url}
                                         title={action.youtubeVideo.title || action.title}
@@ -588,7 +594,15 @@ export function LearnerTimeline({
                                         playsInline
                                         preload="metadata"
                                       />
-                                    ) : (
+                                    </div>
+                                  ) : (
+                                    <div
+                                      className="aspect-video overflow-hidden"
+                                      style={{
+                                        borderRadius: "var(--token-comp-video-radius)",
+                                        border: "var(--token-comp-video-border)",
+                                      }}
+                                    >
                                       <iframe
                                         src={`https://www.youtube.com/embed/${action.youtubeVideo.videoId}?rel=0&modestbranding=1&iv_load_policy=3`}
                                         title={action.youtubeVideo.title || action.title}
@@ -596,8 +610,8 @@ export function LearnerTimeline({
                                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                                         allowFullScreen
                                       />
-                                    )}
-                                  </div>
+                                    </div>
+                                  )
                                 )}
 
                                 {/* Reflection prompt */}
