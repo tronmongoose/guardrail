@@ -72,20 +72,12 @@ const AMBIENT_HEADERS = [
 function GenerationProgress({ stage, progress, onCancel, creatorEmail }: { stage: string | null; progress: number; onCancel?: () => void; creatorEmail?: string }) {
   const stepsData = useGenerationSteps({ stage, progress, status: "PROCESSING" });
   const [headerIndex, setHeaderIndex] = useState(0);
-  const [showAsyncMessage, setShowAsyncMessage] = useState(false);
-
   // Rotate ambient header every 8 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       setHeaderIndex((prev) => (prev + 1) % AMBIENT_HEADERS.length);
     }, 8000);
     return () => clearInterval(interval);
-  }, []);
-
-  // After 15s, fade in the "feel free to close the tab" message
-  useEffect(() => {
-    const timer = setTimeout(() => setShowAsyncMessage(true), 15_000);
-    return () => clearTimeout(timer);
   }, []);
 
   return (
@@ -114,27 +106,17 @@ function GenerationProgress({ stage, progress, onCancel, creatorEmail }: { stage
         variant="full"
       />
 
-      {/* Async messaging — fades in after 15s */}
-      <div
-        className="mt-6 transition-opacity duration-1000"
-        style={{ opacity: showAsyncMessage ? 1 : 0 }}
-        aria-hidden={!showAsyncMessage}
-      >
+      {/* Async messaging */}
+      <div className="mt-6">
         <p className="text-sm text-gray-400">
-          This usually takes a few minutes — feel free to close this tab.
+          This can take 5–10 minutes — feel free to navigate away.
         </p>
         {creatorEmail && (
           <p className="text-sm text-gray-500 mt-1">
-            We&apos;ll email you at <span className="text-gray-300">{creatorEmail}</span> the moment it&apos;s ready.
+            We&apos;ll email <span className="text-gray-300">{creatorEmail}</span> when it&apos;s ready.
           </p>
         )}
       </div>
-
-      {!showAsyncMessage && (
-        <p className="text-xs text-gray-600 mt-4">
-          Sit back and relax — this usually takes 20-45 seconds
-        </p>
-      )}
       {onCancel && (
         <button
           onClick={onCancel}
@@ -558,6 +540,7 @@ export default function ProgramEditPage() {
         }}
         onComplete={() => {
           setShowWizard(false);
+          setActiveTab("curriculum");
           load();
         }}
         onCancel={() => setShowWizard(false)}
