@@ -144,7 +144,7 @@ function DashboardContent() {
         throw new Error(data.error || "Failed to create program");
       }
       const program = await res.json();
-      router.push(`/programs/${program.id}/edit`);
+      router.push(`/programs/${program.id}/edit?wizard=true`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create program");
       setCreating(false);
