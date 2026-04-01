@@ -31,7 +31,9 @@ Package manager: **pnpm 9** (workspaces).
 | Auth — Creators | Clerk (`@clerk/nextjs`) |
 | Auth — Learners | Magic links (email-based, custom) |
 | Payments | Stripe one-time payments + Stripe Connect Express (creator payouts) |
-| File storage | Vercel Blob |
+| File storage | Vercel Blob (private store) |
+| Video — Transcoding | Mux Video (`@mux/mux-node`) — HLS adaptive streaming |
+| Video — Player | Mux Player (`@mux/mux-player-react`) via `next/dynamic` SSR-disabled |
 | Email | Resend API (falls back to console if no key) |
 | AI — LLM | Anthropic Claude (`claude-sonnet-4-20250514`) or OpenAI GPT-4o |
 | AI — Embeddings | HuggingFace `sentence-transformers/all-MiniLM-L6-v2` |
@@ -77,6 +79,11 @@ ANTHROPIC_MODEL=claude-sonnet-4-20250514
 OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o
 HUGGINGFACEHUB_API_TOKEN=hf_...
+
+# Video (Mux)
+MUX_TOKEN_ID=...                     # Mux API access token ID
+MUX_TOKEN_SECRET=...                 # Mux API access token secret
+MUX_WEBHOOK_SECRET=...               # Mux webhook signing secret
 
 # Email
 RESEND_API_KEY=...                   # Optional — logs to console if absent
@@ -138,9 +145,40 @@ Edge case: if a creator somehow lacks a Stripe Connect account at checkout time,
 
 ---
 
+## Mux Video Pipeline
+
+Uploaded videos are transcoded by Mux into HLS for universal browser playback.
+
+**Upload flow:**
+1. Creator uploads video → browser sends file directly to Mux via direct upload URL
+2. Server creates `YouTubeVideo` record with `muxUploadId` and sentinel URL `mux-upload://...`
+3. Mux webhook `video.upload.asset_created` → writes `muxAssetId`
+4. Mux webhook `video.asset.ready` → writes `muxPlaybackId`, `muxStatus: "ready"`, and real stream URL
+5. Viewer renders `<MuxVideoPlayer playbackId={...} />`
+
+**Key implementation details:**
+- `MuxVideoPlayer` uses `next/dynamic` with `ssr: false` — Mux Player is a web component that fails during SSR
+- The `video.asset.ready` webhook has a fallback: looks up by `muxUploadId` if `muxAssetId` lookup fails (handles event ordering races)
+- `mux-upload://` videos are excluded from the AI generation pipeline (no accessible URL for Gemini/embeddings)
+- The upload URL route uses the request's `Origin` header for CORS so it works on production, preview, and localhost
+- Vercel Blob is still used for legacy uploads; Mux is the primary path for new uploads
+- Backfill endpoint at `GET /api/mux/backfill` fixes records with missing/wrong playback IDs
+- Debug endpoint at `GET /api/mux/debug?programId=xxx` shows all Mux fields for a program
+
+**Key files:**
+| Purpose | Path |
+|---|---|
+| Mux client init | [apps/web/lib/mux.ts](apps/web/lib/mux.ts) |
+| Upload URL creation | [apps/web/app/api/mux/upload-url/route.ts](apps/web/app/api/mux/upload-url/route.ts) |
+| Mux webhook handler | [apps/web/app/api/webhooks/mux/route.ts](apps/web/app/api/webhooks/mux/route.ts) |
+| MuxVideoPlayer component | [apps/web/components/viewer/MuxVideoPlayer.tsx](apps/web/components/viewer/MuxVideoPlayer.tsx) |
+| Backfill endpoint | [apps/web/app/api/mux/backfill/route.ts](apps/web/app/api/mux/backfill/route.ts) |
+
+---
+
 ## AI Pipeline
 
-1. Creator pastes YouTube video URLs
+1. Creator uploads videos (Mux direct upload) or pastes YouTube URLs
 2. **Video segmentation** ([packages/ai/src/video-segmentation.ts](packages/ai/src/video-segmentation.ts)): long videos (>10 min) are split into virtual child records using Gemini topic timestamps — no physical file splitting
 3. HuggingFace generates embeddings from video metadata/transcripts ([packages/ai/src/hf-embeddings.ts](packages/ai/src/hf-embeddings.ts))
 4. K-means clustering groups related videos ([packages/ai/src/clustering.ts](packages/ai/src/clustering.ts))
@@ -148,6 +186,8 @@ Edge case: if a creator somehow lacks a Stripe Connect account at checkout time,
 6. Gemini 2.5 Flash analyzes individual videos for full topic extraction, segment boundaries, transcripts ([packages/ai/src/gemini-video-analyzer.ts](packages/ai/src/gemini-video-analyzer.ts))
 7. Async generation pipeline handles segmented videos as independent content pieces
 8. Creator reviews the `ProgramDraft` and approves or edits before publishing
+
+**Note:** `mux-upload://` videos are excluded from Gemini analysis and HF embeddings (no accessible content). They get stub digests so the LLM still references them in the program structure.
 
 Use `LLM_PROVIDER=stub` locally to skip all LLM API calls.
 
@@ -195,9 +235,18 @@ Drag-and-drop notes:
 ## Deployment
 
 - Target: **Vercel** — root directory must be set to `apps/web` in Vercel project settings
+- Production domain: `app.journeyline.ai`
 - Config: [apps/web/vercel.json](apps/web/vercel.json)
 - Build runs `prisma migrate deploy` before `next build`
 - Remote image domains: `i.ytimg.com`, `img.youtube.com` (YouTube thumbnails)
+- Prisma uses `directUrl` for migrations (Neon direct/non-pooled connection) and `url` for runtime queries (pooled)
+- Vercel Blob store is **private** — all uploads use `access: "private"`
+- Mux webhook URL: `https://app.journeyline.ai/api/webhooks/mux` (configured in Mux dashboard)
+
+**Neon/Prisma gotchas:**
+- Never use interactive `$transaction` — Neon PgBouncer kills long-running transactions. Use sequential queries with `createMany` for batch inserts.
+- Add `SELECT 1` keepalive before DB-heavy operations that follow long AI processing stages (Neon suspends idle compute)
+- Generation pipeline stale job threshold: 3 minutes. Failed jobs block retries until threshold passes.
 
 ---
 
