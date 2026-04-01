@@ -659,11 +659,16 @@ export function SessionDetailPanel({
                 <button
                   onClick={suggestions ? acceptAllSuggestions : fetchSuggestions}
                   disabled={suggestLoading || analyzingVideo}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-medium bg-teal-600 text-white hover:bg-teal-700 transition disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={
+                    suggestLoading || analyzingVideo
+                      ? { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#6b7280" }
+                      : { background: "linear-gradient(135deg, rgba(0,255,200,0.15), rgba(255,0,128,0.15))", border: "1px solid rgba(0,255,200,0.35)", color: "#00ffc8" }
+                  }
                 >
                   {suggestLoading ? (
                     <>
-                      <svg className="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                      <svg className="w-3.5 h-3.5 animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg>
@@ -672,7 +677,14 @@ export function SessionDetailPanel({
                   ) : suggestions ? (
                     "Accept all"
                   ) : (
-                    "Generate"
+                    <>
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M15 4l5 5L8 21l-5-2 2-5L15 4Z" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M3 3l1.5 1.5M3 6h1M6 3v1" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M18 13l1 1M19 13v1.5M18 14.5h1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      Regenerate
+                    </>
                   )}
                 </button>
               </div>

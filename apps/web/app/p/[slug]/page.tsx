@@ -132,6 +132,17 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
     return watch.youtubeVideo?.thumbnailUrl ?? null;
   }
 
+  // First available video thumbnail for the hero
+  const heroThumbnail = (() => {
+    for (const week of program.weeks) {
+      for (const session of week.sessions) {
+        const t = getSessionThumbnail(session);
+        if (t) return t;
+      }
+    }
+    return null;
+  })();
+
   const hasWhoSection = !!(program.targetAudience || program.outcomeStatement);
 
   // Action type display order
@@ -215,100 +226,207 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
             </div>
           </div>
 
-          {/* Right: At a Glance card (desktop only) */}
+          {/* Right: Video thumbnail (desktop only) — falls back to At a Glance card */}
+          {heroThumbnail ? (
+            <div className="hidden md:flex flex-col gap-4">
+              {/* Thumbnail */}
+              <div
+                className="relative overflow-hidden"
+                style={{
+                  aspectRatio: "16/9",
+                  borderRadius: "var(--token-radius-lg)",
+                  boxShadow: "var(--token-shadow-md)",
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={heroThumbnail}
+                  alt=""
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+                {/* Dark scrim */}
+                <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.3)" }} />
+                {/* Play button */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div
+                    className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg"
+                    style={{ backgroundColor: "var(--token-color-accent)" }}
+                  >
+                    <svg className="w-6 h-6 ml-1" fill="currentColor" viewBox="0 0 24 24" style={{ color: "#fff" }}>
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+              {/* Compact stats */}
+              <p
+                className="flex flex-wrap gap-x-2"
+                style={{
+                  fontFamily: "var(--token-text-body-sm-font)",
+                  fontSize: "var(--token-text-body-sm-size)",
+                  color: "var(--token-color-text-secondary)",
+                }}
+              >
+                <span>{program.durationWeeks} weeks</span>
+                <span>·</span>
+                <span>{totalSessions} sessions</span>
+                <span>·</span>
+                <span>{allActions.length} actions</span>
+                <span>·</span>
+                <span>{pacingLabel}</span>
+              </p>
+              {/* Action type pills */}
+              {allActions.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {actionTypeOrder.map((type) => {
+                    const count = actionTypeCounts[type];
+                    if (!count) return null;
+                    return (
+                      <span
+                        key={type}
+                        style={{
+                          ...getActionTypeBg(type, 85),
+                          fontFamily: "var(--token-text-label-sm-font)",
+                          fontSize: "var(--token-text-label-sm-size)",
+                          fontWeight: "var(--token-text-label-sm-weight)",
+                          borderRadius: "100px",
+                          padding: "4px 12px",
+                        }}
+                      >
+                        {actionTypeIcons[type]} {count} {ACTION_TYPE_LABELS[type]}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div
+              className="hidden md:flex flex-col gap-5 p-7"
+              style={{
+                borderRadius: "var(--token-radius-lg)",
+                backgroundColor: "var(--token-color-bg-elevated)",
+                border: "2px solid var(--token-color-accent)",
+                boxShadow: "var(--token-shadow-md)",
+              }}
+            >
+              <p
+                style={{
+                  fontFamily: "var(--token-text-label-sm-font)",
+                  fontSize: "var(--token-text-label-sm-size)",
+                  fontWeight: "var(--token-text-label-sm-weight)",
+                  color: "var(--token-color-accent)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.15em",
+                }}
+              >
+                At a glance
+              </p>
+
+              {/* Key numbers */}
+              <div className="flex gap-6">
+                {[
+                  { label: "Weeks", value: program.durationWeeks },
+                  { label: "Sessions", value: totalSessions },
+                  { label: "Actions", value: allActions.length },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <p
+                      style={{
+                        fontFamily: "var(--token-text-heading-lg-font)",
+                        fontSize: "var(--token-text-heading-lg-size)",
+                        fontWeight: "var(--token-text-heading-lg-weight)",
+                        color: "var(--token-color-text-primary)",
+                        lineHeight: "1",
+                      }}
+                    >
+                      {value}
+                    </p>
+                    <p
+                      style={{
+                        fontFamily: "var(--token-text-body-sm-font)",
+                        fontSize: "var(--token-text-body-sm-size)",
+                        color: "var(--token-color-text-secondary)",
+                        marginTop: "2px",
+                      }}
+                    >
+                      {label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pacing */}
+              <p
+                style={{
+                  fontFamily: "var(--token-text-body-sm-font)",
+                  fontSize: "var(--token-text-body-sm-size)",
+                  color: "var(--token-color-text-secondary)",
+                }}
+              >
+                {pacingLabel} · Start any time
+              </p>
+
+              {/* Action type pills */}
+              {allActions.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {actionTypeOrder.map((type) => {
+                    const count = actionTypeCounts[type];
+                    if (!count) return null;
+                    return (
+                      <span
+                        key={type}
+                        className="px-3 py-1 text-sm rounded-full"
+                        style={{
+                          ...getActionTypeBg(type, 85),
+                          fontFamily: "var(--token-text-label-sm-font)",
+                          fontSize: "var(--token-text-label-sm-size)",
+                          fontWeight: "var(--token-text-label-sm-weight)",
+                          borderRadius: "100px",
+                        }}
+                      >
+                        {actionTypeIcons[type]} {count} {ACTION_TYPE_LABELS[type]}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── Mobile hero thumbnail (hidden on md+) ────────────────────────────── */}
+      {heroThumbnail && (
+        <div className="md:hidden px-6 pb-6 max-w-5xl mx-auto">
           <div
-            className="hidden md:flex flex-col gap-5 p-7"
+            className="relative overflow-hidden"
             style={{
+              aspectRatio: "16/9",
               borderRadius: "var(--token-radius-lg)",
-              backgroundColor: "var(--token-color-bg-elevated)",
-              border: "2px solid var(--token-color-accent)",
               boxShadow: "var(--token-shadow-md)",
             }}
           >
-            <p
-              style={{
-                fontFamily: "var(--token-text-label-sm-font)",
-                fontSize: "var(--token-text-label-sm-size)",
-                fontWeight: "var(--token-text-label-sm-weight)",
-                color: "var(--token-color-accent)",
-                textTransform: "uppercase",
-                letterSpacing: "0.15em",
-              }}
-            >
-              At a glance
-            </p>
-
-            {/* Key numbers */}
-            <div className="flex gap-6">
-              {[
-                { label: "Weeks", value: program.durationWeeks },
-                { label: "Sessions", value: totalSessions },
-                { label: "Actions", value: allActions.length },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <p
-                    style={{
-                      fontFamily: "var(--token-text-heading-lg-font)",
-                      fontSize: "var(--token-text-heading-lg-size)",
-                      fontWeight: "var(--token-text-heading-lg-weight)",
-                      color: "var(--token-color-text-primary)",
-                      lineHeight: "1",
-                    }}
-                  >
-                    {value}
-                  </p>
-                  <p
-                    style={{
-                      fontFamily: "var(--token-text-body-sm-font)",
-                      fontSize: "var(--token-text-body-sm-size)",
-                      color: "var(--token-color-text-secondary)",
-                      marginTop: "2px",
-                    }}
-                  >
-                    {label}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            {/* Pacing */}
-            <p
-              style={{
-                fontFamily: "var(--token-text-body-sm-font)",
-                fontSize: "var(--token-text-body-sm-size)",
-                color: "var(--token-color-text-secondary)",
-              }}
-            >
-              {pacingLabel} · Start any time
-            </p>
-
-            {/* Action type pills */}
-            {allActions.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {actionTypeOrder.map((type) => {
-                  const count = actionTypeCounts[type];
-                  if (!count) return null;
-                  return (
-                    <span
-                      key={type}
-                      className="px-3 py-1 text-sm rounded-full"
-                      style={{
-                        ...getActionTypeBg(type, 85),
-                        fontFamily: "var(--token-text-label-sm-font)",
-                        fontSize: "var(--token-text-label-sm-size)",
-                        fontWeight: "var(--token-text-label-sm-weight)",
-                        borderRadius: "100px",
-                      }}
-                    >
-                      {actionTypeIcons[type]} {count} {ACTION_TYPE_LABELS[type]}
-                    </span>
-                  );
-                })}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={heroThumbnail}
+              alt=""
+              style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            />
+            <div className="absolute inset-0" style={{ background: "rgba(0,0,0,0.3)" }} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div
+                className="w-14 h-14 rounded-full flex items-center justify-center shadow-lg"
+                style={{ backgroundColor: "var(--token-color-accent)" }}
+              >
+                <svg className="w-6 h-6 ml-1" fill="currentColor" viewBox="0 0 24 24" style={{ color: "#fff" }}>
+                  <path d="M8 5v14l11-7z" />
+                </svg>
               </div>
-            )}
+            </div>
           </div>
         </div>
-      </section>
+      )}
 
       {/* ── Mobile stats strip (hidden on md+) ───────────────────────────────── */}
       <div className="md:hidden px-6 pb-6 max-w-5xl mx-auto">
