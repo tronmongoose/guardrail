@@ -59,6 +59,7 @@ export function LearnerTimeline({
 }: Props) {
   const { showToast } = useToast();
 
+  const groupLabel = pacingMode === "UNLOCK_ON_COMPLETE" ? "Lesson" : "Week";
   const [unlockedWeekNumber, setUnlockedWeekNumber] = useState(currentWeek);
   const [completedWeeksState, setCompletedWeeksState] = useState<Set<number>>(
     () => new Set(completedWeeks)
@@ -186,7 +187,7 @@ export function LearnerTimeline({
         } else {
           setCelebration({
             weekNumber,
-            weekTitle: week?.title ?? `Week ${weekNumber}`,
+            weekTitle: week?.title ?? `${groupLabel} ${weekNumber}`,
             actionCount: weekActionCount,
           });
           setTimeout(() => setCelebration(null), 6000);
@@ -317,7 +318,7 @@ export function LearnerTimeline({
                   className="text-sm font-medium"
                   style={{ color: isUnlocked ? "var(--token-color-text-primary)" : "var(--token-color-text-secondary)" }}
                 >
-                  Week {week.weekNumber}: {week.title.replace(/^Week\s+\d+:\s*/i, "")}
+                  {groupLabel} {week.weekNumber}: {week.title.replace(/^(Week|Lesson)\s+\d+:\s*/i, "")}
                 </h2>
                 {isUnlocked && weekActions.length > 0 && (
                   <span
@@ -389,7 +390,7 @@ export function LearnerTimeline({
                     style={{ color: "var(--token-color-text-secondary)", opacity: 0.6 }}
                   >
                     {pacingMode === "UNLOCK_ON_COMPLETE" ? (
-                      <>Complete Week {week.weekNumber - 1} to unlock</>
+                      <>Complete {groupLabel} {week.weekNumber - 1} to unlock</>
                     ) : (
                       <>
                         Unlocks in{" "}
@@ -749,13 +750,13 @@ export function LearnerTimeline({
               className="text-xl font-bold mb-2"
               style={{ color: "var(--token-color-text-primary)" }}
             >
-              {`Week ${celebration.weekNumber} Complete!`}
+              {`${groupLabel} ${celebration.weekNumber} Complete!`}
             </h3>
             <p
               className="text-sm mb-1"
               style={{ color: "var(--token-color-text-secondary)" }}
             >
-              Week {celebration.weekNumber}: {celebration.weekTitle}
+              {groupLabel} {celebration.weekNumber}: {celebration.weekTitle}
             </p>
             <p
               className="text-sm mb-6"
@@ -780,7 +781,7 @@ export function LearnerTimeline({
                 border: "none",
               }}
             >
-              {`Continue to Week ${celebration.weekNumber + 1} \u2192`}
+              {`Continue to ${groupLabel} ${celebration.weekNumber + 1} \u2192`}
             </button>
           </div>
         </div>

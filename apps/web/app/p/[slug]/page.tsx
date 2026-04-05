@@ -113,6 +113,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
     {} as Record<string, number>
   );
   const pacingLabel = program.pacingMode === "DRIP_BY_WEEK" ? "Drip-paced" : "Self-paced";
+  const groupLabel = program.pacingMode === "UNLOCK_ON_COMPLETE" ? "Lesson" : "Week";
 
   // Feature cards: up to 3 sessions with keyTakeaways or summary
   const featureCards = program.weeks
@@ -573,7 +574,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
                         letterSpacing: "0.1em",
                       }}
                     >
-                      Week {week.weekNumber}
+                      {groupLabel} {week.weekNumber}
                     </p>
                     {week.sessions.length > 0 && (
                       <span
