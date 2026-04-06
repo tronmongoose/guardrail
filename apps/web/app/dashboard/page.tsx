@@ -106,8 +106,8 @@ function DashboardContent() {
     }
 
     Promise.all([
-      fetch("/api/programs").then((r) => r.json()),
-      fetch("/api/user/onboarding").then((r) => r.json()),
+      fetch("/api/programs").then((r) => (r.ok ? r.json() : [])),
+      fetch("/api/user/onboarding").then((r) => (r.ok ? r.json() : {})),
       fetch("/api/user/metrics").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/admin/check").then((r) => r.json()).catch(() => ({ isAdmin: false })),
     ])
