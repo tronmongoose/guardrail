@@ -115,7 +115,7 @@ function DashboardContent() {
         if (adminData?.isAdmin) setIsAdmin(true);
         if (
           (!Array.isArray(programsData) || programsData.length === 0) &&
-          !userData.onboardingComplete
+          !(userData as { onboardingComplete?: boolean }).onboardingComplete
         ) {
           router.push("/new");
           return;
