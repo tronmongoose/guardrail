@@ -45,7 +45,7 @@ export function StepReview({ state, programId, skinId, onSkinChange, onGenerateS
       </div>
 
       {/* Skin picker — hero feature */}
-      <SkinPicker value={skinId} onChange={onSkinChange} thumbnailUrl={firstThumbnail} onGenerateSkin={onGenerateSkin} />
+      <SkinPicker value={skinId} onChange={onSkinChange} thumbnailUrl={firstThumbnail} onGenerateSkin={onGenerateSkin} programTitle={state.basics.title} />
     </div>
   );
 }

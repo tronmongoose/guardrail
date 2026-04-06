@@ -18,6 +18,8 @@ interface SkinPickerProps {
   thumbnailUrl?: string | null;
   /** Called when user hits "Generate My Skin". Should return "custom:{id}" on success, null on failure. */
   onGenerateSkin?: () => Promise<string | null>;
+  /** Program title shown in the preview panel. */
+  programTitle?: string;
 }
 
 // ── Per-skin themed SVG icon paths (24x24 viewBox, stroke-based) ──────────────
@@ -133,7 +135,7 @@ function CategoryIcon({ path, size = 14 }: { path: string; size?: number }) {
   );
 }
 
-export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin }: SkinPickerProps) {
+export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, programTitle }: SkinPickerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [openCategories, setOpenCategories] = useState<Set<string>>(() => {
     if (value === "auto-generate" || value.startsWith("custom:")) return new Set(["my-brand"]);
@@ -491,6 +493,7 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin }: Sk
               tokens={previewSkinId === "auto-generate" ? customSkins[0].tokens : previewCustomTokens}
               viewMode="desktop"
               thumbnailUrl={thumbnailUrl}
+              programTitle={programTitle}
             />
           )}
         </div>
@@ -629,6 +632,7 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin }: Sk
               tokens={previewSkinId === "auto-generate" ? customSkins[0].tokens : previewCustomTokens}
               viewMode="mobile"
               thumbnailUrl={thumbnailUrl}
+              programTitle={programTitle}
             />
           )}
         </div>

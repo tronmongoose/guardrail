@@ -13,6 +13,8 @@ interface SkinPreviewPanelProps {
   thumbnailUrl?: string | null;
   /** Optional token override — when provided, skips the catalog lookup. Used for custom AI-generated skins. */
   tokens?: SkinTokens;
+  /** Program title to display in preview — falls back to a placeholder if empty. */
+  programTitle?: string;
 }
 
 // ── Section header (sticky) ───────────────────────────────────────────────────
@@ -107,7 +109,7 @@ function ColorSwatch({ name, value }: { name: string; value: string }) {
 // Mirrors the layout of apps/web/app/p/[slug]/page.tsx
 // viewMode="mobile"  → single-column (hero + what you get + pricing)
 // viewMode="desktop" → 2-col hero with video preview + what you get + pricing
-function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl }: { viewMode?: "desktop" | "mobile"; thumbnailUrl?: string | null }) {
+function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitle }: { viewMode?: "desktop" | "mobile"; thumbnailUrl?: string | null; displayTitle: string }) {
   const weeks = [
     { week: 1, title: "Foundation" },
     { week: 2, title: "Progressive Overload" },
@@ -204,7 +206,7 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl }: { viewMod
             color: "var(--token-color-text-primary)",
             marginBottom: "8px",
           }}>
-            The 8-Week Strength Foundation
+            {displayTitle}
           </h1>
           <p style={{
             fontFamily: "var(--token-text-body-sm-font)",
@@ -340,7 +342,7 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl }: { viewMod
             lineHeight: "1.05",
             color: "var(--token-color-text-primary)",
           }}>
-            The 8-Week Strength Foundation
+            {displayTitle}
           </h1>
           <p style={{
             fontFamily: "var(--token-text-body-sm-font)",
@@ -461,7 +463,7 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl }: { viewMod
 
 // ── Learner Journey section ───────────────────────────────────────────────────
 // Mirrors the layout of apps/web/app/learn/[programId]/timeline.tsx
-function LearnerJourneySection() {
+function LearnerJourneySection({ displayTitle }: { displayTitle: string }) {
   const r = 18;
   const circ = 2 * Math.PI * r;
   const progressPercent = 38;
@@ -515,7 +517,7 @@ function LearnerJourneySection() {
                 color: "var(--token-color-text-primary)",
               }}
             >
-              8-Week Strength Foundation
+              {displayTitle}
             </h1>
           </div>
           {/* Progress circle — mirrors the SVG arc in the nav */}
@@ -758,7 +760,7 @@ function LearnerJourneySection() {
 
 // ── Learner Step View section ─────────────────────────────────────────────────
 // Mirrors the expanded action card state in timeline.tsx
-function LearnerStepViewSection() {
+function LearnerStepViewSection({ displayTitle }: { displayTitle: string }) {
   return (
     <div
       style={{
@@ -913,7 +915,7 @@ function LearnerStepViewSection() {
 
 // ── Program Covers section ────────────────────────────────────────────────────
 // Shows how a program appears as a card/thumbnail in listings
-function ProgramCoversSection() {
+function ProgramCoversSection({ displayTitle }: { displayTitle: string }) {
   return (
     <div
       style={{
@@ -984,7 +986,7 @@ function ProgramCoversSection() {
                 marginBottom: "4px",
               }}
             >
-              8-Week Strength Foundation
+              {displayTitle}
             </h3>
             <p style={{ fontSize: "11px", color: "var(--token-color-text-secondary)" }}>
               Build strength from the ground up
@@ -1273,7 +1275,8 @@ function DesignTokensSection({ tokens }: { tokens: SkinTokens }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, tokens: tokenOverride }: SkinPreviewPanelProps) {
+export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, tokens: tokenOverride, programTitle }: SkinPreviewPanelProps) {
+  const displayTitle = programTitle?.trim() || "8-Week Strength Foundation";
   const tokens = useMemo(() => tokenOverride ?? getSkinTokens(skinId), [skinId, tokenOverride]);
   const cssVars = useMemo(() => getTokenCSSVars(tokens), [tokens]);
   const entry = getSkinCatalogEntry(skinId);
@@ -1315,19 +1318,19 @@ export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, to
 
         {/* ── Section 1: Public program page ── */}
         <SectionHeader label="Public program page" />
-        <MarketingLanderSection viewMode={viewMode} thumbnailUrl={thumbnailUrl} />
+        <MarketingLanderSection viewMode={viewMode} thumbnailUrl={thumbnailUrl} displayTitle={displayTitle} />
 
         {/* ── Section 2: Learner timeline ── */}
         <SectionHeader label="Learner timeline" />
-        <LearnerJourneySection />
+        <LearnerJourneySection displayTitle={displayTitle} />
 
         {/* ── Section 3: Learner step view ── */}
         <SectionHeader label="Learner step view" />
-        <LearnerStepViewSection />
+        <LearnerStepViewSection displayTitle={displayTitle} />
 
         {/* ── Section 4: Program covers ── */}
         <SectionHeader label="Program covers" />
-        <ProgramCoversSection />
+        <ProgramCoversSection displayTitle={displayTitle} />
 
         {/* ── Section 5: Design Tokens ── */}
         <SectionHeader label="Design Tokens" />
