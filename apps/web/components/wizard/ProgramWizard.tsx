@@ -116,12 +116,12 @@ export function ProgramWizard({
   // Track how many videos existed at mount so we don't auto-generate on localStorage restores
   const initialVideoCount = useRef(state.content.videos.length);
 
-  // Auto-advance to Theme step when the first new video is uploaded on the Content step
+  // Auto-advance to Lessons flow step when the first new video is uploaded on the Content step
   useEffect(() => {
     if (currentStep !== 1) return;
     if (state.content.videos.length === 0) return;
     if (state.content.videos.length <= initialVideoCount.current) return;
-    setCurrentStep(3); // jump to Theme
+    setCurrentStep(2); // advance to Lessons flow
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.content.videos.length]);
 
