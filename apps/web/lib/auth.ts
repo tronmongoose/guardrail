@@ -18,10 +18,28 @@ export async function getOrCreateUser() {
   const clerkUser = await currentUser();
   if (!clerkUser) return null;
 
+  const email = clerkUser.emailAddresses[0]?.emailAddress ?? "";
+
+  // If a user already exists with this email (e.g. a learner who purchased
+  // via magic link), link the Clerk account to that existing record.
+  const existingByEmail = await prisma.user.findUnique({ where: { email } });
+  if (existingByEmail) {
+    return prisma.user.update({
+      where: { id: existingByEmail.id },
+      data: {
+        clerkId: userId,
+        role: "CREATOR",
+        name: existingByEmail.name ?? (clerkUser.firstName
+          ? `${clerkUser.firstName} ${clerkUser.lastName ?? ""}`.trim()
+          : undefined),
+      },
+    });
+  }
+
   return prisma.user.create({
     data: {
       clerkId: userId,
-      email: clerkUser.emailAddresses[0]?.emailAddress ?? "",
+      email,
       name: clerkUser.firstName
         ? `${clerkUser.firstName} ${clerkUser.lastName ?? ""}`.trim()
         : undefined,
