@@ -11,6 +11,7 @@ import { useAutosave } from "@/hooks/useAutosave";
 import { useBeforeUnload } from "@/hooks/useBeforeUnload";
 import { ContentLegalNotice } from "@/components/wizard/ContentLegalNotice";
 import { SkinPicker } from "@/components/skins/SkinPicker";
+import { AiAssistButton } from "@/components/ui/AiAssistButton";
 
 /**
  * First Program Creation Flow
@@ -561,13 +562,7 @@ export default function NewProgramPage() {
   const handleGenerate = async () => {
     if (!programId) return;
 
-    // Safety check: block if uploads are still in progress
-    const uploadsInProgress = pendingUploads.filter(p => !p.error).length;
-    if (uploadsInProgress > 0) {
-      setError(`${uploadsInProgress} upload${uploadsInProgress !== 1 ? "s are" : " is"} still finishing — please wait a moment and try again.`);
-      return;
-    }
-    if (videos.length === 0) {
+    if (videos.length === 0 && pendingUploads.filter(p => !p.error).length === 0) {
       setError("No videos were uploaded successfully. Please go back and add your videos.");
       return;
     }
@@ -751,6 +746,13 @@ export default function NewProgramPage() {
                   placeholder="e.g., 'Beginner content creators'"
                   className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan"
                 />
+                <AiAssistButton
+                  value={targetAudience}
+                  type="target_audience"
+                  context={[programTitle, targetTransformation].filter(Boolean).join(" — ")}
+                  onEnhance={(enhanced) => setTargetAudience(enhanced)}
+                  variant="prominent"
+                />
               </div>
 
               <div>
@@ -761,6 +763,13 @@ export default function NewProgramPage() {
                   placeholder="What will they be able to do after completing your program?"
                   rows={3}
                   className="w-full mt-1 px-3 py-2.5 bg-surface-dark border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan focus:ring-1 focus:ring-neon-cyan resize-none"
+                />
+                <AiAssistButton
+                  value={targetTransformation}
+                  type="transformation"
+                  context={[programTitle, targetTransformation].filter(Boolean).join(" — ")}
+                  onEnhance={(enhanced) => setTargetTransformation(enhanced)}
+                  variant="prominent"
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   Be specific: "Edit professional YouTube videos in under 2 hours"
@@ -1214,17 +1223,17 @@ export default function NewProgramPage() {
                 Ready to generate
               </h1>
               <p className="text-gray-400">
-                AI will structure your videos into a week-by-week curriculum
+                AI will structure your videos into a {pacingMode === "unlock_on_complete" ? "session-by-session" : "week-by-week"} curriculum
               </p>
             </div>
 
-            {/* Upload progress badge — uploads may still be finishing */}
+            {/* Upload progress badge — uploads continue in the background */}
             {pendingUploads.filter(p => !p.error).length > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border border-amber-500/20 rounded-lg text-xs text-amber-400">
+              <div className="flex items-center gap-2 px-3 py-2 bg-neon-cyan/10 border border-neon-cyan/20 rounded-lg text-xs text-neon-cyan">
                 <svg className="w-3.5 h-3.5 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
-                Still uploading {pendingUploads.filter(p => !p.error).length} video{pendingUploads.filter(p => !p.error).length !== 1 ? "s" : ""}… please wait before generating.
+                {pendingUploads.filter(p => !p.error).length} upload{pendingUploads.filter(p => !p.error).length !== 1 ? "s" : ""} finishing in the background — you can generate now.
               </div>
             )}
 

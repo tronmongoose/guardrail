@@ -157,7 +157,7 @@ export function StepContent({
     "Writing engaging session titles...",
     "Grouping related content...",
     "Mapping out your curriculum...",
-    "Polishing the week-by-week flow...",
+    "Polishing the lesson-by-lesson flow...",
     "Almost there — putting it all together...",
   ];
 

@@ -296,6 +296,10 @@ export function ProgramWizard({
 
       if (!genRes.ok) {
         const error = await genRes.json();
+        if (error.code === "PLATFORM_ACCESS_REQUIRED") {
+          window.location.href = "/onboarding/upgrade";
+          return;
+        }
         throw new Error(error.detail || error.error || "Failed to start generation");
       }
 

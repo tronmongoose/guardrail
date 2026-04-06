@@ -158,15 +158,7 @@ export default function OnboardingPage() {
         throw new Error("Failed to save");
       }
 
-      const data = await res.json();
-      const hasAccess = data.platformPromoGranted || data.platformPaymentComplete;
-      const feeConfigured = true; // fee is always required unless promo granted
-
-      if (hasAccess || !feeConfigured) {
-        router.push("/dashboard");
-      } else {
-        router.push("/onboarding/upgrade");
-      }
+      router.push("/dashboard");
     } catch {
       setError("Failed to complete onboarding. Please try again.");
       setSaving(false);

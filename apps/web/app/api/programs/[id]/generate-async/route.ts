@@ -38,6 +38,19 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Check creator has platform access
+  const hasAccess = user.platformPromoGranted || user.platformPaymentComplete;
+  if (!hasAccess) {
+    return NextResponse.json(
+      {
+        error: "Platform access required",
+        code: "PLATFORM_ACCESS_REQUIRED",
+        message: "Please complete platform setup to generate programs.",
+      },
+      { status: 402 }
+    );
+  }
+
   const hasContent = program.videos.length > 0 || program.artifacts.length > 0;
   if (!hasContent) {
     return NextResponse.json({ error: "No content to process" }, { status: 400 });

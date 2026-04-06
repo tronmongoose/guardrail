@@ -113,13 +113,6 @@ function DashboardContent() {
     ])
       .then(([programsData, userData, metricsData, adminData]) => {
         if (adminData?.isAdmin) setIsAdmin(true);
-        // Platform access gate
-        const hasAccess = userData.platformPromoGranted || userData.platformPaymentComplete;
-        if (!hasAccess) {
-          router.push("/onboarding/upgrade");
-          return;
-        }
-
         if (
           (!Array.isArray(programsData) || programsData.length === 0) &&
           !userData.onboardingComplete

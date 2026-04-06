@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { Spinner } from "@/components/ui/spinner";
@@ -69,7 +69,7 @@ const AMBIENT_HEADERS = [
   "Building something your learners will love",
 ];
 
-function GenerationProgress({ stage, progress, onCancel, creatorEmail }: { stage: string | null; progress: number; onCancel?: () => void; creatorEmail?: string }) {
+function GenerationProgress({ stage, progress, onCancel, creatorEmail, programTitle }: { stage: string | null; progress: number; onCancel?: () => void; creatorEmail?: string; programTitle?: string }) {
   const stepsData = useGenerationSteps({ stage, progress, status: "PROCESSING" });
   const [headerIndex, setHeaderIndex] = useState(0);
   // Rotate ambient header every 8 seconds
@@ -94,9 +94,11 @@ function GenerationProgress({ stage, progress, onCancel, creatorEmail }: { stage
         {AMBIENT_HEADERS[headerIndex]}
       </p>
 
-      <h2 className="text-2xl font-bold text-white mb-3">Building your program...</h2>
+      <h2 className="text-2xl font-bold text-white mb-3">
+        {programTitle ? `Building "${programTitle}"` : "Building your program..."}
+      </h2>
       <p className="text-gray-400 mb-8">
-        AI is carefully analyzing your content and crafting a structured curriculum
+        We&apos;re hard at work crafting your incredible journeyline! Feel free to navigate elsewhere — we&apos;ll email you when it&apos;s ready.
       </p>
 
       <GenerationSteps
@@ -109,7 +111,7 @@ function GenerationProgress({ stage, progress, onCancel, creatorEmail }: { stage
       {/* Async messaging */}
       <div className="mt-6">
         <p className="text-sm text-gray-400">
-          This can take 5–10 minutes — feel free to navigate away.
+          This can take 5–10 minutes.
         </p>
         {creatorEmail && (
           <p className="text-sm text-gray-500 mt-1">
@@ -142,6 +144,7 @@ export default function ProgramEditPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showWizard, setShowWizard] = useState(searchParams.get("wizard") === "true");
+  const wizardDismissedRef = useRef(false);
   const [activeTab, setActiveTab] = useState<"details" | "curriculum" | "payments" | "preview">("details");
   const [previewView, setPreviewView] = useState<"overview" | "session">("overview");
   const [previewDeviceMode, setPreviewDeviceMode] = useState<"desktop" | "mobile">("desktop");
@@ -321,6 +324,14 @@ export default function ProgramEditPage() {
 
     return () => clearInterval(interval);
   }, [asyncGenerating, id, load, showToast]);
+
+  // Auto-show wizard for programs that haven't completed generation
+  useEffect(() => {
+    if (!program || !genStatusChecked || wizardDismissedRef.current) return;
+    if (program.weeks.length === 0 && !asyncGenerating) {
+      setShowWizard(true);
+    }
+  }, [program, genStatusChecked, asyncGenerating]);
 
   async function cancelGeneration() {
     try {
@@ -543,7 +554,10 @@ export default function ProgramEditPage() {
           setActiveTab("curriculum");
           load();
         }}
-        onCancel={() => setShowWizard(false)}
+        onCancel={() => {
+          wizardDismissedRef.current = true;
+          setShowWizard(false);
+        }}
       />
     );
   }
@@ -900,7 +914,7 @@ export default function ProgramEditPage() {
               </div>
             </div>
           ) : program.weeks.length === 0 && (asyncGenerating || !genStatusChecked || activeGenerations.includes(id)) ? (
-            <GenerationProgress stage={asyncStage} progress={asyncProgress} onCancel={cancelGeneration} creatorEmail={creatorEmail} />
+            <GenerationProgress stage={asyncStage} progress={asyncProgress} onCancel={cancelGeneration} creatorEmail={creatorEmail} programTitle={program?.title ?? undefined} />
           ) : program.weeks.length === 0 ? (
             <div className="max-w-lg mx-auto mt-16 text-center">
               <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-pink-900/30 border border-pink-700/50 flex items-center justify-center">
