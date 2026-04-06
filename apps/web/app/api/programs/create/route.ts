@@ -19,7 +19,8 @@ export async function POST() {
 
     return NextResponse.json(program);
   } catch (err) {
-    console.error("[programs/create] Unhandled error:", err);
-    return NextResponse.json({ error: "Failed to create program" }, { status: 500 });
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[programs/create] Unhandled error:", message, err);
+    return NextResponse.json({ error: `Failed to create program: ${message}` }, { status: 500 });
   }
 }
