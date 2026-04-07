@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getOrCreateUser } from "@/lib/auth";
+import { auth } from "@clerk/nextjs/server";
 import { prisma } from "@/lib/prisma";
 
 /**
  * Poll generation job status.
- * Returns current status, stage, progress, and any error.
+ * Uses lightweight auth (no user upsert) and a single query for speed.
  */
 export async function GET(
   _req: NextRequest,
@@ -12,22 +12,15 @@ export async function GET(
 ) {
   const { id: programId } = await params;
 
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { userId: clerkId } = await auth();
+  if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Verify program ownership
-  const program = await prisma.program.findUnique({
-    where: { id: programId },
-    select: { creatorId: true },
-  });
-
-  if (!program || program.creatorId !== user.id) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
-  // Get most recent job for this program
+  // Single query: fetch the latest job and verify ownership via a join
   const job = await prisma.generationJob.findFirst({
-    where: { programId },
+    where: {
+      programId,
+      program: { creator: { clerkId } },
+    },
     orderBy: { createdAt: "desc" },
   });
 

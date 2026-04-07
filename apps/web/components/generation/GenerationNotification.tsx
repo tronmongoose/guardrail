@@ -49,36 +49,49 @@ export function GenerationNotification({
   useEffect(() => {
     let stopped = false;
     let interval: ReturnType<typeof setInterval> | null = null;
+    let consecutiveErrors = 0;
+
+    const stop = () => {
+      stopped = true;
+      if (interval) clearInterval(interval);
+    };
 
     const poll = async () => {
       if (stopped) return;
       try {
         const res = await fetch(`/api/programs/${programId}/generate-async/status`);
-        if (!res.ok || stopped) return;
+        if (stopped) return;
+
+        // 404 = no job found — stop polling
+        if (res.status === 404) { stop(); return; }
+        if (!res.ok) {
+          consecutiveErrors++;
+          if (consecutiveErrors >= 3) stop(); // give up after 3 consecutive errors
+          return;
+        }
+
+        consecutiveErrors = 0;
         const data: GenerationJob = await res.json();
         setJob(data);
 
         if (data.status === "COMPLETED") {
-          stopped = true;
-          if (interval) clearInterval(interval);
+          stop();
           onCompleteRef.current?.();
         } else if (data.status === "FAILED") {
-          stopped = true;
-          if (interval) clearInterval(interval);
+          stop();
         }
       } catch (err) {
         console.error("Failed to poll generation status:", err);
+        consecutiveErrors++;
+        if (consecutiveErrors >= 3) stop();
       }
     };
 
-    // Initial fetch, then poll every 2s until terminal status or unmount
+    // Initial fetch, then poll every 5s until terminal status or unmount
     poll();
-    interval = setInterval(poll, 2000);
+    interval = setInterval(poll, 5000);
 
-    return () => {
-      stopped = true;
-      if (interval) clearInterval(interval);
-    };
+    return () => stop();
   }, [programId]); // programId is the only stable dep needed
 
   // When on the edit page and generation completes: trigger a reload of program data via custom event,

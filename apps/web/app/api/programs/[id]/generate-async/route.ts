@@ -135,10 +135,10 @@ async function processGenerationJob(jobId: string, programId: string) {
   }
 
   try {
-    // Mark as processing — start with video_analysis stage
+    // Mark as processing — start with preparing stage so the UI shows progress immediately
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { status: "PROCESSING", stage: "video_analysis", progress: 0, startedAt: new Date() },
+      data: { status: "PROCESSING", stage: "preparing", progress: 2, startedAt: new Date() },
     });
 
     // Fetch program with videos, artifacts, and existing analyses
@@ -162,9 +162,13 @@ async function processGenerationJob(jobId: string, programId: string) {
     // Build ID sets for later lookups — will be updated after segmentation re-fetch
     const videoIdSet = new Set(program.videos.map((v) => v.id));
 
-    // ── Step 0: Video Analysis (0-10%) ──
+    // ── Step 0: Video Analysis (5-10%) ──
     // Only analyze top-level (non-segment) videos; segment children inherit parent's analysis
     checkDeadline("video_analysis");
+    await prisma.generationJob.update({
+      where: { id: jobId },
+      data: { stage: "video_analysis", progress: 5 },
+    });
     const videosNeedingAnalysis = program.videos.filter(
       (v) => !v.isSegment && !v.analysis && !v.url.startsWith("mux-upload://")
     );
@@ -237,7 +241,8 @@ async function processGenerationJob(jobId: string, programId: string) {
         }
 
         // Single batch heartbeat — one DB call per batch instead of one per video
-        const analysisProgress = Math.round(((i + batch.length) / videosNeedingAnalysis.length) * 10);
+        // Range: 5-10% (preparing stage covers 0-5%)
+        const analysisProgress = 5 + Math.round(((i + batch.length) / videosNeedingAnalysis.length) * 5);
         await prisma.generationJob.update({
           where: { id: jobId },
           data: { progress: analysisProgress },

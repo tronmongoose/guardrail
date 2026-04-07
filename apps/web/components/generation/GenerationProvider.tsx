@@ -46,6 +46,7 @@ export function GenerationProvider({ children }: GenerationProviderProps) {
         <GenerationNotification
           key={programId}
           programId={programId}
+          onComplete={() => dismissGeneration(programId)}
           onDismiss={() => dismissGeneration(programId)}
         />
       ))}

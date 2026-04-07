@@ -298,6 +298,11 @@ export default function ProgramEditPage() {
 
       try {
         const res = await fetch(`/api/programs/${id}/generate-async/status`);
+        if (res.status === 404) {
+          clearInterval(interval);
+          setAsyncGenerating(false);
+          return;
+        }
         if (!res.ok) return;
         const data = await res.json();
 
@@ -320,7 +325,7 @@ export default function ProgramEditPage() {
       } catch {
         // silently retry next interval
       }
-    }, 2000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [asyncGenerating, id, load, showToast]);
@@ -1117,6 +1122,7 @@ export default function ProgramEditPage() {
               value={program.customSkinId ? `custom:${program.customSkinId}` : program.skinId}
               onChange={handleSkinChange}
               onGenerateSkin={handleGenerateSkin}
+              programTitle={program.title}
               thumbnailUrl={(() => {
                 const muxId =
                   program.videos[0]?.muxPlaybackId ??

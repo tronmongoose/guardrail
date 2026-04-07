@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse, after } from "next/server";
+import { auth as clerkAuth } from "@clerk/nextjs/server";
 import { getOrCreateUser } from "@/lib/auth";
 
 export const maxDuration = 300; // Keep function alive for post-response Gemini analysis
@@ -231,18 +232,16 @@ export async function GET(
 ) {
   const { id: programId } = await params;
 
-  const user = await getOrCreateUser();
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const { userId: clerkId } = await clerkAuth();
+  if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const program = await prisma.program.findUnique({
-    where: { id: programId },
-    select: { creatorId: true },
-  });
-  if (!program) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (program.creatorId !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
+  // Single query: fetch videos and verify ownership via join
   const videos = await prisma.youTubeVideo.findMany({
-    where: { programId, isSegment: false },
+    where: {
+      programId,
+      isSegment: false,
+      program: { creator: { clerkId } },
+    },
     include: {
       _count: { select: { segments: true } },
       analysis: { select: { id: true } },

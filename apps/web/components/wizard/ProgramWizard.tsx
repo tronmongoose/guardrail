@@ -129,10 +129,11 @@ export function ProgramWizard({
   const [analysisStatus, setAnalysisStatus] = useState<Record<string, boolean>>({});
   const analysisPollerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Poll for video analysis completion across all wizard steps
+  // Poll for video analysis completion — only on Content step (index 1) to avoid
+  // redundant network traffic on Lessons Flow / Theme steps.
   useEffect(() => {
     const videoCount = state.content.videos.length;
-    if (videoCount === 0) return;
+    if (videoCount === 0 || currentStep !== 1) return;
 
     const poll = () =>
       fetch(`/api/programs/${programId}/videos`)
@@ -156,7 +157,7 @@ export function ProgramWizard({
             analysisPollerRef.current = null;
           }
         });
-      }, 5_000);
+      }, 10_000);
     });
 
     return () => {
@@ -165,7 +166,7 @@ export function ProgramWizard({
         analysisPollerRef.current = null;
       }
     };
-  }, [programId, state.content.videos.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [programId, state.content.videos.length, currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist state to localStorage (exclude large blobs to avoid quota issues)
   useEffect(() => {

@@ -35,7 +35,7 @@ interface UseGenerationStepsResult {
 /**
  * Maps backend generation {stage, progress} to 8 rich frontend steps.
  *
- * Backend stages: video_analysis(0-10) → embedding(10-25) → clustering(25-35) → analyzing(35-55) → generating(55-85) → validating → persisting
+ * Backend stages: preparing(2-5) → video_analysis(5-10) → embedding(10-25) → clustering(25-35) → analyzing(35-55) → generating(55-85) → validating → persisting
  *
  * The "generating" stage (55-85%) is a single long LLM call with no intermediate
  * updates. This hook simulates smooth sub-step progression client-side using a
@@ -50,9 +50,38 @@ export function useGenerationSteps(input: UseGenerationStepsInput): UseGeneratio
   const [simulatedProgress, setSimulatedProgress] = useState(0);
   const generatingStartRef = useRef<number | null>(null);
 
+  // Early-stage simulation: gentle progress during preparing/video_analysis
+  const [earlySimulated, setEarlySimulated] = useState(0);
+  const earlyStartRef = useRef<number | null>(null);
+
   // Track step completion timestamps for minimum dwell time
   const [displayedActiveIndex, setDisplayedActiveIndex] = useState(0);
   const lastStepChangeRef = useRef<number>(Date.now());
+
+  // Simulate smooth progress during early stages (preparing + video_analysis)
+  // so the bar starts moving immediately instead of sitting at 0%
+  useEffect(() => {
+    const isEarlyStage = (stage === "preparing" || stage === "video_analysis") && status === "PROCESSING";
+    if (!isEarlyStage) {
+      earlyStartRef.current = null;
+      setEarlySimulated(0);
+      return;
+    }
+
+    if (!earlyStartRef.current) {
+      earlyStartRef.current = Date.now();
+    }
+
+    const interval = setInterval(() => {
+      const elapsed = Date.now() - (earlyStartRef.current || Date.now());
+      // Ease from 2 toward 9 over ~60 seconds (gentle crawl)
+      const t = Math.min(elapsed / 60000, 1);
+      const simulated = 2 + 7 * (1 - Math.pow(1 - t, 2));
+      setEarlySimulated(Math.min(simulated, 9));
+    }, 800);
+
+    return () => clearInterval(interval);
+  }, [stage, status]);
 
   // Simulate smooth progress during the "generating" stage
   useEffect(() => {
@@ -77,7 +106,9 @@ export function useGenerationSteps(input: UseGenerationStepsInput): UseGeneratio
     return () => clearInterval(interval);
   }, [stage, status]);
 
-  const displayProgress = stage === "generating"
+  const displayProgress = (stage === "preparing" || stage === "video_analysis")
+    ? Math.max(progress, earlySimulated)
+    : stage === "generating"
     ? Math.max(progress, simulatedProgress)
     : progress;
 
@@ -135,13 +166,13 @@ function computeStepStatus(
   if (stage === "complete") return "completed";
 
   // Helper: stage ordering for "is past" checks
-  const stageOrder = ["video_analysis", "embedding", "clustering", "analyzing", "generating", "validating", "persisting"];
+  const stageOrder = ["preparing", "video_analysis", "embedding", "clustering", "analyzing", "generating", "validating", "persisting"];
   const currentStageIdx = stageOrder.indexOf(stage ?? "");
   const isPast = (s: string) => currentStageIdx > stageOrder.indexOf(s);
 
   switch (index) {
-    case 0: // Watching your videos — video_analysis (0-10)
-      if (stage === "video_analysis") return "active";
+    case 0: // Watching your videos — preparing + video_analysis (0-10)
+      if (stage === "preparing" || stage === "video_analysis") return "active";
       if (isPast("video_analysis")) return "completed";
       return "pending";
 
