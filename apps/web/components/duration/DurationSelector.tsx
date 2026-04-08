@@ -3,6 +3,8 @@
 interface DurationPreset {
   weeks: number;
   ratioNote: string;
+  label?: string;
+  aiRecommended?: boolean;
 }
 
 interface DurationSelectorProps {
@@ -28,7 +30,7 @@ export function DurationSelector({
           type="button"
           onClick={() => onChange(preset.weeks)}
           className={`
-            py-4 px-4 rounded-xl border text-center transition-all
+            relative py-4 px-4 rounded-xl border text-center transition-all
             ${
               value === preset.weeks
                 ? "bg-neon-cyan/20 border-neon-cyan text-neon-cyan shadow-lg shadow-neon-cyan/20"
@@ -36,6 +38,14 @@ export function DurationSelector({
             }
           `}
         >
+          {preset.aiRecommended && (
+            <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] px-2 py-0.5 rounded-full bg-neon-pink/20 text-neon-pink border border-neon-pink/30 whitespace-nowrap">
+              AI recommends
+            </span>
+          )}
+          {preset.label && (
+            <div className="text-[11px] font-medium opacity-60 mb-1">{preset.label}</div>
+          )}
           <div className="text-2xl font-bold">{preset.weeks}</div>
           <div className="text-sm opacity-70">{unit}</div>
           <div className="text-xs mt-1 opacity-50">{preset.ratioNote}</div>

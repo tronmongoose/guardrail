@@ -35,11 +35,11 @@ interface UseGenerationStepsResult {
 /**
  * Maps backend generation {stage, progress} to 8 rich frontend steps.
  *
- * Backend stages: preparing(2-5) → video_analysis(5-10) → embedding(10-25) → clustering(25-35) → analyzing(35-55) → generating(55-85) → validating → persisting
+ * Backend stages: preparing(2-5) → fetching_transcripts(5-25) → analyzing(25-45) → generating(45-85) → validating → persisting
  *
- * The "generating" stage (55-85%) is a single long LLM call with no intermediate
+ * The "generating" stage (45-85%) is a single long LLM call with no intermediate
  * updates. This hook simulates smooth sub-step progression client-side using a
- * logarithmic timer, so steps 6-8 animate naturally.
+ * logarithmic timer, so steps 5-8 animate naturally.
  *
  * Each step dwells for a minimum of 2.5s before transitioning, so the experience
  * feels deliberate rather than rushed.
@@ -58,10 +58,10 @@ export function useGenerationSteps(input: UseGenerationStepsInput): UseGeneratio
   const [displayedActiveIndex, setDisplayedActiveIndex] = useState(0);
   const lastStepChangeRef = useRef<number>(Date.now());
 
-  // Simulate smooth progress during early stages (preparing + video_analysis)
+  // Simulate smooth progress during early stages (preparing + fetching_transcripts)
   // so the bar starts moving immediately instead of sitting at 0%
   useEffect(() => {
-    const isEarlyStage = (stage === "preparing" || stage === "video_analysis") && status === "PROCESSING";
+    const isEarlyStage = (stage === "preparing" || stage === "fetching_transcripts") && status === "PROCESSING";
     if (!isEarlyStage) {
       earlyStartRef.current = null;
       setEarlySimulated(0);
@@ -74,10 +74,10 @@ export function useGenerationSteps(input: UseGenerationStepsInput): UseGeneratio
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - (earlyStartRef.current || Date.now());
-      // Ease from 2 toward 9 over ~60 seconds (gentle crawl)
+      // Ease from 2 toward 20 over ~60 seconds (gentle crawl through transcript fetch)
       const t = Math.min(elapsed / 60000, 1);
-      const simulated = 2 + 7 * (1 - Math.pow(1 - t, 2));
-      setEarlySimulated(Math.min(simulated, 9));
+      const simulated = 2 + 18 * (1 - Math.pow(1 - t, 2));
+      setEarlySimulated(Math.min(simulated, 20));
     }, 800);
 
     return () => clearInterval(interval);
@@ -97,16 +97,16 @@ export function useGenerationSteps(input: UseGenerationStepsInput): UseGeneratio
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - (generatingStartRef.current || Date.now());
-      // Ease from 55 toward 84 over ~45 seconds (slower for more theatrical feel)
+      // Ease from 45 toward 84 over ~45 seconds (slower for more theatrical feel)
       const t = Math.min(elapsed / 45000, 1);
-      const simulated = 55 + 29 * (1 - Math.pow(1 - t, 2));
+      const simulated = 45 + 39 * (1 - Math.pow(1 - t, 2));
       setSimulatedProgress(Math.min(simulated, 84));
     }, 800);
 
     return () => clearInterval(interval);
   }, [stage, status]);
 
-  const displayProgress = (stage === "preparing" || stage === "video_analysis")
+  const displayProgress = (stage === "preparing" || stage === "fetching_transcripts")
     ? Math.max(progress, earlySimulated)
     : stage === "generating"
     ? Math.max(progress, simulatedProgress)
@@ -166,48 +166,47 @@ function computeStepStatus(
   if (stage === "complete") return "completed";
 
   // Helper: stage ordering for "is past" checks
-  const stageOrder = ["preparing", "video_analysis", "embedding", "clustering", "analyzing", "generating", "validating", "persisting"];
+  const stageOrder = ["preparing", "fetching_transcripts", "analyzing", "generating", "validating", "persisting"];
   const currentStageIdx = stageOrder.indexOf(stage ?? "");
   const isPast = (s: string) => currentStageIdx > stageOrder.indexOf(s);
 
   switch (index) {
-    case 0: // Watching your videos — preparing + video_analysis (0-10)
-      if (stage === "preparing" || stage === "video_analysis") return "active";
-      if (isPast("video_analysis")) return "completed";
+    case 0: // Watching your videos — preparing + fetching_transcripts < 15%
+      if (stage === "preparing" || (stage === "fetching_transcripts" && displayProgress < 15)) return "active";
+      if (isPast("preparing") && displayProgress >= 15) return "completed";
+      return isPast("fetching_transcripts") ? "completed" : "pending";
+
+    case 1: // Understanding your expertise — fetching_transcripts >= 15%
+      if (stage === "fetching_transcripts" && displayProgress >= 15) return "active";
+      if (isPast("fetching_transcripts")) return "completed";
       return "pending";
 
-    case 1: // Understanding your expertise — embedding (10-25)
-      if (stage === "embedding") return "active";
-      if (isPast("embedding")) return "completed";
+    case 2: // Finding the natural structure — analyzing < 35%
+      if (stage === "analyzing" && displayProgress < 35) return "active";
+      if ((stage === "analyzing" && displayProgress >= 35) || isPast("analyzing")) return "completed";
       return "pending";
 
-    case 2: // Finding the natural structure — clustering (25-35)
-      if (stage === "clustering") return "active";
-      if (isPast("clustering")) return "completed";
+    case 3: // Extracting key insights — analyzing >= 35%
+      if (stage === "analyzing" && displayProgress >= 35) return "active";
+      if (isPast("analyzing")) return "completed";
       return "pending";
 
-    case 3: // Extracting key insights — analyzing < 48
-      if (stage === "analyzing" && displayProgress < 48) return "active";
-      if ((stage === "analyzing" && displayProgress >= 48) || isPast("analyzing")) return "completed";
+    case 4: // Mapping the learning journey — generating < 60%
+      if (stage === "generating" && displayProgress < 60) return "active";
+      if ((stage === "generating" && displayProgress >= 60) || isPast("generating")) return "completed";
       return "pending";
 
-    case 4: // Mapping the learning journey — analyzing >= 48 or early generating
-      if (stage === "analyzing" && displayProgress >= 48) return "active";
-      if (stage === "generating" && displayProgress < 65) return "active";
-      if ((stage === "generating" && displayProgress >= 65) || isPast("generating")) return "completed";
+    case 5: // Building scene-based lessons — generating 60-72%
+      if (stage === "generating" && displayProgress >= 60 && displayProgress < 72) return "active";
+      if ((stage === "generating" && displayProgress >= 72) || isPast("generating")) return "completed";
       return "pending";
 
-    case 5: // Building scene-based lessons — generating 65-75
-      if (stage === "generating" && displayProgress >= 65 && displayProgress < 75) return "active";
-      if ((stage === "generating" && displayProgress >= 75) || isPast("generating")) return "completed";
-      return "pending";
-
-    case 6: // Writing each lesson with care — generating 75-82
-      if (stage === "generating" && displayProgress >= 75 && displayProgress < 82) return "active";
+    case 6: // Writing each lesson with care — generating 72-82%
+      if (stage === "generating" && displayProgress >= 72 && displayProgress < 82) return "active";
       if ((stage === "generating" && displayProgress >= 82) || isPast("generating")) return "completed";
       return "pending";
 
-    case 7: // Adding the finishing touches — generating >= 82 or validating/persisting
+    case 7: // Adding the finishing touches — generating >= 82% or validating/persisting
       if (stage === "generating" && displayProgress >= 82) return "active";
       if (stage === "validating" || stage === "persisting") return "active";
       return "pending";

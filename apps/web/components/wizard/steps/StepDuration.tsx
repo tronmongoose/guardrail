@@ -1,157 +1,220 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { DurationSelector } from "@/components/duration/DurationSelector";
-
-type PacingMode = "drip_by_week" | "unlock_on_complete";
+import { computeSmartPresets, computeLessonCountFromTopics } from "@guide-rail/ai";
+import type { VideoInfo } from "@guide-rail/ai";
 
 interface StepDurationProps {
   weeks: number;
-  pacingMode: PacingMode;
-  videoCount: number;
+  videos: VideoInfo[];
+  aiStructured: boolean;
   onWeeksChange: (weeks: number) => void;
-  onPacingModeChange: (mode: PacingMode) => void;
+  onAiStructuredChange: (v: boolean) => void;
 }
 
-const PACING_OPTIONS: { value: PacingMode; label: string; description: string; icon: React.ReactNode }[] = [
-  {
-    value: "unlock_on_complete",
-    label: "Completion-based",
-    description: "Next lesson unlocks when learner completes the current one. Best for self-paced learners.",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-  },
-  {
-    value: "drip_by_week",
-    label: "Weekly release",
-    description: "New content unlocks each week on a fixed schedule. Creates anticipation and pacing.",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-      </svg>
-    ),
-  },
-];
+export function StepDuration({
+  weeks,
+  videos,
+  aiStructured,
+  onWeeksChange,
+  onAiStructuredChange,
+}: StepDurationProps) {
+  const videoCount = videos.length;
+  const presets = computeSmartPresets(videoCount, videos);
 
-function computePresets(videoCount: number): { weeks: number; ratioNote: string }[] {
-  if (videoCount === 0) {
-    return [
-      { weeks: 4, ratioNote: "Focused sprint" },
-      { weeks: 8, ratioNote: "Most popular" },
-      { weeks: 12, ratioNote: "Deep dive" },
-    ];
-  }
-  const short = Math.max(2, Math.ceil(videoCount / 2));
-  const med   = Math.max(short + 2, videoCount);
-  const long  = Math.min(26, med + Math.ceil(med / 2));
-  return [
-    { weeks: short, ratioNote: `~${(videoCount / short).toFixed(1)} videos/wk` },
-    { weeks: med,   ratioNote: `~${(videoCount / med).toFixed(1)} videos/wk` },
-    { weeks: long,  ratioNote: `~${(videoCount / long).toFixed(1)} videos/wk` },
-  ];
-}
+  const totalDuration = videos.reduce((sum, v) => sum + (v.durationSeconds ?? 0), 0);
+  const hasDuration = totalDuration > 0;
+  const totalMin = Math.round(totalDuration / 60);
 
-export function StepDuration({ weeks, pacingMode, videoCount, onWeeksChange, onPacingModeChange }: StepDurationProps) {
-  const presets = computePresets(videoCount);
+  // AI readiness: all videos must have topic data
+  const analyzedCount = videos.filter((v) => (v.topicCount ?? 0) > 0).length;
+  const totalTopics = videos.reduce((sum, v) => sum + (v.topicCount ?? 0), 0);
+  const allAnalyzed = videoCount > 0 && analyzedCount === videoCount;
+
+  // Auto-set weeks from topic analysis when AI mode is active.
+  // Before all videos are analyzed, use video count as a sensible fallback
+  // so the wizard never saves the stale default of 8.
+  const prevAiWeeks = useRef<number | null>(null);
+  useEffect(() => {
+    if (!aiStructured) return;
+    const target = allAnalyzed
+      ? computeLessonCountFromTopics(videos)
+      : Math.max(2, videoCount);
+    if (target !== prevAiWeeks.current) {
+      prevAiWeeks.current = target;
+      onWeeksChange(target);
+    }
+  }, [aiStructured, allAnalyzed, videos, videoCount, onWeeksChange]);
 
   return (
     <div className="space-y-8">
-      {/* Pacing Mode Selection */}
+      {/* Structure Mode Toggle */}
       <div>
-        <h2 className="text-xl font-semibold text-white mb-2">Progression Style</h2>
+        <h2 className="text-xl font-semibold text-white mb-2">Program Structure</h2>
         <p className="text-gray-400 text-sm mb-4">
-          How should learners move through your program?
+          How should we determine your program structure?
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {PACING_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onPacingModeChange(option.value)}
-              className={`
-                p-4 rounded-xl border text-left transition-all
-                ${
-                  pacingMode === option.value
-                    ? "border-neon-cyan bg-neon-cyan/10"
-                    : "border-surface-border bg-surface-dark hover:border-gray-500"
-                }
-              `}
-            >
-              <div className="flex items-start gap-3">
-                <div
-                  className={`
-                    flex-shrink-0 p-2 rounded-lg
-                    ${pacingMode === option.value ? "bg-neon-cyan/20 text-neon-cyan" : "bg-surface-card text-gray-400"}
-                  `}
-                >
-                  {option.icon}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3
-                      className={`font-medium ${
-                        pacingMode === option.value ? "text-neon-cyan" : "text-white"
-                      }`}
-                    >
-                      {option.label}
-                    </h3>
-                    {option.value === "unlock_on_complete" && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-neon-pink/20 text-neon-pink border border-neon-pink/30">
-                        Recommended
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-400 mt-1">{option.description}</p>
-                </div>
+          {/* Let AI Decide — default, left position */}
+          <button
+            type="button"
+            onClick={() => onAiStructuredChange(true)}
+            className={`
+              p-4 rounded-xl border text-left transition-all
+              ${aiStructured
+                ? "border-neon-pink bg-neon-pink/10"
+                : "border-surface-border bg-surface-dark hover:border-gray-500"
+              }
+            `}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={`
+                  flex-shrink-0 p-2 rounded-lg
+                  ${aiStructured ? "bg-neon-pink/20 text-neon-pink" : "bg-surface-card text-gray-400"}
+                `}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
               </div>
-            </button>
-          ))}
+              <div className="flex-1 min-w-0">
+                <h3 className={`font-medium ${aiStructured ? "text-neon-pink" : "text-white"}`}>
+                  Let AI decide
+                </h3>
+                <p className="text-sm text-gray-400 mt-1">
+                  AI analyzes your video topics to find the ideal structure
+                </p>
+              </div>
+            </div>
+          </button>
+
+          {/* Quick Setup */}
+          <button
+            type="button"
+            onClick={() => onAiStructuredChange(false)}
+            className={`
+              p-4 rounded-xl border text-left transition-all
+              ${!aiStructured
+                ? "border-neon-cyan bg-neon-cyan/10"
+                : "border-surface-border bg-surface-dark hover:border-gray-500"
+              }
+            `}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={`
+                  flex-shrink-0 p-2 rounded-lg
+                  ${!aiStructured ? "bg-neon-cyan/20 text-neon-cyan" : "bg-surface-card text-gray-400"}
+                `}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className={`font-medium ${!aiStructured ? "text-neon-cyan" : "text-white"}`}>
+                  Quick setup
+                </h3>
+                <p className="text-sm text-gray-400 mt-1">
+                  Choose your program length from presets
+                </p>
+              </div>
+            </div>
+          </button>
         </div>
       </div>
 
-      {/* Duration Selection */}
-      <div>
-        <h2 className="text-xl font-semibold text-white mb-2">
-          {pacingMode === "unlock_on_complete" ? "Program Length" : "Program Duration"}
-        </h2>
-        <p className="text-gray-400 text-sm mb-4">
-          {videoCount > 0
-            ? `Based on your ${videoCount} video${videoCount === 1 ? "" : "s"} — pick the pace that fits your program.`
-            : "You haven't added videos yet. You can adjust this after adding content."}
-        </p>
+      {/* Conditional content based on structure mode */}
+      {!aiStructured ? (
+        /* ─── Quick Setup Path: show preset picker ─── */
+        <div>
+          <h2 className="text-xl font-semibold text-white mb-2">Program Length</h2>
+          <p className="text-gray-400 text-sm mb-4">
+            {videoCount > 0
+              ? hasDuration
+                ? `Based on your ${videoCount} video${videoCount === 1 ? "" : "s"} (${totalMin} min total) \u2014 pick the pace that fits.`
+                : `Based on your ${videoCount} video${videoCount === 1 ? "" : "s"} \u2014 analyzing durations\u2026`
+              : "You haven't added videos yet. You can adjust this after adding content."}
+          </p>
 
-        <DurationSelector
-          value={weeks}
-          onChange={onWeeksChange}
-          pacingMode={pacingMode}
-          presets={presets}
-        />
-      </div>
+          <DurationSelector
+            value={weeks}
+            onChange={onWeeksChange}
+            pacingMode="unlock_on_complete"
+            presets={presets}
+          />
+        </div>
+      ) : allAnalyzed ? (
+        /* ─── AI Decide Path: Ready ─── */
+        <div className="p-6 rounded-xl border border-neon-pink/30 bg-neon-pink/5">
+          <div className="flex items-center gap-2 mb-4">
+            <svg className="w-4 h-4 text-neon-pink" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+            </svg>
+            <span className="text-sm font-medium text-neon-pink">AI Analysis Complete</span>
+          </div>
 
-      {/* Pacing mode tip */}
-      <div className="p-4 bg-neon-cyan/5 border border-neon-cyan/20 rounded-lg">
-        <h4 className="text-sm font-medium text-neon-cyan mb-2">
-          {pacingMode === "unlock_on_complete" ? "About Completion-based Progression" : "About Weekly Release"}
-        </h4>
-        <p className="text-xs text-gray-400">
-          {pacingMode === "unlock_on_complete" ? (
-            <>
-              Learners progress at their own pace. Fast learners can binge, while others take their time.
-              This mode tends to have <span className="text-white">higher completion rates</span> because
-              learners stay in momentum.
-            </>
-          ) : (
-            <>
-              Content unlocks weekly from the learner&apos;s enrollment date. This creates
-              <span className="text-white"> anticipation and consistent engagement</span>, but some
-              learners may disengage while waiting.
-            </>
-          )}
-        </p>
-      </div>
+          <p className="text-gray-400 text-sm mb-5">
+            Found <span className="text-white font-medium">{totalTopics} topic{totalTopics === 1 ? "" : "s"}</span> across
+            your <span className="text-white font-medium">{videoCount} video{videoCount === 1 ? "" : "s"}</span>
+          </p>
+
+          <div className="flex items-center justify-center mb-5">
+            <div className="text-center px-8 py-4 rounded-xl bg-surface-dark border border-neon-pink/20">
+              <div className="text-3xl font-bold text-white">{weeks}</div>
+              <div className="text-sm text-gray-400 mt-1">lessons</div>
+              {hasDuration && (
+                <div className="text-xs text-gray-500 mt-1">
+                  ~{Math.round(totalDuration / weeks / 60)} min per lesson
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex justify-center">
+            <span
+              className="inline-flex items-center gap-1.5 text-xs text-gray-500 px-3 py-1.5 rounded-lg bg-surface-dark border border-surface-border cursor-not-allowed"
+              title="Coming soon"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+              Edit structure
+              <span className="text-[10px] text-gray-600">(coming soon)</span>
+            </span>
+          </div>
+        </div>
+      ) : (
+        /* ─── AI Decide Path: Waiting ─── */
+        <div className="p-6 rounded-xl border border-surface-border bg-surface-dark">
+          <div className="flex items-center gap-2 mb-4">
+            <svg className="w-4 h-4 text-amber-400 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span className="text-sm font-medium text-amber-400">Analyzing your videos...</span>
+          </div>
+
+          <p className="text-gray-400 text-sm mb-4">
+            {analyzedCount} of {videoCount} video{videoCount === 1 ? "" : "s"} complete
+          </p>
+
+          {/* Progress bar */}
+          <div className="w-full h-2 rounded-full bg-surface-card overflow-hidden mb-3">
+            <div
+              className="h-full rounded-full bg-amber-400 transition-all duration-500"
+              style={{ width: `${videoCount > 0 ? Math.round((analyzedCount / videoCount) * 100) : 0}%` }}
+            />
+          </div>
+
+          <p className="text-xs text-gray-500">
+            This usually takes 1-2 minutes
+          </p>
+        </div>
+      )}
     </div>
   );
 }

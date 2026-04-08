@@ -1,54 +1,51 @@
-// MUX_MIGRATION: This Vercel Blob client-upload token handler has been superseded
-// by POST /api/mux/upload-url which issues Mux direct upload URLs instead.
-// Remove this file once all video upload surfaces have been migrated to MuxUploader.
-//
-// Original Blob upload implementation preserved below for reference:
-//
-// import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
-// import { NextRequest, NextResponse } from "next/server";
-// import { getOrCreateUser } from "@/lib/auth";
-// import { prisma } from "@/lib/prisma";
-//
-// export async function POST(
-//   req: NextRequest,
-//   { params }: { params: Promise<{ id: string }> }
-// ) {
-//   const { id: programId } = await params;
-//   const body = (await req.json()) as HandleUploadBody;
-//
-//   try {
-//     const jsonResponse = await handleUpload({
-//       body,
-//       request: req,
-//       onBeforeGenerateToken: async () => {
-//         const user = await getOrCreateUser();
-//         if (!user) throw new Error("Unauthorized");
-//
-//         const program = await prisma.program.findUnique({
-//           where: { id: programId },
-//           select: { creatorId: true },
-//         });
-//         if (!program) throw new Error("Program not found");
-//         if (program.creatorId !== user.id) throw new Error("Forbidden");
-//
-//         return {
-//           allowedContentTypes: [
-//             "video/mp4", "video/quicktime", "video/webm", "video/x-mp4",
-//             "video/x-m4v", "video/mpeg", "video/x-matroska", "video/x-msvideo",
-//             "audio/mpeg", "audio/wav", "audio/mp4", "audio/x-m4a",
-//             "audio/ogg", "application/octet-stream",
-//           ],
-//           tokenPayload: JSON.stringify({ programId }),
-//         };
-//       },
-//       onUploadCompleted: async () => {},
-//     });
-//
-//     return NextResponse.json(jsonResponse);
-//   } catch (err) {
-//     console.error("[blob-upload-token] Failed for program", programId, "—", (err as Error).message);
-//     return NextResponse.json({ error: (err as Error).message }, { status: 400 });
-//   }
-// }
+import { NextRequest, NextResponse } from "next/server";
+import { put } from "@vercel/blob";
+import { getOrCreateUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 
-export {};
+export const maxDuration = 120;
+
+/**
+ * Server-side Vercel Blob upload.
+ * Streams the raw request body directly to Blob storage.
+ * Client sends: PUT with raw file bytes + query params for filename.
+ */
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id: programId } = await params;
+
+  const user = await getOrCreateUser();
+  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const program = await prisma.program.findUnique({
+    where: { id: programId },
+    select: { creatorId: true },
+  });
+  if (!program) return NextResponse.json({ error: "Program not found" }, { status: 404 });
+  if (program.creatorId !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const filename = req.nextUrl.searchParams.get("filename");
+  if (!filename) return NextResponse.json({ error: "Missing filename" }, { status: 400 });
+
+  const contentType = req.headers.get("content-type") || "video/mp4";
+
+  if (!req.body) return NextResponse.json({ error: "No body" }, { status: 400 });
+
+  try {
+    const blob = await put(filename, req.body, {
+      access: "public",
+      addRandomSuffix: true,
+      contentType,
+    });
+
+    return NextResponse.json({ url: blob.url, pathname: blob.pathname });
+  } catch (err) {
+    console.error("[blob-upload] Failed:", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Upload failed" },
+      { status: 500 }
+    );
+  }
+}

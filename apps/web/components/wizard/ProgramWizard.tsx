@@ -8,6 +8,7 @@ import { StepContent } from "./steps/StepContent";
 import { StepReview } from "./steps/StepReview";
 import { TransitionStylePicker } from "./TransitionStylePicker";
 import { useGeneration } from "@/components/generation";
+import { computeSmartPresets } from "@guide-rail/ai";
 
 export interface WizardState {
   basics: {
@@ -20,6 +21,7 @@ export interface WizardState {
   duration: {
     weeks: number;
     pacingMode: "drip_by_week" | "unlock_on_complete";
+    aiStructured: boolean;
   };
   content: {
     videos: Array<{
@@ -27,6 +29,8 @@ export interface WizardState {
       videoId: string;
       title: string | null;
       thumbnailUrl: string | null;
+      durationSeconds?: number | null;
+      topicCount?: number;
     }>;
     artifacts: Array<{
       id?: string;
@@ -71,6 +75,7 @@ const DEFAULT_STATE: WizardState = {
   duration: {
     weeks: 8,
     pacingMode: "unlock_on_complete", // Default to staged progression for better completion rates
+    aiStructured: true,
   },
   content: {
     videos: [],
@@ -97,6 +102,7 @@ export function ProgramWizard({
 }: ProgramWizardProps) {
   const { startGeneration } = useGeneration();
   const [currentStep, setCurrentStep] = useState(0);
+  const [uploadingCount, setUploadingCount] = useState(0);
   const [state, setState] = useState<WizardState>(() => {
     // Try to load from localStorage first
     if (typeof window !== "undefined") {
@@ -116,32 +122,55 @@ export function ProgramWizard({
   // Track how many videos existed at mount so we don't auto-generate on localStorage restores
   const initialVideoCount = useRef(state.content.videos.length);
 
-  // Auto-advance to Lessons flow step when the first new video is uploaded on the Content step
+  // Auto-advance to Lessons flow step when the first new video is uploaded (or upload starts) on the Content step
   useEffect(() => {
     if (currentStep !== 1) return;
-    if (state.content.videos.length === 0) return;
-    if (state.content.videos.length <= initialVideoCount.current) return;
+    const hasNewContent = state.content.videos.length > initialVideoCount.current || uploadingCount > 0;
+    if (!hasNewContent) return;
     setCurrentStep(2); // advance to Lessons flow
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.content.videos.length]);
+  }, [state.content.videos.length, uploadingCount]);
 
   // Track analysis status for uploaded videos — used for the footer badge
   const [analysisStatus, setAnalysisStatus] = useState<Record<string, boolean>>({});
   const analysisPollerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Poll for video analysis completion — only on Content step (index 1) to avoid
-  // redundant network traffic on Lessons Flow / Theme steps.
+  // Poll for video analysis completion — runs on Content (1) and Lessons flow (2) steps
+  // so duration/topic data arrives in time for smart presets.
   useEffect(() => {
     const videoCount = state.content.videos.length;
-    if (videoCount === 0 || currentStep !== 1) return;
+    if (videoCount === 0 || currentStep > 2) return;
 
     const poll = () =>
       fetch(`/api/programs/${programId}/videos`)
         .then((r) => r.ok ? r.json() : [])
-        .then((data: Array<{ id: string; hasAnalysis?: boolean }>) => {
+        .then((data: Array<{ id: string; hasAnalysis?: boolean; durationSeconds?: number | null; topicCount?: number }>) => {
           const next: Record<string, boolean> = {};
           for (const v of data) next[v.id] = !!v.hasAnalysis;
           setAnalysisStatus(next);
+
+          // Enrich wizard state videos with duration/topic data from analysis
+          setState((prev) => {
+            let changed = false;
+            const enriched = prev.content.videos.map((video) => {
+              const fresh = data.find((d) => d.id === video.id);
+              if (!fresh) return video;
+              if (
+                (fresh.durationSeconds ?? null) !== (video.durationSeconds ?? null) ||
+                (fresh.topicCount ?? 0) !== (video.topicCount ?? 0)
+              ) {
+                changed = true;
+                return {
+                  ...video,
+                  durationSeconds: fresh.durationSeconds ?? video.durationSeconds,
+                  topicCount: fresh.topicCount ?? video.topicCount,
+                };
+              }
+              return video;
+            });
+            return changed ? { ...prev, content: { ...prev.content, videos: enriched } } : prev;
+          });
+
           return next;
         })
         .catch(() => ({} as Record<string, boolean>));
@@ -150,6 +179,8 @@ export function ProgramWizard({
       const ids = state.content.videos.map((v) => v.id);
       if (ids.every((id) => ready[id])) return; // All done, no need to poll
       if (analysisPollerRef.current) clearInterval(analysisPollerRef.current);
+      // Poll faster (5s) when AI mode is active and analysis is pending
+      const pollMs = state.duration.aiStructured ? 5_000 : 10_000;
       analysisPollerRef.current = setInterval(() => {
         poll().then((latest) => {
           if (ids.every((id) => latest[id]) && analysisPollerRef.current) {
@@ -157,7 +188,7 @@ export function ProgramWizard({
             analysisPollerRef.current = null;
           }
         });
-      }, 10_000);
+      }, pollMs);
     });
 
     return () => {
@@ -166,7 +197,7 @@ export function ProgramWizard({
         analysisPollerRef.current = null;
       }
     };
-  }, [programId, state.content.videos.length, currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [programId, state.content.videos.length, currentStep, state.duration.aiStructured]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist state to localStorage (exclude large blobs to avoid quota issues)
   useEffect(() => {
@@ -202,7 +233,7 @@ export function ProgramWizard({
           state.basics.targetTransformation.trim().length > 0
         );
       case 1: // Content
-        return state.content.videos.length > 0 || state.content.artifacts.length > 0;
+        return state.content.videos.length > 0 || state.content.artifacts.length > 0 || uploadingCount > 0;
       case 2: // Duration
         return state.duration.weeks >= 2;
       case 3: // Theme (optional)
@@ -215,20 +246,13 @@ export function ProgramWizard({
   }, [currentStep, state]);
 
   // Auto-select middle preset when entering the duration step if current value isn't one of the presets
+  // Skip when AI mode is active — weeks is derived from topic analysis instead
   useEffect(() => {
-    if (currentStep !== 2) return;
-    const videoCount = state.content.videos.length;
-    let presets: number[];
-    if (videoCount === 0) {
-      presets = [4, 8, 12];
-    } else {
-      const short = Math.max(2, Math.ceil(videoCount / 2));
-      const med = Math.max(short + 2, videoCount);
-      const long = Math.min(26, med + Math.ceil(med / 2));
-      presets = [short, med, long];
-    }
-    if (!presets.includes(state.duration.weeks)) {
-      setState((prev) => ({ ...prev, duration: { ...prev.duration, weeks: presets[1] } }));
+    if (currentStep !== 2 || state.duration.aiStructured) return;
+    const presets = computeSmartPresets(state.content.videos.length, state.content.videos);
+    const presetWeeks = presets.map((p) => p.weeks);
+    if (!presetWeeks.includes(state.duration.weeks)) {
+      setState((prev) => ({ ...prev, duration: { ...prev.duration, weeks: presets[1].weeks } }));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentStep]);
@@ -268,6 +292,7 @@ export function ProgramWizard({
           targetAudience: state.basics.targetAudience,
           targetTransformation: state.basics.targetTransformation,
           durationWeeks: state.duration.weeks,
+          aiStructured: state.duration.aiStructured,
           pacingMode: state.duration.pacingMode,
           vibePrompt: state.vibe.vibePrompt,
           ...skinPatchFields,
@@ -340,16 +365,17 @@ export function ProgramWizard({
             onArtifactsChange={(artifacts) =>
               updateState("content", { artifacts })
             }
+            onUploadingCountChange={setUploadingCount}
           />
         );
       case 2:
         return (
           <StepDuration
             weeks={state.duration.weeks}
-            pacingMode={state.duration.pacingMode}
-            videoCount={state.content.videos.length}
+            videos={state.content.videos}
+            aiStructured={state.duration.aiStructured}
             onWeeksChange={(weeks) => updateState("duration", { weeks })}
-            onPacingModeChange={(pacingMode) => updateState("duration", { pacingMode })}
+            onAiStructuredChange={(aiStructured) => updateState("duration", { aiStructured })}
           />
         );
       case 3:

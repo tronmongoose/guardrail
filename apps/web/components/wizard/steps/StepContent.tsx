@@ -31,6 +31,7 @@ interface StepContentProps {
   artifacts: Artifact[];
   onVideosChange: (videos: Video[]) => void;
   onArtifactsChange: (artifacts: Artifact[]) => void;
+  onUploadingCountChange?: (count: number) => void;
 }
 
 function isUploadedVideo(video: Video): boolean {
@@ -138,6 +139,7 @@ export function StepContent({
   artifacts,
   onVideosChange,
   onArtifactsChange,
+  onUploadingCountChange,
 }: StepContentProps) {
   const [activeTab, setActiveTab] = useState<ContentTab>(
     artifacts.length > 0 && videos.length === 0 ? "upload" : videos.length > 0 ? "youtube" : "upload"
@@ -149,16 +151,12 @@ export function StepContent({
 
   const isExtracting = extractionStates.some((s) => s.status === "pending" || s.status === "extracting" || s.status === "transcribing");
 
-  const AI_UPLOAD_MESSAGES = [
-    "Compiling your videos...",
-    "Crafting catchy headlines...",
-    "Finding the best moments...",
-    "Building your program structure...",
-    "Writing engaging session titles...",
-    "Grouping related content...",
-    "Mapping out your curriculum...",
-    "Polishing the lesson-by-lesson flow...",
-    "Almost there — putting it all together...",
+  const UPLOAD_MESSAGES = [
+    "Uploading your videos...",
+    "Sending files to our servers...",
+    "Processing your upload...",
+    "Almost done uploading...",
+    "Saving your content...",
   ];
 
   useEffect(() => {
@@ -167,7 +165,7 @@ export function StepContent({
       return;
     }
     const interval = setInterval(() => {
-      setAiMessageIndex((i) => (i + 1) % AI_UPLOAD_MESSAGES.length);
+      setAiMessageIndex((i) => (i + 1) % UPLOAD_MESSAGES.length);
     }, 2800);
     return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -360,13 +358,11 @@ export function StepContent({
     };
 
     // Step 2: PUT the file directly to Mux — never touches the Next.js server.
-    // Use XHR so we get granular upload progress events.
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
 
       xhr.upload.addEventListener("progress", (event) => {
         if (event.lengthComputable) {
-          // Scale to 0-88 so the bar doesn't jump straight to 100 before "Saving"
           updateState(Math.round((event.loaded / event.total) * 88), "Uploading");
         }
       });
@@ -386,7 +382,8 @@ export function StepContent({
 
     updateState(92, "Saving");
 
-    // Step 3: Create the video record linked to the Mux upload ID
+    // Step 3: Create the video record linked to the Mux upload ID.
+    // Gemini analysis is triggered by the video.asset.ready webhook once Mux finishes processing.
     const res = await fetch(`/api/programs/${programId}/videos`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -401,7 +398,6 @@ export function StepContent({
     const video: Video = await res.json();
 
     // Extract a thumbnail from the local File (while we still have it).
-    // This runs entirely in the browser — no extra network call.
     const thumbnailUrl = await extractVideoThumbnail(file);
     return { ...video, thumbnailUrl: thumbnailUrl ?? video.thumbnailUrl };
   };
@@ -549,6 +545,11 @@ export function StepContent({
     const videoFiles = files.filter((f) => isVideoFile(f.name));
     const otherFiles = files.filter((f) => !isVideoFile(f.name));
 
+    // Signal to parent that uploads are starting so wizard can allow advancing
+    if (videoFiles.length > 0) {
+      onUploadingCountChange?.(videoFiles.length);
+    }
+
     // Initialize extraction states — first batch of videos start as "extracting",
     // later-batch videos and other files start as "pending" until their turn
     const CONCURRENCY = 3;
@@ -643,6 +644,9 @@ export function StepContent({
         );
       }
     }
+
+    // Signal uploads finished
+    onUploadingCountChange?.(0);
 
     if (newVideos.length > 0) {
       onVideosChange([...videos, ...newVideos]);
@@ -903,7 +907,7 @@ export function StepContent({
                 <div className="text-center">
                   <div className="w-8 h-8 mx-auto mb-3 border-2 border-neon-pink border-t-transparent rounded-full animate-spin" />
                   <p className="text-sm font-medium text-neon-pink transition-all duration-500">
-                    {AI_UPLOAD_MESSAGES[aiMessageIndex]}
+                    {UPLOAD_MESSAGES[aiMessageIndex]}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">Large videos take a minute — hang tight</p>
                 </div>

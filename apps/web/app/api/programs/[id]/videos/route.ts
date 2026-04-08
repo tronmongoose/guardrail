@@ -20,6 +20,34 @@ export async function POST(
   const { id: programId } = await params;
   const timer = createTimer();
 
+  const { url, source, title: uploadedTitle, muxUploadId } = await req.json();
+
+  // Fast path for Mux direct uploads — lightweight auth (no user upsert) + single query
+  if (source === "mux-upload") {
+    const { userId: clerkId } = await clerkAuth();
+    if (!clerkId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const program = await prisma.program.findFirst({
+      where: { id: programId, creator: { clerkId } },
+      select: { id: true },
+    });
+    if (!program) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const rawName = (uploadedTitle as string | undefined) || "Uploaded Video";
+    const title = rawName.replace(/\.[^/.]+$/, ""); // strip extension
+    const video = await prisma.youTubeVideo.create({
+      data: {
+        videoId: crypto.randomUUID(),
+        url: `mux-upload://${muxUploadId}`, // sentinel URL replaced by webhook when asset is ready
+        title,
+        programId,
+        muxUploadId,
+      },
+    });
+    return NextResponse.json(video);
+  }
+
+  // All other sources (YouTube URLs, Blob uploads) use full auth with user upsert
   const user = await getOrCreateUser();
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -35,24 +63,6 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { url, source, title: uploadedTitle, muxUploadId } = await req.json();
-
-  // Handle Mux direct uploads (browser uploads directly to Mux, no Blob involved)
-  if (source === "mux-upload") {
-    const rawName = (uploadedTitle as string | undefined) || "Uploaded Video";
-    const title = rawName.replace(/\.[^/.]+$/, ""); // strip extension
-    const video = await prisma.youTubeVideo.create({
-      data: {
-        videoId: crypto.randomUUID(),
-        url: `mux-upload://${muxUploadId}`, // sentinel URL replaced by webhook when asset is ready
-        title,
-        programId,
-        muxUploadId,
-      },
-    });
-    return NextResponse.json(video);
-  }
-
   // Handle direct file uploads (from Vercel Blob)
   if (source === "upload") {
     const rawName = (uploadedTitle as string | undefined) || url.split("/").pop() || "Uploaded Video";
@@ -66,28 +76,10 @@ export async function POST(
       },
     });
 
-    // Run Mux transcoding + Gemini analysis after the response is sent
+    // Run Gemini analysis after the response is sent
     const mimeType = url.toLowerCase().endsWith(".mov") ? "video/quicktime" : "video/mp4";
     const videoId = video.id;
     after(async () => {
-      // Kick off Mux transcoding (non-blocking, runs in parallel with Gemini)
-      if (process.env.MUX_TOKEN_ID) {
-        try {
-          const asset = await mux.video.assets.create({
-            inputs: [{ url }],
-            playback_policy: ["public"],
-            video_quality: "basic",
-          });
-          await prisma.youTubeVideo.update({
-            where: { id: videoId },
-            data: { muxAssetId: asset.id },
-          });
-          console.log(`[mux] Asset created for "${title}" — asset=${asset.id} (playback ID set via webhook)`);
-        } catch (muxErr) {
-          console.error(`[mux] Asset creation failed for "${title}":`, muxErr);
-        }
-      }
-
       try {
         const analysis = await analyzeUploadedVideoWithGemini(url, title, mimeType);
         await prisma.videoAnalysis.upsert({
@@ -244,13 +236,18 @@ export async function GET(
     },
     include: {
       _count: { select: { segments: true } },
-      analysis: { select: { id: true } },
+      analysis: { select: { id: true, durationSeconds: true, topics: true } },
     },
     orderBy: { createdAt: "asc" },
   });
 
-  // Return analysis as a boolean flag to keep payload small
+  // Return analysis as boolean flag + duration/topic count for smart presets
   return NextResponse.json(
-    videos.map(({ analysis, ...v }) => ({ ...v, hasAnalysis: analysis !== null }))
+    videos.map(({ analysis, ...v }) => ({
+      ...v,
+      hasAnalysis: analysis !== null,
+      durationSeconds: analysis?.durationSeconds ?? v.durationSeconds ?? null,
+      topicCount: Array.isArray(analysis?.topics) ? (analysis.topics as unknown[]).length : 0,
+    }))
   );
 }
