@@ -47,10 +47,17 @@ function resolveProvider(): { provider: SupportedProvider; apiKey: string } | nu
 // ---------------------------------------------------------------------------
 
 export async function generateMuxVideoAnalysis({
-  assetId,
-  playbackId,
+  assetId: _assetId,
+  playbackId: _playbackId,
   ytVideoId,
 }: ChapterAnalysisInput): Promise<void> {
+  // DISABLED: Mux AI chapter generation — replaced by pipeline transcript fetch + Gemini text analysis.
+  // The generation pipeline now fetches transcripts directly via @mux/ai/primitives.
+  // To re-enable Mux AI chapter generation, uncomment the original body below.
+  console.info(`[mux-ai] Skipped — Mux AI analysis disabled (video ${ytVideoId})`);
+  return;
+
+  /* ── Original Mux AI chapter generation body ──
   if (!isMuxConfigured()) {
     logger.warn({ operation: "mux_ai.mux_not_configured", ytVideoId });
     return;
@@ -72,12 +79,8 @@ export async function generateMuxVideoAnalysis({
 
   try {
     const mux = getMux();
-
-    // Fetch the full asset object — @mux/ai's MuxAsset type is exactly
-    // Awaited<ReturnType<Mux["video"]["assets"]["retrieve"]>>, so this is safe.
     const asset = await mux.video.assets.retrieve(assetId);
 
-    // Run transcript fetch and chapter generation in parallel.
     const [transcriptResult, chaptersResult] = await Promise.all([
       fetchTranscriptForAsset(asset, playbackId).catch((err) => {
         logger.warn({ operation: "mux_ai.transcript_fetch_failed", ytVideoId }, err);
@@ -86,7 +89,6 @@ export async function generateMuxVideoAnalysis({
       generateChapters(assetId, "en", {
         provider,
         credentials,
-        // Guide the model toward learning-friendly chapter titles
         promptOverrides: {
           titleGuidelines:
             "Use concise, educational titles that describe what the viewer will learn. Under 8 words.",
@@ -97,7 +99,6 @@ export async function generateMuxVideoAnalysis({
     const chapters = chaptersResult.chapters;
     const durationSeconds = asset.duration ? Math.round(asset.duration) : undefined;
 
-    // Map chapters → topics (same shape as Gemini VideoTopic[])
     const topics = chapters.map((ch, i, arr) => ({
       label: ch.title,
       startSeconds: ch.startTime,
@@ -105,8 +106,6 @@ export async function generateMuxVideoAnalysis({
       subtopics: [] as string[],
     }));
 
-    // Use chapter boundaries as segments; transcript text will be blank unless
-    // we parse VTT cues per-chapter (future improvement).
     const segments = chapters.map((ch, i, arr) => ({
       startSeconds: ch.startTime,
       endSeconds: arr[i + 1]?.startTime ?? durationSeconds ?? ch.startTime + 300,
@@ -114,12 +113,8 @@ export async function generateMuxVideoAnalysis({
       topic: ch.title,
     }));
 
-    // Build a readable summary from chapter titles as a fallback.
     const chapterList = chapters.map((c) => c.title).join("; ");
-    const summary =
-      chapters.length > 0
-        ? `Chapters: ${chapterList}`
-        : "Video analysis via Mux AI.";
+    const summary = chapters.length > 0 ? `Chapters: ${chapterList}` : "Video analysis via Mux AI.";
 
     const analysisData = {
       summary,
@@ -139,7 +134,6 @@ export async function generateMuxVideoAnalysis({
       update: analysisData,
     });
 
-    // Back-fill durationSeconds on the video record if it wasn't already set.
     if (durationSeconds) {
       await prisma.youTubeVideo.update({
         where: { id: ytVideoId },
@@ -155,8 +149,7 @@ export async function generateMuxVideoAnalysis({
       durationSeconds,
     });
   } catch (err) {
-    // Non-blocking — log and continue. The program can still generate with
-    // the metadata-only path; this analysis enriches it.
     logger.error({ operation: "mux_ai.analysis_failed", ytVideoId, assetId }, err);
   }
+  */
 }

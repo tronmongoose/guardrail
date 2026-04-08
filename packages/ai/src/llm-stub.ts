@@ -1,11 +1,13 @@
 /**
  * Stub LLM — generates deterministic ProgramDraft JSON for local dev without API keys.
- * Distributes content evenly across all weeks.
+ * Uses the clip distributor for even video distribution across weeks.
  * When enriched digests are available, generates scene-based output with clips/overlays.
  */
 
 import type { ProgramDraft } from "@guide-rail/shared";
 import type { ContentDigest, EnrichedContentDigest } from "./llm-adapter";
+import { distributeClipsToLessons } from "./clip-distributor";
+import type { DistributionPlan } from "./clip-distributor";
 
 interface StubInput {
   programId: string;
@@ -26,6 +28,7 @@ interface StubInput {
   }[];
   contentDigests?: ContentDigest[];
   hasVideoAnalysis?: boolean;
+  clipDistributionPlan?: DistributionPlan;
 }
 
 /**
@@ -81,13 +84,37 @@ export function generateWithStub(input: StubInput): ProgramDraft {
 
   const useSceneMode = input.hasVideoAnalysis === true;
 
-  // Distribute content across weeks
-  const itemsPerWeek = Math.max(1, Math.ceil(allContent.length / input.durationWeeks));
+  // Use clip distribution plan if provided, or compute one for scene mode
+  let plan = input.clipDistributionPlan;
+  if (!plan && useSceneMode) {
+    const enriched = (input.contentDigests ?? []).filter(
+      (d): d is EnrichedContentDigest => "topics" in d && ((d as EnrichedContentDigest).topics?.length ?? 0) > 0,
+    );
+    const basic = (input.contentDigests ?? []).filter(
+      (d) => !("topics" in d) || !((d as EnrichedContentDigest).topics?.length),
+    );
+    if (enriched.length > 0) {
+      plan = distributeClipsToLessons(enriched, basic, input.durationWeeks, 1);
+    }
+  }
+
   const weeks: ProgramDraft["weeks"] = [];
 
   for (let weekNum = 1; weekNum <= input.durationWeeks; weekNum++) {
-    const startIdx = (weekNum - 1) * itemsPerWeek;
-    const weekContent = allContent.slice(startIdx, startIdx + itemsPerWeek);
+    const lessonIdx = weekNum - 1;
+    const planLesson = plan?.lessons[lessonIdx];
+
+    // Determine which content items are relevant for this week
+    // Use plan clips to find video IDs, or fall back to simple slice distribution
+    const weekVideoIds = planLesson
+      ? [...new Set(planLesson.clips.map((c) => c.videoId))]
+      : [];
+    const weekContent = weekVideoIds.length > 0
+      ? weekVideoIds.map((vid) => allContent.find((c) => c.id === vid)).filter(Boolean) as typeof allContent
+      : allContent.slice(
+          lessonIdx * Math.max(1, Math.ceil(allContent.length / input.durationWeeks)),
+          (lessonIdx + 1) * Math.max(1, Math.ceil(allContent.length / input.durationWeeks)),
+        );
 
     const actions: ProgramDraft["weeks"][0]["sessions"][0]["actions"] = [];
     let orderIndex = 0;
@@ -173,7 +200,43 @@ export function generateWithStub(input: StubInput): ProgramDraft {
     let clips: ProgramDraft["weeks"][0]["sessions"][0]["clips"];
     let overlays: ProgramDraft["weeks"][0]["sessions"][0]["overlays"];
 
-    if (useSceneMode) {
+    if (useSceneMode && planLesson && planLesson.clips.length > 0) {
+      // Use pre-computed distribution plan clips
+      clips = planLesson.clips.map((planClip, idx) => ({
+        youtubeVideoId: planClip.videoId,
+        startSeconds: planClip.startSeconds,
+        endSeconds: planClip.endSeconds,
+        orderIndex: idx,
+        transitionType: idx === 0 ? "NONE" : "FADE",
+        transitionDurationMs: 500,
+        chapterTitle: planClip.topicLabel,
+        chapterDescription: planClip.subtopics?.join(", "),
+      }));
+
+      overlays = [
+        {
+          type: "TITLE_CARD",
+          content: { title: `Learning Session`, subtitle: `Week ${weekNum}` },
+          position: "CENTER",
+          durationMs: 4000,
+          orderIndex: 0,
+          triggerAtSeconds: 0,
+        },
+      ];
+
+      if (keyTakeaways.length > 0 && clips.length > 1) {
+        overlays.push({
+          type: "KEY_POINTS",
+          content: { points: keyTakeaways },
+          clipOrderIndex: 1,
+          position: "BOTTOM",
+          durationMs: 6000,
+          orderIndex: 1,
+          triggerAtSeconds: 5,
+        });
+      }
+    } else if (useSceneMode) {
+      // Fallback: inline clip generation from digests (no plan)
       const videoItems = weekContent.filter((item) => item.type === "video");
       clips = [];
       overlays = [];
@@ -182,7 +245,6 @@ export function generateWithStub(input: StubInput): ProgramDraft {
       for (const item of videoItems) {
         const enriched = digestMap.get(item.id) as EnrichedContentDigest | undefined;
         if (enriched?.topics && enriched.topics.length > 0) {
-          // Create clips from topic segments
           for (const topic of enriched.topics.slice(0, 4)) {
             clips.push({
               youtubeVideoId: item.id,
@@ -197,7 +259,6 @@ export function generateWithStub(input: StubInput): ProgramDraft {
             clipOrder++;
           }
         } else {
-          // No topic data — single clip for entire video
           clips.push({
             youtubeVideoId: item.id,
             startSeconds: 0,
@@ -211,7 +272,6 @@ export function generateWithStub(input: StubInput): ProgramDraft {
         }
       }
 
-      // Title card overlay
       overlays.push({
         type: "TITLE_CARD",
         content: { title: weekContent.length > 0 ? `Learning Session` : `Review Session`, subtitle: `Week ${weekNum}` },
@@ -221,7 +281,6 @@ export function generateWithStub(input: StubInput): ProgramDraft {
         triggerAtSeconds: 0,
       });
 
-      // KEY_POINTS overlay if we have takeaways
       if (keyTakeaways.length > 0 && clips.length > 1) {
         overlays.push({
           type: "KEY_POINTS",

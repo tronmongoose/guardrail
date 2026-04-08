@@ -5,15 +5,18 @@
  *   Pass 1 (extractContentDigests): Per-content-source extraction → structured digests
  *   Pass 2 (generateProgramDraft):  Curriculum design using rich digests
  *
- * Supports: "anthropic" | "openai" | "stub"
+ * Supports: "anthropic" | "openai" | "gemini" | "stub"
  * Configured via LLM_PROVIDER env var. Defaults to "stub" for local dev.
  */
 
 import { ProgramDraftSchema } from "@guide-rail/shared";
 import type { ProgramDraft } from "@guide-rail/shared";
 import { generateWithStub, generateStubContentDigest } from "./llm-stub";
+import { GEMINI_API_BASE, getGeminiModel } from "./constants";
+import type { DistributionPlan } from "./clip-distributor";
+import { formatDistributionPlanForPrompt } from "./clip-distributor";
 
-export type LLMProvider = "anthropic" | "openai" | "stub";
+export type LLMProvider = "anthropic" | "openai" | "gemini" | "stub";
 
 const LLM_TIMEOUT_MS = 60_000; // 60s for content extraction
 const GENERATION_TIMEOUT_MS = 120_000; // 120s for curriculum generation
@@ -66,6 +69,10 @@ interface GenerateInput {
   contentDigests?: ContentDigest[];
   /** When true, prompt requests scene-based output with clips/overlays */
   hasVideoAnalysis?: boolean;
+  /** Pre-computed clip-to-lesson assignment plan */
+  clipDistributionPlan?: DistributionPlan;
+  /** When true, LLM determines the ideal lesson count instead of using durationWeeks exactly */
+  aiStructured?: boolean;
 }
 
 const MAX_REPAIR_ATTEMPTS = 2;
@@ -128,6 +135,29 @@ async function extractSingleDigest(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any = await res.json();
     raw = data.content[0].text;
+  } else if (provider === "gemini") {
+    const key = process.env.GOOGLE_AI_API_KEY;
+    if (!key) throw new Error("GOOGLE_AI_API_KEY not set");
+    const model = getGeminiModel();
+    const res = await fetchWithTimeout(
+      `${GEMINI_API_BASE}/models/${model}:generateContent?key=${key}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json", temperature: 0.1 },
+        }),
+      },
+      LLM_TIMEOUT_MS,
+    );
+    if (!res.ok) {
+      const errorBody = await res.text().catch(() => "");
+      throw new Error(`Gemini API error: ${res.status} - ${errorBody}`);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await res.json();
+    raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   } else {
     const key = process.env.OPENAI_API_KEY;
     if (!key) throw new Error("OPENAI_API_KEY not set");
@@ -263,6 +293,15 @@ export async function generateProgramDraft(
   console.info(`[LLM] Generation request:`, JSON.stringify(inputSummary));
   console.info(`[LLM] Using provider: ${provider}`);
 
+  // ── Diagnostic: log the full prompt being sent to the LLM ──
+  const debugPrompt = buildPrompt(input);
+  console.info(`[LLM] ═══ PROMPT (first 2000 chars) ═══`);
+  console.info(debugPrompt.slice(0, 2000));
+  if (debugPrompt.length > 2000) {
+    console.info(`[LLM] ... (${debugPrompt.length} total chars, truncated in log)`);
+  }
+  console.info(`[LLM] ═══ END PROMPT PREVIEW ═══`);
+
   let raw: string;
 
   if (provider === "stub") {
@@ -271,6 +310,9 @@ export async function generateProgramDraft(
   } else if (provider === "anthropic") {
     console.info("[LLM] Calling Anthropic API");
     raw = await callAnthropic(input);
+  } else if (provider === "gemini") {
+    console.info("[LLM] Calling Gemini API");
+    raw = await callGemini(input);
   } else if (provider === "openai") {
     console.info("[LLM] Calling OpenAI API");
     raw = await callOpenAI(input);
@@ -279,6 +321,12 @@ export async function generateProgramDraft(
   }
 
   console.info(`[LLM] Raw response length: ${raw.length} chars`);
+  console.info(`[LLM] ═══ RESPONSE (first 1000 chars) ═══`);
+  console.info(raw.slice(0, 1000));
+  if (raw.length > 1000) {
+    console.info(`[LLM] ... (${raw.length} total chars, truncated in log)`);
+  }
+  console.info(`[LLM] ═══ END RESPONSE PREVIEW ═══`);
 
   // Parse + validate + repair loop
   for (let attempt = 0; attempt <= MAX_REPAIR_ATTEMPTS; attempt++) {
@@ -354,10 +402,15 @@ function buildPrompt(input: GenerateInput): string {
   const hasVideos = videoCount > 0;
   const hasDocs = docCount > 0;
 
-  // Build content descriptions — enriched with timestamps when available
+  // Build content descriptions — always include transcript when available
   const contentDescriptions = allContent.map((item, i) => {
     const typeLabel = item.type === "video" ? "VIDEO" : "DOCUMENT";
     const digest = digestMap.get(item.id);
+
+    // Always include transcript/text — this is the primary content signal for curriculum quality
+    const transcriptSnippet = item.text && item.text.length > 0
+      ? `\n   TRANSCRIPT (${item.text.length} chars):\n   ${item.text.slice(0, 4000)}${item.text.length > 4000 ? "..." : ""}`
+      : `\n   TRANSCRIPT: [NOT AVAILABLE — video has not been transcribed yet]`;
 
     // Enriched digest with timestamps (from Gemini analysis)
     const enriched = digest as EnrichedContentDigest | undefined;
@@ -383,6 +436,7 @@ function buildPrompt(input: GenerateInput): string {
         momentLines ? `   Key moments:\n${momentLines}` : "",
         `   Skills: ${enriched.skillsIntroduced.join(", ") || "N/A"}`,
         `   Difficulty: ${enriched.difficultyLevel}`,
+        transcriptSnippet,
       ].filter(Boolean).join("\n");
     }
 
@@ -395,14 +449,12 @@ function buildPrompt(input: GenerateInput): string {
         `   Skills introduced: ${digest.skillsIntroduced.join(", ") || "N/A"}`,
         `   Notable examples: ${digest.memorableExamples.join("; ") || "N/A"}`,
         `   Difficulty: ${digest.difficultyLevel}`,
+        transcriptSnippet,
       ].join("\n");
     }
 
-    // Fallback to text snippet
-    const textSnippet = item.text
-      ? `\n   Content preview: ${item.text.slice(0, 600)}${item.text.length > 600 ? "..." : ""}`
-      : "";
-    return `${i + 1}. [${typeLabel}] "${item.title}" (ID: ${item.id}, Cluster: ${item.clusterId})${textSnippet}`;
+    // No digest at all — show transcript as the only context
+    return `${i + 1}. [${typeLabel}] "${item.title}" (ID: ${item.id}, Cluster: ${item.clusterId})${transcriptSnippet}`;
   }).join("\n\n");
 
   const totalContent = allContent.length;
@@ -429,11 +481,37 @@ Apply this style throughout all titles, descriptions, instructions, and reflecti
 
   // ── Scene-based prompt (with clips/overlays) ──
   if (useSceneMode) {
+    const hasPlan = !!input.clipDistributionPlan && input.clipDistributionPlan.lessons.length > 0;
+    const planBlock = hasPlan
+      ? `\n${formatDistributionPlanForPrompt(input.clipDistributionPlan!)}\n`
+      : "";
+
+    const distributionRule = hasPlan
+      ? `2. Follow the VIDEO ASSIGNMENT PLAN exactly — clip assignments are pre-computed and mandatory. Do NOT change youtubeVideoId, startSeconds, or endSeconds values. You may only add chapterTitle, chapterDescription, transitionType, and overlay details.`
+      : `2. Distribute content logically across all ${input.durationWeeks} weeks (~${contentPerWeek} source(s) per week)`;
+
+    // Duration instruction depends on whether user chose a specific count or let AI decide
+    const durationInstruction = input.aiStructured
+      ? `- Duration: Determine the ideal number of lessons based on the content below. Use approximately ${input.durationWeeks} as a starting point, but adjust up or down to whatever count best fits the natural topic structure. Each lesson should have 5-15 minutes of meaningful content.`
+      : `- Duration: EXACTLY ${input.durationWeeks} weeks (you MUST create ${input.durationWeeks} weeks)`;
+
+    const weekCountRule = input.aiStructured
+      ? `1. Choose the ideal number of weeks based on the content — each lesson should have 5-15 minutes of clip content. You may create more or fewer than ${input.durationWeeks} weeks if the content warrants it.`
+      : `1. Generate EXACTLY ${input.durationWeeks} weeks (weekNumber 1 through ${input.durationWeeks})`;
+
+    const taskInstruction = input.aiStructured
+      ? `Create a scene-based program with the ideal number of lessons for this content. Each session is a curated playlist of video clips from the source material, with transitions and overlays.`
+      : `Create a ${input.durationWeeks}-week scene-based program. Each session is a curated playlist of video clips from the source material, with transitions and overlays.`;
+
+    const durationWeeksOutput = input.aiStructured
+      ? `"<number of weeks you chose>"`
+      : `${input.durationWeeks}`;
+
     return `You are an expert curriculum designer creating a scene-based learning program with video clips, transitions, and overlays.
 
 PROGRAM CONTEXT:
 - Title: "${input.programTitle}"
-- Duration: EXACTLY ${input.durationWeeks} weeks (you MUST create ${input.durationWeeks} weeks)
+${durationInstruction}
 - Content available: ${contentSummary}
 ${input.programDescription ? `- Description: ${input.programDescription}` : ""}
 ${audienceContext}
@@ -443,9 +521,9 @@ ${vibeInstructions}
 
 AVAILABLE CONTENT SOURCES (with timestamped topic data):
 ${contentDescriptions}
-
+${planBlock}
 YOUR TASK:
-Create a ${input.durationWeeks}-week scene-based program. Each session is a curated playlist of video clips from the source material, with transitions and overlays.
+${taskInstruction}
 
 LESSON SHAPING RULES:
 - Target 8-15 minutes of clip content per session
@@ -459,8 +537,8 @@ LESSON SHAPING RULES:
 - Progressive complexity: foundational → applied → integration across weeks
 
 CRITICAL REQUIREMENTS:
-1. Generate EXACTLY ${input.durationWeeks} weeks (weekNumber 1 through ${input.durationWeeks})
-2. Distribute content logically across all ${input.durationWeeks} weeks (~${contentPerWeek} source(s) per week)
+${weekCountRule}
+${distributionRule}
 3. Each week needs a clear theme building toward the transformation
 4. Each session MUST include keyTakeaways (2-3 items)
 5. Each session MUST include a "clips" array with video clip segments
@@ -474,7 +552,7 @@ OUTPUT FORMAT (JSON only, no markdown):
   "title": "${input.programTitle}",
   "description": "Compelling 1-2 sentence description",
   "pacingMode": "drip_by_week",
-  "durationWeeks": ${input.durationWeeks},
+  "durationWeeks": ${durationWeeksOutput},
   "weeks": [
     {
       "title": "Week 1: [Theme]",
@@ -568,6 +646,11 @@ QUALITY GUIDELINES:
   }
 
   // ── Classic prompt (flat actions, no clips) ──
+  const hasPlanClassic = !!input.clipDistributionPlan && input.clipDistributionPlan.lessons.length > 0;
+  const classicPlanBlock = hasPlanClassic
+    ? `\n${formatDistributionPlanForPrompt(input.clipDistributionPlan!)}\n`
+    : "";
+
   const actionInstructions = [];
   if (hasVideos) {
     actionInstructions.push(`  * WATCH action(s) — for VIDEO content, reference videos by their exact ID in the youtubeVideoId field`);
@@ -610,11 +693,28 @@ QUALITY GUIDELINES:
               "orderIndex": ${actionExamples.length}
             }`);
 
+  // Duration instruction depends on whether user chose a specific count or let AI decide
+  const classicDurationInstruction = input.aiStructured
+    ? `- Duration: Determine the ideal number of lessons based on the content below. Use approximately ${input.durationWeeks} as a starting point, but adjust up or down to whatever count best fits the natural topic structure. Each lesson should have 5-15 minutes of meaningful content.`
+    : `- Duration: EXACTLY ${input.durationWeeks} weeks (you MUST create ${input.durationWeeks} weeks)`;
+
+  const classicWeekCountRule = input.aiStructured
+    ? `1. Choose the ideal number of weeks based on the content — each lesson should have 5-15 minutes of content. You may create more or fewer than ${input.durationWeeks} weeks if the content warrants it.`
+    : `1. Generate EXACTLY ${input.durationWeeks} weeks (weekNumber 1 through ${input.durationWeeks})`;
+
+  const classicTaskInstruction = input.aiStructured
+    ? `Create a structured learning program with the ideal number of lessons that transforms ${input.targetAudience || "learners"} toward ${input.targetTransformation || "the intended outcome"}.`
+    : `Create a ${input.durationWeeks}-week structured learning program that transforms ${input.targetAudience || "learners"} toward ${input.targetTransformation || "the intended outcome"}.`;
+
+  const classicDurationWeeksOutput = input.aiStructured
+    ? `"<number of weeks you chose>"`
+    : `${input.durationWeeks}`;
+
   return `You are an expert curriculum designer creating a transformational learning program.
 
 PROGRAM CONTEXT:
 - Title: "${input.programTitle}"
-- Duration: EXACTLY ${input.durationWeeks} weeks (you MUST create ${input.durationWeeks} weeks)
+${classicDurationInstruction}
 - Content available: ${contentSummary}
 ${input.programDescription ? `- Description: ${input.programDescription}` : ""}
 ${audienceContext}
@@ -624,13 +724,15 @@ ${vibeInstructions}
 
 AVAILABLE CONTENT SOURCES:
 ${contentDescriptions}
-
+${classicPlanBlock}
 YOUR TASK:
-Create a ${input.durationWeeks}-week structured learning program that transforms ${input.targetAudience || "learners"} toward ${input.targetTransformation || "the intended outcome"}.
+${classicTaskInstruction}
 
 CRITICAL REQUIREMENTS:
-1. Generate EXACTLY ${input.durationWeeks} weeks (weekNumber 1 through ${input.durationWeeks})
-2. Distribute content logically across all ${input.durationWeeks} weeks (approximately ${contentPerWeek} source(s) per week)
+${classicWeekCountRule}
+${hasPlanClassic
+    ? `2. Follow the VIDEO ASSIGNMENT PLAN exactly — use the specified video IDs for WATCH actions in each week. Every video must appear at least once.`
+    : `2. Distribute content logically across all ${input.durationWeeks} weeks (approximately ${contentPerWeek} source(s) per week)`}
 3. Each week needs a clear theme that builds toward the transformation
 4. Content from the same cluster shares related topics — use this to group them logically
 5. Each session MUST include 2-3 key takeaways (keyTakeaways array)
@@ -649,7 +751,7 @@ OUTPUT FORMAT (JSON only, no markdown):
   "title": "${input.programTitle}",
   "description": "A compelling 1-2 sentence description of the program transformation",
   "pacingMode": "drip_by_week",
-  "durationWeeks": ${input.durationWeeks},
+  "durationWeeks": ${classicDurationWeeksOutput},
   "weeks": [
     {
       "title": "Week 1: [Theme]",
@@ -742,6 +844,39 @@ async function callOpenAI(input: GenerateInput): Promise<string> {
   return data.choices[0].message.content;
 }
 
+async function callGemini(input: GenerateInput): Promise<string> {
+  const key = process.env.GOOGLE_AI_API_KEY;
+  if (!key) throw new Error("GOOGLE_AI_API_KEY not set");
+
+  const model = getGeminiModel();
+  const prompt = buildPrompt(input);
+
+  const res = await fetchWithTimeout(
+    `${GEMINI_API_BASE}/models/${model}:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseMimeType: "application/json",
+          temperature: 0.2,
+        },
+      }),
+    },
+    GENERATION_TIMEOUT_MS,
+  );
+
+  if (!res.ok) {
+    const errorBody = await res.text().catch(() => "");
+    throw new Error(`Gemini API error: ${res.status} - ${errorBody}`);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data: any = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+}
+
 async function repairJSON(
   badOutput: string,
   error: string,
@@ -768,6 +903,26 @@ async function repairJSON(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const data: any = await res.json();
     return data.content[0].text;
+  }
+
+  if (provider === "gemini") {
+    const key = process.env.GOOGLE_AI_API_KEY!;
+    const model = getGeminiModel();
+    const res = await fetchWithTimeout(
+      `${GEMINI_API_BASE}/models/${model}:generateContent?key=${key}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: repairPrompt }] }],
+          generationConfig: { responseMimeType: "application/json", temperature: 0.1 },
+        }),
+      },
+      LLM_TIMEOUT_MS,
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
   }
 
   // OpenAI

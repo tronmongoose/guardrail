@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { getEmbeddings, clusterEmbeddings, generateProgramDraft, extractContentDigests, analyzeVideoWithGemini, analyzeUploadedVideoWithGemini } from "@guide-rail/ai";
-import type { ContentDigest, EnrichedContentDigest } from "@guide-rail/ai";
-import { maybeSegmentVideo } from "@/lib/video-segmentation";
+import { generateProgramDraft, extractContentDigests, analyzeUploadedVideoWithGemini, distributeClipsToLessons, validateAndFixClipDistribution } from "@guide-rail/ai";
+import type { ContentDigest, EnrichedContentDigest, DistributionPlan } from "@guide-rail/ai";
 import { ProgramDraftSchema } from "@guide-rail/shared";
-import type { VideoAnalysisOutput } from "@guide-rail/shared";
 import { Prisma } from "@prisma/client";
 import { aiLogger, createTimer } from "@/lib/logger";
 import { generateSkinFromVibe } from "@/lib/generate-skin";
 import { sendProgramReadyEmail } from "@/lib/email";
+import { getMux, isMuxConfigured } from "@/lib/mux";
 
 export const maxDuration = 300; // Vercel Pro: keep function alive while background job runs
-
-const HF_MODEL = process.env.HF_EMBEDDING_MODEL || "sentence-transformers/all-MiniLM-L6-v2";
 
 /**
  * Async program generation endpoint.
@@ -159,53 +156,119 @@ async function processGenerationJob(jobId: string, programId: string) {
       (a) => a.extractedText && a.extractedText.length > 0
     );
 
-    // Build ID sets for later lookups — will be updated after segmentation re-fetch
-    const videoIdSet = new Set(program.videos.map((v) => v.id));
+    // All non-segment, top-level videos for the pipeline
+    const videosForPipeline = program.videos.filter((v) => !v.isSegment);
+    const videoIdSet = new Set(videosForPipeline.map((v) => v.id));
 
-    // ── Step 0: Video Analysis (5-10%) ──
-    // Only analyze top-level (non-segment) videos; segment children inherit parent's analysis
-    checkDeadline("video_analysis");
+    // ── Diagnostic: log each video's state entering the pipeline ──
+    console.info(`[generate-async] ═══ PIPELINE START ═══`);
+    console.info(`[generate-async] Program: "${program.title}" (${programId})`);
+    console.info(`[generate-async] Videos: ${videosForPipeline.length}, Artifacts: ${usableArtifacts.length}`);
+    for (const v of videosForPipeline) {
+      console.info(`[generate-async]   VIDEO "${v.title}" | url=${v.url.slice(0, 60)} | transcript=${v.transcript ? `${v.transcript.length} chars` : "NONE"} | analysis=${v.analysis ? "YES" : "NO"}`);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ── Step 1: Gemini Video Analysis (5-25%) ──
+    // Analyzes videos that don't yet have a VideoAnalysis record.
+    // In production, the video.asset.ready webhook pre-runs this. But locally
+    // (no webhook) or if the user clicks Generate before the webhook fires,
+    // this step runs Gemini directly using the Mux MP4 static rendition URL.
+    // ══════════════════════════════════════════════════════════════════════════
+    checkDeadline("fetching_transcripts");
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { stage: "video_analysis", progress: 5 },
+      data: { stage: "fetching_transcripts", progress: 5 },
     });
-    const videosNeedingAnalysis = program.videos.filter(
-      (v) => !v.isSegment && !v.analysis && !v.url.startsWith("mux-upload://")
+
+    // Resolve muxPlaybackId from Mux API for videos that don't have it yet
+    // (webhooks may not have fired, especially in local dev)
+    const videosWithoutPlaybackId = videosForPipeline.filter(
+      (v) => !v.analysis && !v.muxPlaybackId && v.muxUploadId && isMuxConfigured()
     );
-    let analysisCount = 0;
+    if (videosWithoutPlaybackId.length > 0) {
+      console.info(`[generate-async] [MUX] Resolving playbackId for ${videosWithoutPlaybackId.length} video(s) via Mux API`);
+      const mux = getMux();
+      for (const v of videosWithoutPlaybackId) {
+        try {
+          // Get asset ID from upload
+          let assetId = v.muxAssetId;
+          if (!assetId) {
+            const upload = await mux.video.uploads.retrieve(v.muxUploadId!);
+            assetId = upload.asset_id ?? null;
+            if (assetId) {
+              await prisma.youTubeVideo.update({ where: { id: v.id }, data: { muxAssetId: assetId } });
+              (v as { muxAssetId: string | null }).muxAssetId = assetId;
+            }
+          }
+          if (!assetId) { console.warn(`[generate-async] [MUX]   "${v.title}" — no asset yet`); continue; }
+
+          // Get playback ID from asset
+          const asset = await mux.video.assets.retrieve(assetId);
+          if (asset.status === "ready" && asset.playback_ids?.[0]?.id) {
+            const pid = asset.playback_ids[0].id;
+            await prisma.youTubeVideo.update({
+              where: { id: v.id },
+              data: { muxPlaybackId: pid, muxStatus: "ready", url: `https://stream.mux.com/${pid}` },
+            });
+            (v as { muxPlaybackId: string | null }).muxPlaybackId = pid;
+            console.info(`[generate-async] [MUX]   ✓ "${v.title}" → playbackId=${pid}`);
+          } else {
+            console.warn(`[generate-async] [MUX]   "${v.title}" — asset status=${asset.status}, not ready yet`);
+          }
+        } catch (err) {
+          console.warn(`[generate-async] [MUX]   "${v.title}" resolve failed:`, err instanceof Error ? err.message : err);
+        }
+      }
+    }
+
+    const videosNeedingAnalysis = videosForPipeline.filter(
+      (v) => !v.analysis && v.muxPlaybackId
+    );
 
     if (videosNeedingAnalysis.length > 0 && process.env.GOOGLE_AI_API_KEY) {
-      console.info(`[generate-async] Running Gemini analysis for ${videosNeedingAnalysis.length} video(s)`);
-      const ANALYSIS_CONCURRENCY = 3;
+      console.info(`[generate-async] [GEMINI] ${videosNeedingAnalysis.length} video(s) need Gemini analysis`);
+      const MUX_RENDITION_POLL_MS = 5_000;
+      const MUX_RENDITION_MAX_MS = 2 * 60_000; // 2 min max wait for renditions
 
-      for (let i = 0; i < videosNeedingAnalysis.length; i += ANALYSIS_CONCURRENCY) {
-        checkDeadline("video_analysis");
-        const batch = videosNeedingAnalysis.slice(i, i + ANALYSIS_CONCURRENCY);
-        // ── Run all AI calls in the batch concurrently — NO DB access during AI ──
-        // Connections are released before analysis begins; DB writes happen after.
-        const aiResults = await Promise.allSettled(
-          batch.map((v) => {
-            const isUpload = !v.url.includes("youtube.com") && !v.url.includes("youtu.be") && !v.url.startsWith("mux-upload://");
-            return isUpload
-              ? analyzeUploadedVideoWithGemini(
-                  v.url,
-                  v.title ?? "Untitled",
-                  v.url.toLowerCase().endsWith(".mov") ? "video/quicktime" : "video/mp4",
-                )
-              : analyzeVideoWithGemini(v.videoId, v.title ?? "Untitled", v.durationSeconds ?? undefined);
-          }),
-        );
+      for (let i = 0; i < videosNeedingAnalysis.length; i++) {
+        checkDeadline("fetching_transcripts");
+        const v = videosNeedingAnalysis[i];
+        const mp4Url = `https://stream.mux.com/${v.muxPlaybackId}/capped-1080p.mp4`;
 
-        // ── Write results after AI completes — connections acquired only for writes ──
-        for (let j = 0; j < batch.length; j++) {
-          const v = batch[j];
-          const result = aiResults[j];
-          if (result.status === "rejected") {
-            console.warn(`[generate-async] Gemini analysis failed for "${v.title}":`, result.reason);
-            continue;
+        // Wait for the MP4 static rendition to be accessible before sending to Gemini
+        console.info(`[generate-async] [GEMINI] Waiting for MP4 rendition: "${v.title}"`);
+        const renditionStart = Date.now();
+        let mp4Ready = false;
+        while (!mp4Ready && (Date.now() - renditionStart) < MUX_RENDITION_MAX_MS) {
+          checkDeadline("fetching_transcripts");
+          try {
+            const headRes = await fetch(mp4Url, { method: "HEAD" });
+            if (headRes.ok) {
+              mp4Ready = true;
+              console.info(`[generate-async] [GEMINI] ✓ MP4 ready for "${v.title}" (${Math.round((Date.now() - renditionStart) / 1000)}s)`);
+            } else {
+              console.info(`[generate-async] [GEMINI]   MP4 not ready yet (${headRes.status}) — waiting ${MUX_RENDITION_POLL_MS / 1000}s...`);
+              await new Promise((r) => setTimeout(r, MUX_RENDITION_POLL_MS));
+            }
+          } catch {
+            await new Promise((r) => setTimeout(r, MUX_RENDITION_POLL_MS));
           }
-          const analysis = result.value;
-          analysisCount++;
+        }
+
+        if (!mp4Ready) {
+          console.warn(`[generate-async] [GEMINI] ✗ MP4 not available after ${MUX_RENDITION_MAX_MS / 1000}s for "${v.title}" — skipping`);
+          continue;
+        }
+
+        console.info(`[generate-async] [GEMINI] Analyzing "${v.title}" via ${mp4Url}`);
+
+        try {
+          const analysis = await analyzeUploadedVideoWithGemini(
+            mp4Url,
+            v.title ?? "Untitled",
+            "video/mp4",
+          );
 
           await prisma.videoAnalysis.upsert({
             where: { youtubeVideoId: v.id },
@@ -231,245 +294,122 @@ async function processGenerationJob(jobId: string, programId: string) {
             },
           });
 
-          // Create virtual segments after analysis is written
-          if (analysis.durationSeconds) {
-            await maybeSegmentVideo(
-              prisma, v, analysis.topics, analysis.durationSeconds,
-              v.desiredSegmentCount ?? 1,
-            );
+          // Store transcript on video record too
+          if (analysis.fullTranscript) {
+            await prisma.youTubeVideo.update({
+              where: { id: v.id },
+              data: { transcript: analysis.fullTranscript, durationSeconds: analysis.durationSeconds ?? undefined },
+            });
+            (v as { transcript: string | null }).transcript = analysis.fullTranscript;
           }
+
+          // Attach analysis to the in-memory video object for the digest step
+          (v as { analysis: unknown }).analysis = {
+            summary: analysis.summary,
+            fullTranscript: analysis.fullTranscript,
+            segments: analysis.segments,
+            topics: analysis.topics,
+            keyMoments: analysis.keyMoments,
+            people: analysis.people,
+            durationSeconds: analysis.durationSeconds,
+          };
+
+          console.info(`[generate-async] [GEMINI] ✓ "${v.title}" — ${analysis.topics.length} topics, ${analysis.fullTranscript?.length ?? 0} char transcript`);
+        } catch (err) {
+          console.error(`[generate-async] [GEMINI] ✗ "${v.title}" failed:`, err instanceof Error ? err.message : err);
         }
 
-        // Single batch heartbeat — one DB call per batch instead of one per video
-        // Range: 5-10% (preparing stage covers 0-5%)
-        const analysisProgress = 5 + Math.round(((i + batch.length) / videosNeedingAnalysis.length) * 5);
+        const analysisProgress = 5 + Math.round(((i + 1) / videosNeedingAnalysis.length) * 20);
         await prisma.generationJob.update({
           where: { id: jobId },
           data: { progress: analysisProgress },
         });
       }
+    } else if (videosNeedingAnalysis.length > 0) {
+      console.warn(`[generate-async] ${videosNeedingAnalysis.length} video(s) need analysis but GOOGLE_AI_API_KEY is not set`);
     }
 
-    // For videos that still have no analysis (e.g. stub mode / Gemini skipped) but have a
-    // creator-requested split count, segment them using even splits (no topic boundaries).
-    const videosWithoutAnalysis = program.videos.filter(
-      (v) => !v.isSegment && !v.analysis && (v.desiredSegmentCount ?? 1) > 1 && v.durationSeconds,
-    );
-    for (const v of videosWithoutAnalysis) {
-      await maybeSegmentVideo(prisma, v, [], v.durationSeconds!, v.desiredSegmentCount ?? 1);
-    }
-
-    // Re-fetch all videos (including newly created segment children) with analyses
-    const allVideosWithAnalysis = await prisma.youTubeVideo.findMany({
-      where: { programId },
-      include: { analysis: true },
-    });
-
-    // Segment-aware pipeline filter:
-    // Use child segments when available; exclude parents that have been segmented
-    const segmentedParentIds = new Set(
-      allVideosWithAnalysis.filter((v) => v.isSegment && v.parentVideoId).map((v) => v.parentVideoId as string),
-    );
-    const videosForPipeline = allVideosWithAnalysis.filter(
-      (v) => (v.isSegment || !segmentedParentIds.has(v.id)) && !v.url.startsWith("mux-upload://"),
-    );
-
-    // Mux direct uploads have no accessible content for AI processing — include them
-    // as minimal digests so the LLM knows they exist when building the program structure.
-    const muxOnlyVideos = allVideosWithAnalysis.filter((v) => v.url.startsWith("mux-upload://"));
-
-    // For backwards-compat: keep using videosWithAnalysis name for analysis map building
-    const videosWithAnalysis = videosForPipeline;
-
-    // Build analysis lookup: video record ID → VideoAnalysis data
-    const analysisMap = new Map<string, VideoAnalysisOutput>();
-    for (const v of videosWithAnalysis) {
-      if (v.analysis) {
-        analysisMap.set(v.id, {
-          summary: v.analysis.summary,
-          fullTranscript: v.analysis.fullTranscript ?? undefined,
-          segments: v.analysis.segments as unknown as VideoAnalysisOutput["segments"],
-          topics: v.analysis.topics as unknown as VideoAnalysisOutput["topics"],
-          keyMoments: v.analysis.keyMoments as unknown as VideoAnalysisOutput["keyMoments"],
-          people: v.analysis.people as unknown as VideoAnalysisOutput["people"],
-          durationSeconds: v.analysis.durationSeconds ?? undefined,
-        });
-      }
-    }
-
-    // Update videoIdSet to reflect the pipeline videos (includes segment children + mux-only)
-    for (const v of videosForPipeline) videoIdSet.add(v.id);
-    for (const v of muxOnlyVideos) videoIdSet.add(v.id);
-
-    const hasVideoAnalysis = analysisMap.size > 0;
-    console.info(`[generate-async] Video analysis: ${analysisMap.size}/${allVideosWithAnalysis.length} videos analyzed (${analysisCount} new), ${videosForPipeline.length} in pipeline`);
-
-    // ── Step 1: Embeddings (10-25%) ──
-    checkDeadline("embedding");
-    await prisma.generationJob.update({
-      where: { id: jobId },
-      data: { stage: "embedding", progress: 10 },
-    });
-
-    // Use analysis summaries for richer embeddings when available.
-    // For segment children, build narrowed embedding text from the matching topic slice.
-    const videoEmbeddingInputs = videosForPipeline.map((v) => {
-      if (v.isSegment && v.parentVideoId) {
-        const parentAnalysis = analysisMap.get(v.parentVideoId);
-        if (parentAnalysis) {
-          const matchingTopic = parentAnalysis.topics.find(
-            (t) => Math.abs(t.startSeconds - (v.startSeconds ?? 0)) < 10,
-          );
-          return {
-            contentId: v.id,
-            text: `${v.title ?? ""}: ${matchingTopic?.label ?? parentAnalysis.summary}`.slice(0, 4000),
-          };
-        }
-      }
-      const analysis = analysisMap.get(v.id);
-      if (analysis) {
-        const topicLabels = analysis.topics.map((t) => t.label).join(". ");
-        return {
-          contentId: v.id,
-          text: `${v.title ?? ""}: ${analysis.summary}. Topics: ${topicLabels}`.slice(0, 4000),
-        };
-      }
-      return {
-        contentId: v.id,
-        text: v.transcript
-          ? `${v.title ?? ""}: ${v.transcript}`.slice(0, 4000)
-          : `${v.title ?? ""} ${v.description ?? ""}`.trim() || v.videoId,
-      };
-    });
-
-    const artifactEmbeddingInputs = usableArtifacts.map((a) => ({
-      contentId: a.id,
-      text: `${a.originalFilename}: ${a.extractedText!}`.slice(0, 4000),
-    }));
-
-    const embeddingInputs = [...videoEmbeddingInputs, ...artifactEmbeddingInputs];
-
-    aiLogger.embeddingStart(programId, embeddingInputs.length);
-    const embeddingTimer = createTimer();
-
-    const embeddingResults = await getEmbeddings(embeddingInputs);
-    aiLogger.embeddingSuccess(programId, embeddingTimer.elapsed(), embeddingResults.length);
-
-    // Store video embeddings only (Embedding table has FK to YouTubeVideo)
-    for (const result of embeddingResults) {
-      if (videoIdSet.has(result.contentId)) {
-        await prisma.embedding.upsert({
-          where: {
-            programId_videoId_model: { programId, videoId: result.contentId, model: HF_MODEL },
-          },
-          create: { programId, videoId: result.contentId, model: HF_MODEL, vector: result.embedding },
-          update: { vector: result.embedding },
-        });
-      }
-    }
+    const finalWithAnalysis = videosForPipeline.filter((v) => v.analysis).length;
+    const finalWithTranscript = videosForPipeline.filter((v) => v.transcript).length;
+    console.info(`[generate-async] After analysis: ${finalWithAnalysis}/${videosForPipeline.length} analyzed, ${finalWithTranscript}/${videosForPipeline.length} with transcript`);
 
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { stage: "clustering", progress: 25 },
+      data: { progress: 25 },
     });
 
-    // ── Step 2: Clustering (25-35%) ──
-    checkDeadline("clustering");
-    const clusterInputs = embeddingResults.map((r) => ({
-      contentId: r.contentId,
-      embedding: r.embedding,
-    }));
-
-    const totalContent = videosForPipeline.length + usableArtifacts.length;
-    const k = Math.min(program.durationWeeks, totalContent);
-    const clusters = clusterEmbeddings(clusterInputs, k);
-
-    aiLogger.clusteringComplete(programId, timer.elapsed(), {
-      videoCount: program.videos.length,
-      clusterCount: clusters.length,
-    });
-
-    // Store cluster assignments for videos only
-    for (const cluster of clusters) {
-      for (const contentId of cluster.contentIds) {
-        if (videoIdSet.has(contentId)) {
-          await prisma.clusterAssignment.upsert({
-            where: { programId_videoId: { programId, videoId: contentId } },
-            create: { programId, videoId: contentId, clusterId: cluster.clusterId },
-            update: { clusterId: cluster.clusterId },
-          });
-        }
-      }
-    }
-
-    // ── Step 2.5: Content Extraction / Enriched Digests (35-55%) ──
+    // ══════════════════════════════════════════════════════════════════════════
+    // ── Step 2: Content Extraction / Enriched Digests (25-45%) ──
+    // Passes transcripts to the LLM for structured extraction (topics, skills,
+    // key concepts). Videos without transcripts get title-only fallback digests.
+    // ══════════════════════════════════════════════════════════════════════════
     checkDeadline("analyzing");
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { stage: "analyzing", progress: 35 },
+      data: { stage: "analyzing", progress: 25 },
     });
 
-    // Build enriched digests from analysis (skip LLM for these)
     const enrichedDigests: (ContentDigest | EnrichedContentDigest)[] = [];
+
+    // Videos with existing VideoAnalysis records (from prior Mux AI or Gemini runs)
+    // get enriched digests directly — no LLM call needed.
     const videosNeedingLLMExtraction: { contentId: string; contentTitle: string; text: string | null; contentType: "video" }[] = [];
 
     for (const v of videosForPipeline) {
-      // For segment children, use the parent's analysis filtered to this segment's time range
-      const sourceAnalysis = v.isSegment && v.parentVideoId
-        ? analysisMap.get(v.parentVideoId)
-        : analysisMap.get(v.id);
+      if (v.analysis) {
+        // Use existing analysis as enriched digest
+        const a = v.analysis;
+        const topics = (a.topics as unknown as { label: string; startSeconds: number; endSeconds: number; subtopics?: string[] }[]) ?? [];
+        const segments = (a.segments as unknown as { startSeconds: number; endSeconds: number; text: string; topic?: string }[]) ?? [];
+        const keyMoments = (a.keyMoments as unknown as { timestampSeconds: number; description: string; significance?: string; type?: string }[]) ?? [];
 
-      if (sourceAnalysis && sourceAnalysis.topics.length > 0) {
-        // For segments, narrow topics/segments to this child's time bounds
-        const relevantTopics = v.isSegment
-          ? sourceAnalysis.topics.filter(
-              (t) => t.startSeconds >= (v.startSeconds ?? 0) && t.endSeconds <= ((v.endSeconds ?? Infinity) + 5),
-            )
-          : sourceAnalysis.topics;
-        const relevantSegments = v.isSegment
-          ? sourceAnalysis.segments.filter(
-              (s) => s.startSeconds >= (v.startSeconds ?? 0) && s.endSeconds <= ((v.endSeconds ?? Infinity) + 5),
-            )
-          : sourceAnalysis.segments;
-        const relevantMoments = v.isSegment
-          ? (sourceAnalysis.keyMoments ?? []).filter(
-              (m) => m.timestampSeconds >= (v.startSeconds ?? 0) && m.timestampSeconds <= (v.endSeconds ?? Infinity),
-            )
-          : (sourceAnalysis.keyMoments ?? []);
-
-        const topicsForDigest = relevantTopics.length > 0 ? relevantTopics : sourceAnalysis.topics;
-
-        const enriched: EnrichedContentDigest = {
+        enrichedDigests.push({
           contentId: v.id,
           contentTitle: v.title ?? "Untitled",
           contentType: "video",
-          keyConcepts: topicsForDigest.map((t) => t.label),
-          skillsIntroduced: topicsForDigest.flatMap((t) => t.subtopics ?? []).slice(0, 5),
-          memorableExamples: relevantMoments
-            .filter((m) => m.significance === "high")
-            .map((m) => m.description)
-            .slice(0, 3),
+          keyConcepts: topics.map((t) => t.label),
+          skillsIntroduced: topics.flatMap((t) => t.subtopics ?? []).slice(0, 5),
+          memorableExamples: keyMoments.filter((m) => m.significance === "high").map((m) => m.description).slice(0, 3),
           difficultyLevel: "intermediate",
-          summary: v.isSegment
-            ? `${v.title}: ${topicsForDigest.map((t) => t.label).join(", ")}`
-            : sourceAnalysis.summary,
-          segments: relevantSegments,
-          topics: topicsForDigest,
-          keyMoments: relevantMoments,
-          durationSeconds: v.isSegment
-            ? (v.endSeconds ?? 0) - (v.startSeconds ?? 0)
-            : sourceAnalysis.durationSeconds,
-        };
-        enrichedDigests.push(enriched);
-      } else {
-        // No analysis — needs LLM extraction
+          summary: a.summary,
+          segments,
+          topics,
+          keyMoments,
+          durationSeconds: a.durationSeconds ?? undefined,
+        } as EnrichedContentDigest);
+      } else if (v.transcript && v.transcript.length >= 50) {
+        // Has transcript but no analysis — needs LLM extraction
         videosNeedingLLMExtraction.push({
           contentId: v.id,
           contentTitle: v.title ?? "Untitled",
           text: v.transcript,
           contentType: "video",
         });
+      } else {
+        // No transcript and no analysis — title-only fallback
+        enrichedDigests.push({
+          contentId: v.id,
+          contentTitle: v.title ?? "Untitled",
+          contentType: "video",
+          keyConcepts: [v.title ?? "Video content"],
+          skillsIntroduced: [],
+          memorableExamples: [],
+          difficultyLevel: "intermediate",
+          summary: `Uploaded video: ${v.title ?? "Untitled"}`,
+        } as ContentDigest);
       }
+    }
+
+    // ── Diagnostic: log digest routing decisions ──
+    const digestWithAnalysis = videosForPipeline.filter((v) => v.analysis).length;
+    const withTranscriptOnly = videosNeedingLLMExtraction.length;
+    const titleOnlyFallback = videosForPipeline.length - digestWithAnalysis - withTranscriptOnly;
+    console.info(`[generate-async] ═══ DIGEST ROUTING ═══`);
+    console.info(`[generate-async]   Existing analysis → enriched digest: ${digestWithAnalysis}`);
+    console.info(`[generate-async]   Transcript → LLM extraction: ${withTranscriptOnly}`);
+    console.info(`[generate-async]   Title-only fallback (no transcript, no analysis): ${titleOnlyFallback}`);
+    for (const item of videosNeedingLLMExtraction) {
+      console.info(`[generate-async]   LLM EXTRACT: "${item.contentTitle}" | text=${item.text ? `${item.text.length} chars` : "NULL"} | preview="${(item.text ?? "").slice(0, 120)}..."`);
     }
 
     // Artifacts always go through LLM extraction
@@ -486,9 +426,6 @@ async function processGenerationJob(jobId: string, programId: string) {
       aiLogger.extractionStart(programId, allForExtraction.length);
       const extractionTimer = createTimer();
 
-      // Progress callback is intentionally synchronous (no DB call) — holding a
-      // Prisma connection open across an LLM call exhausts the pool.
-      // A single DB write happens after all extraction completes (line below).
       const llmDigests = await extractContentDigests(
         allForExtraction,
         (completed, total) => {
@@ -498,64 +435,111 @@ async function processGenerationJob(jobId: string, programId: string) {
       enrichedDigests.push(...llmDigests);
       aiLogger.extractionSuccess(programId, extractionTimer.elapsed(), llmDigests.length);
     } else {
-      console.info(`[generate-async] All videos have Gemini analysis — skipping LLM extraction`);
-    }
-
-    // Add minimal digests for Mux-only uploads (no transcript/analysis available)
-    for (const v of muxOnlyVideos) {
-      enrichedDigests.push({
-        contentId: v.id,
-        contentTitle: v.title ?? "Untitled",
-        contentType: "video",
-        keyConcepts: [v.title ?? "Video content"],
-        skillsIntroduced: [],
-        memorableExamples: [],
-        difficultyLevel: "intermediate",
-        summary: `Uploaded video: ${v.title ?? "Untitled"}`,
-      } as ContentDigest);
+      console.info(`[generate-async] All content has existing analysis — skipping LLM extraction`);
     }
 
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { progress: 55 },
+      data: { progress: 45 },
     });
 
-    // ── Step 3: LLM Generation (55-85%) ──
+    // ══════════════════════════════════════════════════════════════════════════
+    // ── Step 2.5: Pre-compute clip distribution (45%) ──
+    // Deterministically assigns topic clips from Gemini analysis to lessons
+    // so the LLM gets a mandatory assignment plan instead of guessing.
+    // ══════════════════════════════════════════════════════════════════════════
+    const enrichedOnly = enrichedDigests.filter(
+      (d): d is EnrichedContentDigest => "topics" in d && ((d as EnrichedContentDigest).topics?.length ?? 0) > 0,
+    );
+    const basicOnly = enrichedDigests.filter(
+      (d) => !("topics" in d) || !((d as EnrichedContentDigest).topics?.length),
+    );
+
+    let clipDistributionPlan: DistributionPlan | undefined;
+
+    // When AI decides, use video count as baseline for clip distribution
+    // (the LLM will determine the final lesson count based on content)
+    const effectiveWeeks = program.aiStructured
+      ? Math.max(2, videosForPipeline.length)
+      : program.durationWeeks;
+
+    if (enrichedOnly.length > 0) {
+      clipDistributionPlan = distributeClipsToLessons(
+        enrichedOnly,
+        basicOnly,
+        effectiveWeeks,
+        1, // sessionsPerWeek
+      );
+
+      console.info(`[generate-async] ═══ CLIP DISTRIBUTION ═══`);
+      console.info(`[generate-async]   Total clips: ${clipDistributionPlan.totalClips} across ${clipDistributionPlan.lessons.length} lessons`);
+      console.info(`[generate-async]   Total duration: ${Math.round(clipDistributionPlan.totalDurationSeconds / 60)}min`);
+      for (const lesson of clipDistributionPlan.lessons) {
+        console.info(`[generate-async]   Lesson ${lesson.lessonIndex + 1}: ${lesson.clips.length} clip(s), ${Math.round(lesson.totalDurationSeconds / 60)}min — [${lesson.clips.map((c) => `"${c.topicLabel}"`).join(", ")}]`);
+      }
+      for (const w of clipDistributionPlan.warnings) {
+        console.warn(`[generate-async]   WARNING: ${w}`);
+      }
+    } else {
+      console.info(`[generate-async] No enriched digests — skipping clip distribution (LLM will assign freely)`);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ── Step 3: LLM Generation (45-85%) ──
+    // ══════════════════════════════════════════════════════════════════════════
     checkDeadline("generating");
     await prisma.generationJob.update({
       where: { id: jobId },
-      data: { stage: "generating", progress: 55 },
+      data: { stage: "generating", progress: 45 },
     });
 
-    // Build lookup maps
-    const videoMap = new Map(videosForPipeline.map((v) => [v.id, v]));
-    const artifactMap = new Map(usableArtifacts.map((a) => [a.id, a]));
+    // Build a single flat content grouping (clustering removed — LLM handles grouping)
+    const allContentIds = [
+      ...videosForPipeline.map((v) => v.id),
+      ...usableArtifacts.map((a) => a.id),
+    ];
+    const allContentTitles = [
+      ...videosForPipeline.map((v) => v.title ?? "Untitled"),
+      ...usableArtifacts.map((a) => a.originalFilename),
+    ];
+    const allContentTranscripts = [
+      ...videosForPipeline.map((v) => v.transcript ?? ""),
+      ...usableArtifacts.map((a) => a.extractedText ?? ""),
+    ];
+    const allContentTypes: ("video" | "document")[] = [
+      ...videosForPipeline.map((): "video" => "video"),
+      ...usableArtifacts.map((): "document" => "document"),
+    ];
 
-    const clusterData = clusters.map((c) => ({
-      clusterId: c.clusterId,
-      contentIds: c.contentIds,
-      contentTitles: c.contentIds.map((cid) => {
-        const video = videoMap.get(cid);
-        if (video) return video.title ?? "Untitled";
-        const artifact = artifactMap.get(cid);
-        if (artifact) return artifact.originalFilename;
-        return "Untitled";
-      }),
-      contentTranscripts: c.contentIds.map((cid) => {
-        const video = videoMap.get(cid);
-        if (video) return video.transcript ?? "";
-        const artifact = artifactMap.get(cid);
-        if (artifact) return artifact.extractedText ?? "";
-        return "";
-      }),
-      contentTypes: c.contentIds.map((cid): "video" | "document" =>
-        videoIdSet.has(cid) ? "video" : "document"
-      ),
-      summary: `Group of ${c.contentIds.length} content source(s)`,
-    }));
+    const clusterData = [{
+      clusterId: 0,
+      contentIds: allContentIds,
+      contentTitles: allContentTitles,
+      contentTranscripts: allContentTranscripts,
+      contentTypes: allContentTypes,
+      summary: `All ${allContentIds.length} content source(s)`,
+    }];
+
+    const hasVideoAnalysis = enrichedDigests.some(
+      (d) => "topics" in d && (d as EnrichedContentDigest).topics?.length > 0,
+    );
+
+    // ── Diagnostic: log what the LLM will receive ──
+    console.info(`[generate-async] ═══ LLM INPUT SUMMARY ═══`);
+    console.info(`[generate-async]   Provider: ${process.env.LLM_PROVIDER || "stub"}`);
+    console.info(`[generate-async]   hasVideoAnalysis: ${hasVideoAnalysis}`);
+    console.info(`[generate-async]   Total digests: ${enrichedDigests.length}`);
+    for (const d of enrichedDigests) {
+      const isEnriched = "topics" in d && (d as EnrichedContentDigest).topics?.length > 0;
+      console.info(`[generate-async]   DIGEST: "${d.contentTitle}" | type=${d.contentType} | enriched=${isEnriched} | summary="${d.summary.slice(0, 150)}..." | concepts=[${d.keyConcepts.join(", ")}]`);
+    }
+    console.info(`[generate-async]   Transcripts in cluster data: ${allContentTranscripts.filter((t) => t.length > 0).length}/${allContentTranscripts.length}`);
+    for (let i = 0; i < allContentTitles.length; i++) {
+      console.info(`[generate-async]   CLUSTER CONTENT[${i}]: "${allContentTitles[i]}" | transcript=${allContentTranscripts[i].length} chars | preview="${allContentTranscripts[i].slice(0, 100)}..."`);
+    }
 
     aiLogger.generationStart(programId, {
-      clusterCount: clusters.length,
+      clusterCount: 1,
       durationWeeks: program.durationWeeks,
     });
 
@@ -572,6 +556,8 @@ async function processGenerationJob(jobId: string, programId: string) {
       clusters: clusterData,
       contentDigests: enrichedDigests,
       hasVideoAnalysis,
+      clipDistributionPlan,
+      aiStructured: program.aiStructured,
     });
 
     await prisma.generationJob.update({
@@ -580,10 +566,34 @@ async function processGenerationJob(jobId: string, programId: string) {
     });
 
     // Validate
-    const validated = ProgramDraftSchema.safeParse(draft);
+    let validated = ProgramDraftSchema.safeParse(draft);
     if (!validated.success) {
       aiLogger.validationFailure(programId, validated.error.issues.length);
       throw new Error(`Schema validation failed: ${JSON.stringify(validated.error.issues)}`);
+    }
+
+    // Post-validate clip distribution — repair if LLM deviated from the plan
+    if (clipDistributionPlan && enrichedOnly.length > 0) {
+      const clipValidation = validateAndFixClipDistribution(
+        validated.data,
+        clipDistributionPlan,
+        enrichedOnly,
+      );
+
+      if (!clipValidation.valid) {
+        console.warn(`[generate-async] Clip distribution validation failed: ${clipValidation.errors.join("; ")}`);
+        if (clipValidation.fixedDraft) {
+          const revalidated = ProgramDraftSchema.safeParse(clipValidation.fixedDraft);
+          if (revalidated.success) {
+            validated = revalidated;
+            console.info(`[generate-async] Applied programmatic clip fixes — draft repaired`);
+          } else {
+            console.warn(`[generate-async] Clip fix produced invalid draft — using original LLM output`);
+          }
+        }
+      } else {
+        console.info(`[generate-async] Clip distribution validation passed`);
+      }
     }
 
     await prisma.generationJob.update({
