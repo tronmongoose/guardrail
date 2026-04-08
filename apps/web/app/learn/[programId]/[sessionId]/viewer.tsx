@@ -51,6 +51,7 @@ export interface ViewerOverlay {
 
 export interface SessionViewerProps {
   programId: string;
+  programTitle?: string;
   session: {
     id: string;
     title: string;
@@ -72,6 +73,7 @@ type PlaybackState = "LOADING" | "INTRO" | "PLAYING" | "TRANSITIONING" | "OUTRO"
 
 export function SessionViewer({
   programId,
+  programTitle,
   session,
   clips,
   overlays,
@@ -199,6 +201,7 @@ export function SessionViewer({
     >
       <ViewerNav
         programId={programId}
+        programTitle={programTitle}
         sessionTitle={session.title}
         currentClip={currentClipIndex}
         totalClips={clips.length}
@@ -211,68 +214,16 @@ export function SessionViewer({
           {hasClips ? (
             <div className="relative w-full">
               {currentClip.muxPlaybackId ? (
-                // Mux-hosted video (ready)
+                // Mux-hosted video — with timestamp-based clip playback
                 <MuxVideoPlayer
                   key={currentClip.id}
                   playbackId={currentClip.muxPlaybackId}
                   tokens={currentClip.muxToken ? { playback: currentClip.muxToken } : undefined}
                   title={currentClip.title}
+                  startSeconds={currentClip.startSeconds}
+                  endSeconds={currentClip.endSeconds}
+                  onClipEnd={handleClipEnd}
                   className="w-full"
-                />
-              ) : currentClip.muxStatus === "waiting" ? (
-                // Mux video still processing
-                <div
-                  className="flex aspect-video w-full items-center justify-center gap-3"
-                  style={{ backgroundColor: "var(--token-color-bg-elevated)" }}
-                >
-                  <svg
-                    className="h-5 w-5 animate-spin opacity-60"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  <p
-                    className="text-sm"
-                    style={{ color: "var(--token-color-text-secondary)" }}
-                  >
-                    Video processing, check back shortly.
-                  </p>
-                </div>
-              ) : currentClip.muxStatus === "errored" ? (
-                // Mux processing error
-                <div
-                  className="flex aspect-video w-full items-center justify-center"
-                  style={{ backgroundColor: "var(--token-color-bg-elevated)" }}
-                >
-                  <p className="text-sm" style={{ color: "var(--token-color-error, #ef4444)" }}>
-                    Video processing failed. Please contact your coach.
-                  </p>
-                </div>
-              ) : currentClip.blobUrl ? (
-                // Legacy Vercel Blob video
-                <video
-                  key={currentClip.id}
-                  src={currentClip.blobUrl}
-                  className="w-full aspect-video bg-black"
-                  controls
-                  playsInline
-                  preload="metadata"
-                  onLoadedMetadata={handlePlayerReady}
-                  onEnded={handleClipEnd}
-                  onTimeUpdate={(e) => handleTimeUpdate(e.currentTarget.currentTime)}
                 />
               ) : (
                 // YouTube video (default)

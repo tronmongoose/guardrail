@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { getCurrentUser, getEntitlement } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { resolveTokens } from "@/lib/resolve-tokens";
-import { isMuxSigningConfigured, signMuxPlaybackId } from "@/lib/mux";
+import { isMuxSigningConfigured, signMuxPlaybackId, getMux, isMuxConfigured } from "@/lib/mux";
 import { SkinThemeProvider } from "@/components/skins/SkinThemeProvider";
 import { SessionViewer } from "./viewer";
 
@@ -147,22 +147,50 @@ export default async function SessionPage({
     <SkinThemeProvider tokens={tokens}>
       <SessionViewer
         programId={programId}
+        programTitle={program.title}
         session={{
           id: session.id,
           title: session.title,
           summary: session.summary,
           keyTakeaways: session.keyTakeaways,
         }}
-        clips={finalClips.map((c) => {
+        clips={await Promise.all(finalClips.map(async (c) => {
           const ytVideo = c.youtubeVideo;
 
           // muxPlaybackId is the single source of truth for player selection.
           // Action-level fields take priority (direct Action uploads); fall back to
           // YouTubeVideo-level fields (SessionDetailPanel / wizard uploads).
-          const muxPlaybackId =
+          let muxPlaybackId =
             (c as { muxPlaybackId?: string }).muxPlaybackId ??
             ytVideo.muxPlaybackId ??
             undefined;
+
+          // If muxPlaybackId is missing but the video has a Mux upload, resolve it
+          // from the Mux API. This handles local dev (no webhooks) and race conditions.
+          const muxUploadIdRaw = (ytVideo as { muxUploadId?: string | null }).muxUploadId;
+          if (!muxPlaybackId && muxUploadIdRaw && isMuxConfigured()) {
+            try {
+              const mux = getMux();
+              let assetId = (ytVideo as { muxAssetId?: string | null }).muxAssetId;
+              if (!assetId) {
+                const upload = await mux.video.uploads.retrieve(muxUploadIdRaw);
+                assetId = upload.asset_id ?? null;
+              }
+              if (assetId) {
+                const asset = await mux.video.assets.retrieve(assetId);
+                if (asset.status === "ready" && asset.playback_ids?.[0]?.id) {
+                  muxPlaybackId = asset.playback_ids[0].id;
+                  // Persist for next load
+                  await prisma.youTubeVideo.update({
+                    where: { id: ytVideo.id },
+                    data: { muxPlaybackId, muxAssetId: assetId, muxStatus: "ready", url: `https://stream.mux.com/${muxPlaybackId}` },
+                  });
+                }
+              }
+            } catch {
+              // Non-fatal — video will show as "processing"
+            }
+          }
 
           // muxUploadId lives on YouTubeVideo for panel/wizard uploads.
           const muxUploadId = (ytVideo as { muxUploadId?: string | null }).muxUploadId;
@@ -176,9 +204,7 @@ export default async function SessionPage({
               ? "waiting"
               : undefined);
 
-          // Only set blobUrl when the video has no Mux context at all.
-          // Never set it for in-progress Mux uploads (muxUploadId set) or
-          // completed ones (muxPlaybackId set) — those must render via MuxVideoPlayer.
+          // Set blobUrl for legacy Blob-uploaded videos (no Mux context).
           const blobUrl =
             !muxPlaybackId &&
             !muxUploadId &&
@@ -203,7 +229,7 @@ export default async function SessionPage({
             transitionType: c.transitionType,
             transitionDurationMs: c.transitionDurationMs,
           };
-        })}
+        }))}
         overlays={overlays.map((o) => ({
           id: o.id,
           type: o.type,

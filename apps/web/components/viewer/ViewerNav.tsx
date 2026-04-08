@@ -4,6 +4,7 @@ import Link from "next/link";
 
 export interface ViewerNavProps {
   programId: string;
+  programTitle?: string;
   sessionTitle: string;
   currentClip: number;
   totalClips: number;
@@ -11,6 +12,7 @@ export interface ViewerNavProps {
 
 export function ViewerNav({
   programId,
+  programTitle,
   sessionTitle,
   currentClip,
   totalClips,
@@ -36,8 +38,35 @@ export function ViewerNav({
 
       <div className="mx-2 h-4 w-px" style={{ backgroundColor: "var(--token-color-border-subtle)" }} />
 
+      {/* Desktop: breadcrumb with program title */}
+      <div className="hidden md:flex flex-1 items-center gap-1.5 min-w-0">
+        {programTitle && (
+          <>
+            <span
+              className="text-xs truncate max-w-[200px] flex-shrink"
+              style={{ color: "var(--token-color-text-secondary)" }}
+            >
+              {programTitle}
+            </span>
+            <span
+              className="text-xs flex-shrink-0"
+              style={{ color: "var(--token-color-text-secondary)", opacity: 0.5 }}
+            >
+              /
+            </span>
+          </>
+        )}
+        <p
+          className="truncate text-sm font-medium"
+          style={{ color: "var(--token-color-text-primary)" }}
+        >
+          {sessionTitle}
+        </p>
+      </div>
+
+      {/* Mobile: session title only */}
       <p
-        className="flex-1 truncate text-sm font-medium"
+        className="flex-1 truncate text-sm font-medium md:hidden"
         style={{ color: "var(--token-color-text-primary)" }}
       >
         {sessionTitle}

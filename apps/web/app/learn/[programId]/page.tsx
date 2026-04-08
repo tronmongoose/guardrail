@@ -15,6 +15,7 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
   const program = await prisma.program.findUnique({
     where: { id: programId },
     include: {
+      creator: { select: { name: true } },
       weeks: {
         orderBy: { weekNumber: "asc" },
         include: {
@@ -26,6 +27,15 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
                 include: {
                   youtubeVideo: true,
                   progress: { where: { userId: user.id } },
+                },
+              },
+              compositeSession: {
+                include: {
+                  clips: {
+                    orderBy: { orderIndex: "asc" },
+                    take: 1,
+                    include: { youtubeVideo: { select: { muxPlaybackId: true, thumbnailUrl: true, videoId: true, title: true, url: true } } },
+                  },
                 },
               },
             },
@@ -88,6 +98,9 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
         pacingMode={program.pacingMode}
         skinId={program.skinId}
         skinCSSVars={skinCSSVars}
+        creatorName={program.creator.name}
+        targetTransformation={program.targetTransformation}
+        durationWeeks={program.durationWeeks}
       />
     </SkinThemeProvider>
   );

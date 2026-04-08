@@ -25,6 +25,10 @@ interface ActionData {
 
 type PacingMode = "DRIP_BY_WEEK" | "UNLOCK_ON_COMPLETE";
 
+interface CompositeClipData {
+  youtubeVideo: { muxPlaybackId: string | null; thumbnailUrl: string | null; videoId: string; title: string | null; url: string } | null;
+}
+
 interface Props {
   program: {
     id: string;
@@ -37,6 +41,7 @@ interface Props {
         id: string;
         title: string;
         actions: ActionData[];
+        compositeSession?: { clips: CompositeClipData[] } | null;
       }[];
     }[];
   };
@@ -47,6 +52,9 @@ interface Props {
   pacingMode: PacingMode;
   skinId: string;
   skinCSSVars: Record<string, string>;
+  creatorName: string | null;
+  targetTransformation: string | null;
+  durationWeeks: number;
 }
 
 export function LearnerTimeline({
@@ -56,6 +64,9 @@ export function LearnerTimeline({
   currentWeek,
   completedWeeks,
   pacingMode,
+  creatorName,
+  targetTransformation,
+  durationWeeks,
 }: Props) {
   const { showToast } = useToast();
 
@@ -83,6 +94,9 @@ export function LearnerTimeline({
 
   // Track which action is expanded (for mobile detail view)
   const [expandedAction, setExpandedAction] = useState<string | null>(null);
+
+  // Track which sessions' composite videos have been watched (local state)
+  const [watchedSessions, setWatchedSessions] = useState<Set<string>>(() => new Set());
 
   // Celebration overlay state (week milestones only — not final week)
   const [celebration, setCelebration] = useState<{
@@ -217,13 +231,27 @@ export function LearnerTimeline({
     return map;
   }, [program.weeks, completedActions]);
 
-  // SVG arc for progress circle
+  // SVG arc for progress circle (nav — small)
   const progressArc = useMemo(() => {
     const r = 18;
     const circ = 2 * Math.PI * r;
     const offset = circ - (progressPercent / 100) * circ;
     return { r, circ, offset };
   }, [progressPercent]);
+
+  // SVG arc for sidebar progress ring (desktop — large)
+  const sidebarArc = useMemo(() => {
+    const r = 36;
+    const circ = 2 * Math.PI * r;
+    const offset = circ - (progressPercent / 100) * circ;
+    return { r, circ, offset };
+  }, [progressPercent]);
+
+  // Formatted enrollment date
+  const startedDate = useMemo(() => {
+    const d = new Date(enrolledAt);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }, [enrolledAt]);
 
   return (
     <div
@@ -238,7 +266,7 @@ export function LearnerTimeline({
           borderBottom: "1px solid var(--token-color-border-subtle)",
         }}
       >
-        <div className="flex items-center justify-between px-4 py-3 max-w-xl mx-auto">
+        <div className="flex items-center justify-between px-4 py-3 max-w-xl md:max-w-5xl mx-auto">
           <Link
             href="/"
             className="text-sm font-bold"
@@ -246,7 +274,8 @@ export function LearnerTimeline({
           >
             &larr;
           </Link>
-          <div className="flex-1 text-center px-4">
+          {/* Mobile: centered title */}
+          <div className="flex-1 text-center px-4 md:hidden">
             <h1
               className="text-sm font-semibold truncate heading-display"
               style={{ color: "var(--token-color-text-primary)" }}
@@ -254,6 +283,8 @@ export function LearnerTimeline({
               {program.title}
             </h1>
           </div>
+          {/* Desktop: spacer (title is in sidebar) */}
+          <div className="hidden md:block flex-1" />
           {/* Progress circle */}
           <div className="relative w-10 h-10 flex-shrink-0">
             <svg className="w-10 h-10 -rotate-90" viewBox="0 0 40 40">
@@ -290,19 +321,178 @@ export function LearnerTimeline({
         </div>
       </nav>
 
-      <main className="max-w-xl mx-auto px-4 py-6 pb-24 space-y-4">
-        {/* Progress summary */}
-        <div className="text-center mb-2">
-          <p
-            className="text-xs"
-            style={{ color: "var(--token-color-text-secondary)" }}
-          >
-            {completedCount} of {totalActions} actions complete
-            {isProgramComplete && " — You did it!"}
-          </p>
-        </div>
+      {/* Layout wrapper: sidebar on desktop, single column on mobile */}
+      <div className="md:flex md:gap-8 md:max-w-5xl md:mx-auto md:px-6 md:py-8">
+        {/* Desktop sticky sidebar */}
+        <aside
+          className="hidden md:block w-72 flex-shrink-0 sticky top-16 self-start h-fit max-h-[calc(100vh-5rem)] overflow-y-auto space-y-6 pb-8"
+        >
+          {/* Program identity */}
+          <div>
+            <h1
+              className="text-lg font-bold leading-tight mb-1"
+              style={{ color: "var(--token-color-text-primary)" }}
+            >
+              {program.title}
+            </h1>
+            {creatorName && (
+              <p
+                className="text-xs"
+                style={{ color: "var(--token-color-text-secondary)" }}
+              >
+                by {creatorName}
+              </p>
+            )}
+          </div>
 
-        {/* Week sections */}
+          {targetTransformation && (
+            <p
+              className="text-sm leading-relaxed line-clamp-3"
+              style={{ color: "var(--token-color-text-secondary)" }}
+            >
+              {targetTransformation}
+            </p>
+          )}
+
+          {/* Large progress ring */}
+          <div className="flex flex-col items-center py-2">
+            <div className="relative w-20 h-20 mb-2">
+              <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                <circle
+                  cx="40" cy="40" r={sidebarArc.r}
+                  fill="none"
+                  stroke="var(--token-color-border-subtle)"
+                  strokeWidth="3"
+                />
+                <circle
+                  cx="40" cy="40" r={sidebarArc.r}
+                  fill="none" stroke="url(#sidebarProgressGrad)" strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeDasharray={sidebarArc.circ}
+                  strokeDashoffset={sidebarArc.offset}
+                  className="transition-all duration-700"
+                />
+                <defs>
+                  <linearGradient id="sidebarProgressGrad">
+                    <stop offset="0%" stopColor="var(--token-color-accent)" />
+                    <stop offset="100%" stopColor="var(--token-color-semantic-action-reflect)" />
+                  </linearGradient>
+                </defs>
+              </svg>
+              <span
+                className="absolute inset-0 flex items-center justify-center text-sm font-bold"
+                style={{ color: "var(--token-color-text-primary)" }}
+              >
+                {progressPercent}%
+              </span>
+            </div>
+            <p
+              className="text-xs"
+              style={{ color: "var(--token-color-text-secondary)" }}
+            >
+              {completedCount} of {totalActions} actions
+            </p>
+          </div>
+
+          {/* Per-week mini progress */}
+          <div className="space-y-2">
+            {program.weeks.map((week) => {
+              const isUnlocked = week.weekNumber <= unlockedWeekNumber;
+              const pct = weekCompletionMap[week.id] ?? 0;
+              const isComplete = pct === 100;
+              return (
+                <div key={week.id} className="flex items-center gap-2" style={{ opacity: isUnlocked ? 1 : 0.4 }}>
+                  <span
+                    className="text-[11px] w-16 truncate flex-shrink-0"
+                    style={{ color: "var(--token-color-text-secondary)" }}
+                  >
+                    {groupLabel} {week.weekNumber}
+                  </span>
+                  <div
+                    className="flex-1 h-1.5 rounded-full overflow-hidden"
+                    style={{ backgroundColor: "var(--token-comp-progress-track)" }}
+                  >
+                    {isUnlocked && (
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${pct}%`,
+                          background: "var(--token-comp-progress-fill)",
+                        }}
+                      />
+                    )}
+                  </div>
+                  {isComplete && (
+                    <svg className="w-3.5 h-3.5 flex-shrink-0" style={{ color: "var(--token-color-accent)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                  {!isUnlocked && (
+                    <svg className="w-3 h-3 flex-shrink-0" style={{ color: "var(--token-color-text-secondary)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                    </svg>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Started date */}
+          <p
+            className="text-[11px]"
+            style={{ color: "var(--token-color-text-secondary)", opacity: 0.6 }}
+          >
+            Started {startedDate}
+          </p>
+        </aside>
+
+        {/* Main content column */}
+        <main className="flex-1 max-w-xl md:max-w-2xl mx-auto md:mx-0 px-4 md:px-0 py-6 md:py-0 pb-24 space-y-4">
+          {/* Mobile program hero card */}
+          <div
+            className="p-4 mb-2 md:hidden"
+            style={{
+              borderRadius: "var(--token-radius-lg)",
+              backgroundColor: "var(--token-color-bg-elevated)",
+              border: "1px solid var(--token-color-border-subtle)",
+            }}
+          >
+            <h2
+              className="text-base font-bold leading-tight mb-0.5"
+              style={{ color: "var(--token-color-text-primary)" }}
+            >
+              {program.title}
+            </h2>
+            {creatorName && (
+              <p
+                className="text-xs mb-1"
+                style={{ color: "var(--token-color-text-secondary)" }}
+              >
+                by {creatorName}
+              </p>
+            )}
+            {targetTransformation && (
+              <p
+                className="text-xs leading-relaxed line-clamp-2 mt-1"
+                style={{ color: "var(--token-color-text-secondary)", opacity: 0.8 }}
+              >
+                {targetTransformation}
+              </p>
+            )}
+          </div>
+
+          {/* Progress summary (mobile only — desktop has sidebar ring) */}
+          <div className="text-center mb-2 md:hidden">
+            <p
+              className="text-xs"
+              style={{ color: "var(--token-color-text-secondary)" }}
+            >
+              {completedCount} of {totalActions} actions complete
+              {isProgramComplete && " — You did it!"}
+            </p>
+          </div>
+
+          {/* Week sections */}
         {program.weeks.map((week) => {
           const isUnlocked = week.weekNumber <= unlockedWeekNumber;
           const weekActions = week.sessions.flatMap((s) => s.actions);
@@ -345,7 +535,7 @@ export function LearnerTimeline({
               <div
                 style={{
                   height: "1px",
-                  background: "linear-gradient(90deg, #AD46FF, #F6339A)",
+                  background: "linear-gradient(90deg, var(--token-color-accent), var(--token-color-accent-secondary, var(--token-color-accent)))",
                   marginBottom: "12px",
                   opacity: isUnlocked ? 1 : 0.3,
                 }}
@@ -427,6 +617,151 @@ export function LearnerTimeline({
                     )}
 
                     <div className="space-y-2">
+                      {/* Watch step: action-card style with completion circle */}
+                      {session.compositeSession?.clips?.[0]?.youtubeVideo &&
+                        !session.actions.some((a) => a.type === "WATCH" && a.youtubeVideo) && (() => {
+                          const clipVid = session.compositeSession!.clips[0].youtubeVideo!;
+                          const watchKey = `watch:${session.id}`;
+                          const watchDone = watchedSessions.has(session.id);
+                          const isWatchExpanded = expandedAction === watchKey;
+
+                          const handleWatchComplete = () => {
+                            setWatchedSessions((prev) => new Set(prev).add(session.id));
+                            setExpandedAction(null);
+                          };
+
+                          return (
+                            <div
+                              className={`border transition-all duration-300 overflow-hidden ${
+                                watchDone ? "opacity-70" : ""
+                              }`}
+                              style={{
+                                borderRadius: "var(--token-radius-lg)",
+                                backgroundColor: watchDone
+                                  ? "var(--token-color-bg-default)"
+                                  : "var(--token-color-bg-elevated)",
+                                borderColor: "var(--token-color-border-subtle)",
+                              }}
+                            >
+                              {/* Compact row — same layout as action cards */}
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                  if (!watchDone) setExpandedAction(isWatchExpanded ? null : watchKey);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    if (!watchDone) setExpandedAction(isWatchExpanded ? null : watchKey);
+                                  }
+                                }}
+                                className="w-full flex items-center gap-3 py-3 px-4 text-left cursor-pointer"
+                              >
+                                {/* Completion circle */}
+                                <CompletionCircle
+                                  done={watchDone}
+                                  isSaving={false}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (!watchDone) handleWatchComplete();
+                                  }}
+                                />
+
+                                {/* Watch info */}
+                                <div className="flex-1 min-w-0">
+                                  <p
+                                    className={`text-sm font-medium truncate ${watchDone ? "line-through" : ""}`}
+                                    style={{
+                                      color: watchDone
+                                        ? "var(--token-color-text-secondary)"
+                                        : "var(--token-color-text-primary)",
+                                    }}
+                                  >
+                                    {clipVid.title || session.title}
+                                  </p>
+                                  <span
+                                    className="text-[10px] uppercase tracking-wider font-semibold"
+                                    style={getActionTypeColor("WATCH")}
+                                  >
+                                    Watch
+                                  </span>
+                                </div>
+
+                                {/* Expand chevron */}
+                                {!watchDone && (
+                                  <svg
+                                    className={`w-4 h-4 transition-transform duration-200 ${isWatchExpanded ? "rotate-180" : ""}`}
+                                    style={{ color: "var(--token-color-text-secondary)" }}
+                                    fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                  >
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                  </svg>
+                                )}
+                              </div>
+
+                              {/* Expanded: video player + complete button */}
+                              {isWatchExpanded && !watchDone && (
+                                <div className="px-3 pb-4 pt-1 space-y-3 animate-fade-in">
+                                  {clipVid.muxPlaybackId ? (
+                                    <MuxVideoPlayer
+                                      playbackId={clipVid.muxPlaybackId}
+                                      title={clipVid.title || session.title}
+                                      onClipEnd={handleWatchComplete}
+                                    />
+                                  ) : clipVid.url.includes("blob.vercel-storage.com") ? (
+                                    <div
+                                      className="aspect-video overflow-hidden"
+                                      style={{
+                                        borderRadius: "var(--token-comp-video-radius)",
+                                        border: "var(--token-comp-video-border)",
+                                      }}
+                                    >
+                                      <video
+                                        src={clipVid.url}
+                                        title={clipVid.title || session.title}
+                                        className="w-full h-full"
+                                        controls
+                                        playsInline
+                                        onEnded={handleWatchComplete}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div
+                                      className="aspect-video overflow-hidden"
+                                      style={{
+                                        borderRadius: "var(--token-comp-video-radius)",
+                                        border: "var(--token-comp-video-border)",
+                                      }}
+                                    >
+                                      <iframe
+                                        src={`https://www.youtube.com/embed/${clipVid.videoId}?rel=0&modestbranding=1&iv_load_policy=3`}
+                                        title={clipVid.title || session.title}
+                                        className="w-full h-full"
+                                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                        allowFullScreen
+                                      />
+                                    </div>
+                                  )}
+
+                                  {/* Mark as watched button */}
+                                  <button
+                                    onClick={handleWatchComplete}
+                                    className="w-full py-2.5 text-sm font-semibold transition border hover:opacity-80"
+                                    style={{
+                                      borderRadius: "var(--token-comp-btn-primary-radius)",
+                                      backgroundColor: "var(--token-color-accent)",
+                                      color: "var(--token-color-text-on-accent, #fff)",
+                                      borderColor: "var(--token-color-accent)",
+                                    }}
+                                  >
+                                    Mark as watched
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       {session.actions.map((action) => {
                         const done = completedActions.has(action.id);
                         const isNext = action.id === nextActionId;
@@ -521,12 +856,7 @@ export function LearnerTimeline({
                                 </p>
                                 <span
                                   className="text-[10px] uppercase tracking-wider font-semibold"
-                                  style={{
-                                    background: "linear-gradient(90deg, #C27AFF 0%, #FB64B6 100%)",
-                                    WebkitBackgroundClip: "text",
-                                    WebkitTextFillColor: "transparent",
-                                    backgroundClip: "text",
-                                  }}
+                                  style={getActionTypeColor(action.type)}
                                 >
                                   {ACTION_TYPE_LABELS[action.type] || action.type}
                                 </span>
@@ -706,7 +1036,8 @@ export function LearnerTimeline({
             </p>
           </div>
         )}
-      </main>
+        </main>
+      </div>
 
       {/* Milestone celebration overlay */}
       {celebration && (
@@ -776,8 +1107,8 @@ export function LearnerTimeline({
               className="px-6 py-2.5 text-sm font-semibold transition"
               style={{
                 borderRadius: "var(--token-comp-btn-primary-radius)",
-                background: "linear-gradient(135deg, #00fff0 0%, #a855f7 100%)",
-                color: "#0a0a0a",
+                backgroundColor: "var(--token-color-accent)",
+                color: "var(--token-color-text-on-accent, #fff)",
                 border: "none",
               }}
             >
@@ -880,8 +1211,8 @@ function ProgramCompleteOverlay({
           />
           <defs>
             <linearGradient id="pcArcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#00fff0" />
-              <stop offset="100%" stopColor="#a855f7" />
+              <stop offset="0%" stopColor="var(--token-color-accent)" />
+              <stop offset="100%" stopColor="var(--token-color-accent-secondary, var(--token-color-accent))" />
             </linearGradient>
           </defs>
         </svg>
@@ -889,7 +1220,7 @@ function ProgramCompleteOverlay({
         <div className="absolute inset-0 flex items-center justify-center">
           <span
             className="animate-label-pop text-sm font-bold"
-            style={{ color: "#00fff0" }}
+            style={{ color: "var(--token-color-accent)" }}
           >
             100%
           </span>
@@ -941,8 +1272,8 @@ function ProgramCompleteOverlay({
           className="block w-full text-center py-2.5 text-sm font-semibold transition hover:opacity-90"
           style={{
             borderRadius: "var(--token-comp-btn-primary-radius)",
-            background: "linear-gradient(135deg, #00fff0 0%, #a855f7 100%)",
-            color: "#0a0a0a",
+            backgroundColor: "var(--token-color-accent)",
+            color: "var(--token-color-text-on-accent, #fff)",
           }}
         >
           Back to Dashboard
