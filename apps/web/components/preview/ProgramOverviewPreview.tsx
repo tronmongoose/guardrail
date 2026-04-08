@@ -4,11 +4,24 @@ import { getActionTypeBg, ACTION_TYPE_LABELS } from "@/lib/action-type-styles";
 import type { WeekData, SessionData } from "@/components/builder";
 
 function getSessionThumbnail(session: SessionData): string | null {
+  const firstClip = session.compositeSession?.clips?.[0];
   const watch = session.actions.find((a) => a.type === "WATCH");
-  if (!watch) return null;
-  const muxId = watch.muxPlaybackId;
+  if (!firstClip && !watch) return null;
+
+  const muxId =
+    firstClip?.youtubeVideo?.muxPlaybackId ??
+    watch?.muxPlaybackId ??
+    watch?.youtubeVideo?.muxPlaybackId ??
+    null;
   if (muxId) return `https://image.mux.com/${muxId}/thumbnail.jpg?time=2&width=640`;
-  return watch.youtubeVideo?.thumbnailUrl ?? null;
+
+  return (
+    firstClip?.youtubeVideo?.thumbnailUrl ??
+    watch?.youtubeVideo?.thumbnailUrl ??
+    (watch?.youtubeVideo?.videoId
+      ? `https://img.youtube.com/vi/${watch.youtubeVideo.videoId}/hqdefault.jpg`
+      : null)
+  );
 }
 
 interface ProgramOverviewPreviewProps {

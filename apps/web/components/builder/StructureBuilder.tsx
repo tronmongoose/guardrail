@@ -25,7 +25,7 @@ export interface ActionData {
   instructions: string | null;
   reflectionPrompt: string | null;
   youtubeVideoId: string | null;
-  youtubeVideo?: { videoId: string; thumbnailUrl: string | null } | null;
+  youtubeVideo?: { videoId: string; thumbnailUrl: string | null; muxPlaybackId?: string | null } | null;
   muxPlaybackId?: string | null;
   orderIndex: number;
 }
@@ -33,7 +33,7 @@ export interface ActionData {
 export interface ClipData {
   id: string;
   youtubeVideoId: string;
-  youtubeVideo?: { id: string; title: string | null; thumbnailUrl: string | null };
+  youtubeVideo?: { id: string; title: string | null; thumbnailUrl: string | null; muxPlaybackId?: string | null };
   startSeconds: number | null;
   endSeconds: number | null;
   orderIndex: number;

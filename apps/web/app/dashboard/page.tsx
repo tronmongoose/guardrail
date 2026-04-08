@@ -88,6 +88,7 @@ function DashboardContent() {
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [hasMetricsAccess, setHasMetricsAccess] = useState(false);
 
   useEffect(() => {
     if (searchParams.get("stripe") === "success") {
@@ -110,9 +111,11 @@ function DashboardContent() {
       fetch("/api/user/onboarding").then((r) => (r.ok ? r.json() : {})),
       fetch("/api/user/metrics").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/admin/check").then((r) => r.json()).catch(() => ({ isAdmin: false })),
+      fetch("/api/metrics/check").then((r) => r.json()).catch(() => ({ hasAccess: false })),
     ])
-      .then(([programsData, userData, metricsData, adminData]) => {
+      .then(([programsData, userData, metricsData, adminData, metricsAccessData]) => {
         if (adminData?.isAdmin) setIsAdmin(true);
+        if (metricsAccessData?.hasAccess) setHasMetricsAccess(true);
         if (
           (!Array.isArray(programsData) || programsData.length === 0) &&
           !(userData as { onboardingComplete?: boolean }).onboardingComplete
@@ -196,6 +199,14 @@ function DashboardContent() {
           Journeyline
         </Link>
         <div className="flex items-center gap-4">
+          {hasMetricsAccess && (
+            <Link
+              href="/dashboard/metrics"
+              className="text-xs px-2 py-1 rounded-full bg-purple-900/40 text-purple-400 font-medium hover:bg-purple-900/60 transition"
+            >
+              Metrics
+            </Link>
+          )}
           {isAdmin && (
             <Link
               href="/admin"

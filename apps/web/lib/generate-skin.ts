@@ -119,6 +119,37 @@ async function callAnthropicForSkin(prompt: string): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Gemini call
+// ---------------------------------------------------------------------------
+
+async function callGeminiForSkin(prompt: string): Promise<string> {
+  const { GEMINI_API_BASE, getGeminiModel } = await import("@guide-rail/ai");
+  const key = process.env.GOOGLE_AI_API_KEY;
+  if (!key) throw new Error("GOOGLE_AI_API_KEY not set");
+
+  const model = getGeminiModel();
+  const res = await fetch(
+    `${GEMINI_API_BASE}/models/${model}:generateContent?key=${key}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.3 },
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Gemini API error ${res.status}: ${body}`);
+  }
+
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+}
+
+// ---------------------------------------------------------------------------
 // JSON extraction + merge
 // ---------------------------------------------------------------------------
 
@@ -167,7 +198,7 @@ export async function generateSkinFromVibe(
     return null;
   }
 
-  if (provider !== "anthropic") {
+  if (provider !== "anthropic" && provider !== "gemini") {
     console.warn(`[SkinGen] Provider "${provider}" not supported for skin generation, skipping`);
     return null;
   }
@@ -176,7 +207,11 @@ export async function generateSkinFromVibe(
 
   let raw: string;
   try {
-    raw = await callAnthropicForSkin(prompt);
+    if (provider === "gemini") {
+      raw = await callGeminiForSkin(prompt);
+    } else {
+      raw = await callAnthropicForSkin(prompt);
+    }
   } catch (err) {
     console.error("[SkinGen] API call failed:", err);
     return null;

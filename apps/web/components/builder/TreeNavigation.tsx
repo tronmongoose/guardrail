@@ -18,6 +18,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { getVideoThumbnailUrl } from "@/lib/video-thumbnail";
 import { Spinner } from "@/components/ui/spinner";
 import type { WeekData, SessionData, YouTubeVideoData } from "./StructureBuilder";
 
@@ -67,6 +68,7 @@ function TreeSessionItem({ session, weekId, videos, isSelected, onSelect }: Tree
 
   const watchAction = session.actions.find((a) => a.type === "WATCH" && a.youtubeVideoId);
   const video = watchAction ? videos.find((v) => v.id === watchAction.youtubeVideoId) : null;
+  const thumbUrl = getVideoThumbnailUrl(video);
 
   return (
     <div
@@ -92,9 +94,9 @@ function TreeSessionItem({ session, weekId, videos, isSelected, onSelect }: Tree
         </svg>
       </button>
 
-      {video?.thumbnailUrl ? (
+      {thumbUrl ? (
         <img
-          src={video.thumbnailUrl}
+          src={thumbUrl}
           alt=""
           className="w-8 h-5 object-cover rounded flex-shrink-0"
         />

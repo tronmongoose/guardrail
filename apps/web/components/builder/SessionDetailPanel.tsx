@@ -20,6 +20,7 @@ import { KeyTakeawaysEditor } from "./KeyTakeawaysEditor";
 import { Spinner } from "@/components/ui/spinner";
 import { AiAssistButton } from "@/components/ui/AiAssistButton";
 import type { SessionData, YouTubeVideoData, WeekData } from "./StructureBuilder";
+import { getVideoThumbnailUrl } from "@/lib/video-thumbnail";
 
 function isUploadedVideo(video: YouTubeVideoData): boolean {
   return (
@@ -535,12 +536,18 @@ export function SessionDetailPanel({
             <div className="space-y-1.5">
               {clips.map((clip, i) => {
                 const clipVideo = clip.youtubeVideo ?? videos.find((v) => v.id === clip.youtubeVideoId);
+                const clipThumb = getVideoThumbnailUrl(clipVideo);
                 return (
                   <div
                     key={clip.id}
                     className="flex items-center gap-3 px-3 py-2 bg-gray-800 rounded-lg border border-gray-700"
                   >
                     <span className="text-xs text-gray-400 w-5 text-right flex-shrink-0">{i + 1}</span>
+                    {clipThumb ? (
+                      <img src={clipThumb} alt="" className="w-10 h-6 object-cover rounded flex-shrink-0" />
+                    ) : (
+                      <div className="w-10 h-6 bg-gray-700 rounded flex-shrink-0" />
+                    )}
                     {clip.transitionType && clip.transitionType !== "NONE" && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-teal-50 text-teal-600 border border-teal-200 flex-shrink-0">
                         {clip.transitionType}
@@ -565,24 +572,22 @@ export function SessionDetailPanel({
         ) : video ? (
           /* Video card */
           <div className="flex items-center gap-4 p-4 bg-gray-900 border border-gray-700 rounded-xl">
-            {video.thumbnailUrl ? (
-              <img
-                src={video.thumbnailUrl}
-                alt=""
-                className="w-28 h-16 rounded-lg object-cover flex-shrink-0"
-              />
-            ) : isUploadedVideo(video) ? (
-              <UploadedVideoThumbnail
-                url={video.url}
-                className="w-28 h-16 rounded-lg flex-shrink-0"
-              />
-            ) : (
-              <div className="w-28 h-16 rounded-lg bg-gray-800 flex-shrink-0 flex items-center justify-center">
-                <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              </div>
-            )}
+            {(() => {
+              const thumbUrl = getVideoThumbnailUrl(video);
+              if (thumbUrl) {
+                return <img src={thumbUrl} alt="" className="w-28 h-16 rounded-lg object-cover flex-shrink-0" />;
+              }
+              if (isUploadedVideo(video)) {
+                return <UploadedVideoThumbnail url={video.url} className="w-28 h-16 rounded-lg flex-shrink-0" />;
+              }
+              return (
+                <div className="w-28 h-16 rounded-lg bg-gray-800 flex-shrink-0 flex items-center justify-center">
+                  <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </div>
+              );
+            })()}
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-white truncate">
                 {video.title || "Untitled Video"}
@@ -642,145 +647,6 @@ export function SessionDetailPanel({
           </div>
         )}
 
-        {/* AI suggestions panel */}
-        {(video || hasClips) && (
-          <div className="rounded-xl border border-teal-800 bg-teal-900/20 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-teal-800">
-              <span className="text-xs font-medium text-teal-700">✨ Suggest from video</span>
-              <div className="flex items-center gap-2">
-                {suggestions && (
-                  <button
-                    onClick={() => setSuggestions(null)}
-                    className="text-xs text-teal-500 hover:text-teal-700 transition"
-                  >
-                    Dismiss
-                  </button>
-                )}
-                <button
-                  onClick={suggestions ? acceptAllSuggestions : fetchSuggestions}
-                  disabled={suggestLoading || analyzingVideo}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                  style={
-                    suggestLoading || analyzingVideo
-                      ? { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", color: "#6b7280" }
-                      : { background: "linear-gradient(135deg, rgba(0,255,200,0.15), rgba(255,0,128,0.15))", border: "1px solid rgba(0,255,200,0.35)", color: "#00ffc8" }
-                  }
-                >
-                  {suggestLoading ? (
-                    <>
-                      <svg className="w-3.5 h-3.5 animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Generating…
-                    </>
-                  ) : suggestions ? (
-                    "Accept all"
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M15 4l5 5L8 21l-5-2 2-5L15 4Z" strokeLinecap="round" strokeLinejoin="round" />
-                        <path d="M3 3l1.5 1.5M3 6h1M6 3v1" strokeLinecap="round" strokeLinejoin="round" />
-                        <path d="M18 13l1 1M19 13v1.5M18 14.5h1.5" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                      Regenerate
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {(suggestError || analyzingVideo) && (
-              <div className="px-4 py-3 space-y-2">
-                {analyzingVideo ? (
-                  <div className="flex items-center gap-2 text-xs text-teal-700">
-                    <svg className="w-3 h-3 animate-spin flex-shrink-0" viewBox="0 0 24 24" fill="none">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg>
-                    Analyzing video with Gemini… this may take up to a minute
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-xs text-red-500">{suggestError}</p>
-                    {suggestError?.includes("No video analysis available") && video && (
-                      <button
-                        onClick={analyzeVideo}
-                        className="flex items-center gap-1.5 text-xs font-medium text-teal-700 hover:text-teal-900 transition"
-                      >
-                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                        Analyze video now
-                      </button>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-
-            {suggestions && (
-              <div className="divide-y divide-teal-800">
-                {/* Suggested description */}
-                <div className="px-4 py-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-teal-600">Description</span>
-                    <button
-                      onClick={acceptSuggestedDescription}
-                      className="text-[10px] font-medium text-teal-600 hover:text-teal-800 underline transition"
-                    >
-                      Apply
-                    </button>
-                  </div>
-                  <p className="text-xs text-gray-300 leading-relaxed">{suggestions.description}</p>
-                </div>
-
-                {/* Suggested takeaways */}
-                <div className="px-4 py-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-teal-600">Key Takeaways</span>
-                    <button
-                      onClick={acceptSuggestedTakeaways}
-                      className="text-[10px] font-medium text-teal-600 hover:text-teal-800 underline transition"
-                    >
-                      Apply
-                    </button>
-                  </div>
-                  <ul className="space-y-1">
-                    {suggestions.keyTakeaways.map((t, i) => (
-                      <li key={i} className="flex items-start gap-1.5 text-xs text-gray-300">
-                        <span className="text-teal-400 mt-0.5 flex-shrink-0">•</span>
-                        {t}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                {/* Suggested actions */}
-                <div className="px-4 py-3 space-y-2">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-teal-600">Actions</span>
-                  {suggestions.actions.map((action, i) => (
-                    <div key={i} className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className={`text-[10px] font-bold uppercase flex-shrink-0 ${action.type === "DO" ? "text-amber-600" : "text-purple-600"}`}>
-                          {action.type === "DO" ? "Practice" : "Reflect"}
-                        </span>
-                        <span className="text-xs text-gray-300 truncate">{action.title}</span>
-                      </div>
-                      <button
-                        onClick={() => acceptSuggestedAction(action)}
-                        disabled={addingAction}
-                        className="text-[10px] font-medium text-teal-600 hover:text-teal-800 underline transition flex-shrink-0 disabled:opacity-50"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Summary */}
         <div>

@@ -110,9 +110,6 @@ function GenerationProgress({ stage, progress, onCancel, creatorEmail, programTi
 
       {/* Async messaging */}
       <div className="mt-6">
-        <p className="text-sm text-gray-400">
-          This can take 5–10 minutes.
-        </p>
         {creatorEmail && (
           <p className="text-sm text-gray-500 mt-1">
             We&apos;ll email <span className="text-gray-300">{creatorEmail}</span> when it&apos;s ready.
@@ -314,6 +311,7 @@ export default function ProgramEditPage() {
         }
 
         if (data.status === "COMPLETED") {
+          wizardDismissedRef.current = true;
           setAsyncGenerating(false);
           await load();
           showToast("Program generated!", "success");
@@ -545,6 +543,7 @@ export default function ProgramEditPage() {
           duration: {
             weeks: program.durationWeeks,
             pacingMode: program.pacingMode === "DRIP_BY_WEEK" ? "drip_by_week" : "unlock_on_complete",
+            aiStructured: true,
           },
           content: {
             videos: program.videos,
@@ -556,6 +555,7 @@ export default function ProgramEditPage() {
         }}
         onComplete={() => {
           setShowWizard(false);
+          setAsyncGenerating(true);
           setActiveTab("curriculum");
           load();
         }}
@@ -898,7 +898,9 @@ export default function ProgramEditPage() {
       {/* === Curriculum Tab === */}
       {activeTab === "curriculum" && (
         <main className="p-4" style={{ background: "#0a0a0f" }}>
-          {program.weeks.length === 0 && program.videos.length === 0 ? (
+          {program.weeks.length === 0 && (asyncGenerating || !genStatusChecked || activeGenerations.includes(id)) ? (
+            <GenerationProgress stage={asyncStage} progress={asyncProgress} onCancel={cancelGeneration} creatorEmail={creatorEmail} programTitle={program?.title ?? undefined} />
+          ) : program.weeks.length === 0 && program.videos.length === 0 ? (
             <div className="flex items-center justify-center min-h-[60vh]" style={{ background: "#0a0a0f" }}>
               <div className="max-w-lg text-center">
                 <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-teal-900/40 border border-teal-700/50 flex items-center justify-center">
@@ -918,8 +920,6 @@ export default function ProgramEditPage() {
                 </button>
               </div>
             </div>
-          ) : program.weeks.length === 0 && (asyncGenerating || !genStatusChecked || activeGenerations.includes(id)) ? (
-            <GenerationProgress stage={asyncStage} progress={asyncProgress} onCancel={cancelGeneration} creatorEmail={creatorEmail} programTitle={program?.title ?? undefined} />
           ) : program.weeks.length === 0 ? (
             <div className="max-w-lg mx-auto mt-16 text-center">
               <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-pink-900/30 border border-pink-700/50 flex items-center justify-center">

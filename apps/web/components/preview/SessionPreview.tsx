@@ -10,8 +10,6 @@ interface SessionPreviewProps {
 }
 
 export function SessionPreview({ session, skin, onBack }: SessionPreviewProps) {
-  const watchAction = session.actions.find((a) => a.type === "WATCH");
-
   return (
     <div
       className="min-h-full"
@@ -40,13 +38,25 @@ export function SessionPreview({ session, skin, onBack }: SessionPreviewProps) {
       {/* Content */}
       <div className="p-4 space-y-6">
         {/* Video hero with thumbnail + play button */}
-        {watchAction && (() => {
-          const thumbnailUrl =
-            session.compositeSession?.clips?.[0]?.youtubeVideo?.thumbnailUrl ??
-            watchAction.youtubeVideo?.thumbnailUrl ??
-            (watchAction.youtubeVideo?.videoId
-              ? `https://img.youtube.com/vi/${watchAction.youtubeVideo.videoId}/hqdefault.jpg`
-              : null);
+        {(() => {
+          // Scene-mode: use first composite clip; classic-mode: use first WATCH action
+          const firstClip = session.compositeSession?.clips?.[0];
+          const watchAction = session.actions.find((a) => a.type === "WATCH");
+          if (!firstClip && !watchAction) return null;
+
+          const muxId =
+            firstClip?.youtubeVideo?.muxPlaybackId ??
+            watchAction?.muxPlaybackId ??
+            watchAction?.youtubeVideo?.muxPlaybackId ??
+            null;
+          const thumbnailUrl = muxId
+            ? `https://image.mux.com/${muxId}/thumbnail.jpg?time=2&width=640`
+            : firstClip?.youtubeVideo?.thumbnailUrl ??
+              watchAction?.youtubeVideo?.thumbnailUrl ??
+              (watchAction?.youtubeVideo?.videoId
+                ? `https://img.youtube.com/vi/${watchAction.youtubeVideo.videoId}/hqdefault.jpg`
+                : null);
+          const videoTitle = firstClip?.chapterTitle ?? watchAction?.title ?? "Video";
 
           return (
             <div
@@ -58,7 +68,7 @@ export function SessionPreview({ session, skin, onBack }: SessionPreviewProps) {
               {thumbnailUrl ? (
                 <img
                   src={thumbnailUrl}
-                  alt={watchAction.title}
+                  alt={videoTitle}
                   className="absolute inset-0 w-full h-full object-cover"
                 />
               ) : (
