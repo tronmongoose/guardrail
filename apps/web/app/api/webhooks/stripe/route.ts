@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { createMagicLink, getMagicLinkUrl } from "@/lib/magic-link";
-import { sendMagicLinkEmail } from "@/lib/email";
+import { sendMagicLinkEmail, notifyAdminEnrollment } from "@/lib/email";
 import { logger } from "@/lib/logger";
 import Stripe from "stripe";
 
@@ -104,6 +104,12 @@ export async function POST(req: NextRequest) {
       const program = await prisma.program.findUnique({ where: { id: programId } });
 
       if (user && program) {
+        notifyAdminEnrollment(
+          { email: user.email, name: user.name },
+          { title: program.title, id: programId },
+          "paid",
+        ).catch(() => {});
+
         // Generate and send magic link
         const { token } = await createMagicLink({
           email: user.email,

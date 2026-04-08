@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { slugify } from "@/lib/slug";
 import { logger } from "@/lib/logger";
+import { notifyAdminProgramPublished } from "@/lib/email";
 
 interface ValidationError {
   field: string;
@@ -212,6 +213,12 @@ export async function POST(
     sessionCount: totalSessions,
     priceInCents: program.priceInCents,
   });
+
+  notifyAdminProgramPublished(
+    { id, title: program.title, slug: slug ?? "", priceInCents: program.priceInCents, currency: program.currency },
+    { email: user.email, name: user.name },
+    { weekCount: program.weeks.length, sessionCount: totalSessions },
+  ).catch(() => {});
 
   return NextResponse.json({
     ...updated,

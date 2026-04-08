@@ -132,6 +132,69 @@ The Journeyline Team
 /**
  * Send "your program is ready" notification to the creator when generation completes.
  */
+/**
+ * Notify admin when a new creator signs up.
+ */
+export async function notifyAdminNewCreator(user: {
+  email: string;
+  name?: string | null;
+  id: string;
+}): Promise<void> {
+  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL;
+  if (!adminEmail) return;
+
+  const label = user.name || user.email;
+  await sendEmail({
+    to: adminEmail,
+    subject: `[Journeyline] New creator signup: ${label}`,
+    text: `New creator signed up on Journeyline.\n\nName: ${user.name || "—"}\nEmail: ${user.email}\nUser ID: ${user.id}\nTime: ${new Date().toISOString()}\n\n--\nJourneyline Admin Notifications`,
+  });
+}
+
+/**
+ * Notify admin when a creator publishes a program.
+ */
+export async function notifyAdminProgramPublished(
+  program: { id: string; title: string; slug: string; priceInCents: number; currency: string },
+  creator: { email: string; name?: string | null },
+  stats: { weekCount: number; sessionCount: number },
+): Promise<void> {
+  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL;
+  if (!adminEmail) return;
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.journeyline.ai";
+  const price = program.priceInCents === 0
+    ? "Free"
+    : `${(program.priceInCents / 100).toFixed(2)} ${program.currency.toUpperCase()}`;
+
+  await sendEmail({
+    to: adminEmail,
+    subject: `[Journeyline] Program published: "${program.title}"`,
+    text: `A program was just published on Journeyline.\n\nProgram: ${program.title}\nCreator: ${creator.name || "—"} (${creator.email})\nPrice: ${price}\nStructure: ${stats.weekCount} week(s), ${stats.sessionCount} session(s)\nPublic URL: ${appUrl}/p/${program.slug}\n\n--\nJourneyline Admin Notifications`,
+  });
+}
+
+/**
+ * Notify admin when a learner enrolls in a program.
+ */
+export async function notifyAdminEnrollment(
+  learner: { email: string; name?: string | null },
+  program: { title: string; id: string },
+  enrollmentType: "paid" | "free" | "promo",
+): Promise<void> {
+  const adminEmail = process.env.ADMIN_NOTIFICATION_EMAIL;
+  if (!adminEmail) return;
+
+  await sendEmail({
+    to: adminEmail,
+    subject: `[Journeyline] New enrollment (${enrollmentType}): "${program.title}"`,
+    text: `A learner just enrolled in a program.\n\nLearner: ${learner.name || "Anonymous"} (${learner.email})\nProgram: ${program.title}\nEnrollment type: ${enrollmentType}\nProgram ID: ${program.id}\n\n--\nJourneyline Admin Notifications`,
+  });
+}
+
+/**
+ * Send "your program is ready" notification to the creator when generation completes.
+ */
 export async function sendProgramReadyEmail(
   to: string,
   firstName: string,

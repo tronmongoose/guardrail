@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { createMagicLink, getMagicLinkUrl } from "@/lib/magic-link";
 import { logger } from "@/lib/logger";
+import { notifyAdminEnrollment } from "@/lib/email";
 import Stripe from "stripe";
 
 // Platform fee percentage (e.g., 10%)
@@ -136,6 +137,12 @@ export async function POST(
       promoCode: upperCode,
     });
 
+    notifyAdminEnrollment(
+      { email: user.email, name: user.name },
+      { title: program.title, id: programId },
+      "promo",
+    ).catch(() => {});
+
     if (clerkUser) {
       return NextResponse.json({ enrolled: true, redirectUrl: `/learn/${programId}` });
     }
@@ -156,6 +163,12 @@ export async function POST(
       userId: user.id,
       programId,
     });
+
+    notifyAdminEnrollment(
+      { email: user.email, name: user.name },
+      { title: program.title, id: programId },
+      "free",
+    ).catch(() => {});
 
     // Clerk users go straight to learn page, others get magic link
     if (clerkUser) {

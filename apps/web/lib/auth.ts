@@ -1,6 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { cookies } from "next/headers";
 import { prisma } from "./prisma";
+import { notifyAdminNewCreator } from "./email";
 
 const LEARNER_SESSION_COOKIE = "guiderail_learner_session";
 
@@ -24,7 +25,7 @@ export async function getOrCreateUser() {
   // via magic link), link the Clerk account to that existing record.
   const existingByEmail = await prisma.user.findUnique({ where: { email } });
   if (existingByEmail) {
-    return prisma.user.update({
+    const promoted = await prisma.user.update({
       where: { id: existingByEmail.id },
       data: {
         clerkId: userId,
@@ -34,9 +35,11 @@ export async function getOrCreateUser() {
           : undefined),
       },
     });
+    notifyAdminNewCreator(promoted).catch(() => {});
+    return promoted;
   }
 
-  return prisma.user.create({
+  const newUser = await prisma.user.create({
     data: {
       clerkId: userId,
       email,
@@ -46,6 +49,8 @@ export async function getOrCreateUser() {
       role: "CREATOR",
     },
   });
+  notifyAdminNewCreator(newUser).catch(() => {});
+  return newUser;
 }
 
 /**

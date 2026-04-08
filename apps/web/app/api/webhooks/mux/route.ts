@@ -2,7 +2,8 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { getMux, isMuxConfigured } from "@/lib/mux";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
-import { generateMuxVideoAnalysis } from "@/lib/mux-ai-analysis";
+import { Prisma } from "@prisma/client";
+import { analyzeUploadedVideoWithGemini } from "@guide-rail/ai";
 
 export async function POST(req: NextRequest) {
   if (!isMuxConfigured()) {
@@ -171,6 +172,61 @@ export async function POST(req: NextRequest) {
           playbackId,
           lookupBy: ytVideo.muxAssetId ? "assetId" : "uploadId",
         });
+
+        // Fire-and-forget: Gemini analyzes the video via the Mux MP4 static rendition.
+        // mp4_support: "capped-1080p" is set on upload, so static renditions exist.
+        const videoTitle = ytVideo.title ?? "Untitled";
+        const videoRecordId = ytVideo.id;
+        const mp4Url = `https://stream.mux.com/${playbackId}/capped-1080p.mp4`;
+
+        after(async () => {
+          try {
+            logger.info({ operation: "mux.webhook.gemini_analysis_start", ytVideoId: videoRecordId, mp4Url });
+            const analysis = await analyzeUploadedVideoWithGemini(mp4Url, videoTitle, "video/mp4");
+
+            await prisma.videoAnalysis.upsert({
+              where: { youtubeVideoId: videoRecordId },
+              create: {
+                youtubeVideoId: videoRecordId,
+                summary: analysis.summary,
+                fullTranscript: analysis.fullTranscript ?? null,
+                segments: analysis.segments as unknown as Prisma.InputJsonValue,
+                topics: analysis.topics as unknown as Prisma.InputJsonValue,
+                keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
+                people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
+                durationSeconds: analysis.durationSeconds ?? null,
+              },
+              update: {
+                summary: analysis.summary,
+                fullTranscript: analysis.fullTranscript ?? null,
+                segments: analysis.segments as unknown as Prisma.InputJsonValue,
+                topics: analysis.topics as unknown as Prisma.InputJsonValue,
+                keyMoments: analysis.keyMoments as unknown as Prisma.InputJsonValue ?? undefined,
+                people: analysis.people as unknown as Prisma.InputJsonValue ?? undefined,
+                durationSeconds: analysis.durationSeconds ?? null,
+                analyzedAt: new Date(),
+              },
+            });
+
+            // Also store transcript on the video record for the pipeline
+            if (analysis.fullTranscript) {
+              await prisma.youTubeVideo.update({
+                where: { id: videoRecordId },
+                data: { transcript: analysis.fullTranscript, durationSeconds: analysis.durationSeconds ?? undefined },
+              });
+            }
+
+            logger.info({
+              operation: "mux.webhook.gemini_analysis_complete",
+              ytVideoId: videoRecordId,
+              topics: analysis.topics.length,
+              transcriptChars: analysis.fullTranscript?.length ?? 0,
+            });
+          } catch (err) {
+            logger.error({ operation: "mux.webhook.gemini_analysis_failed", ytVideoId: videoRecordId }, err);
+          }
+        });
+
         break;
       }
 
@@ -224,51 +280,8 @@ export async function POST(req: NextRequest) {
     }
 
     case "video.track.ready": {
-      // Fires when a text track (caption/subtitle) becomes available.
-      // We use this — rather than video.asset.ready — to trigger @mux/ai chapter
-      // generation because the caption track must exist before fetchTranscriptForAsset
-      // can succeed. Ensure "video.track.ready" is enabled in your Mux dashboard
-      // webhook settings alongside the other events.
-      const trackType: string = event.data?.type ?? "";
-      if (trackType !== "text") break; // only caption/subtitle tracks
-
-      const assetId: string = event.data?.asset_id ?? "";
-      if (!assetId) break;
-
-      const ytVideo = await prisma.youTubeVideo.findFirst({
-        where: { muxAssetId: assetId },
-        select: { id: true, muxPlaybackId: true },
-      });
-
-      if (!ytVideo) {
-        // This track belongs to an Action upload (lesson-level) — no AI analysis needed.
-        break;
-      }
-
-      if (!ytVideo.muxPlaybackId) {
-        // video.asset.ready hasn't fired yet; skip — transcript isn't accessible.
-        logger.warn({
-          operation: "mux.webhook.track_ready.no_playback_id",
-          assetId,
-          ytVideoId: ytVideo.id,
-        });
-        break;
-      }
-
-      logger.info({
-        operation: "mux.webhook.track_ready.queueing_analysis",
-        ytVideoId: ytVideo.id,
-        assetId,
-      });
-
-      // Fire and forget — webhook returns 200 immediately.
-      after(() =>
-        generateMuxVideoAnalysis({
-          assetId,
-          playbackId: ytVideo.muxPlaybackId!,
-          ytVideoId: ytVideo.id,
-        })
-      );
+      // No-op: Gemini analysis now runs on video.asset.ready via the MP4 static rendition.
+      // Mux caption tracks are no longer used for transcription.
       break;
     }
 
