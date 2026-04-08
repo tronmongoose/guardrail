@@ -1,10 +1,11 @@
-# GuideRail — Claude Code Context
+When working on marketing, copy, ads, or brand tasks, read JOURNEYLINEMARKETING.md first.
+# JourneyLine.AI — Claude Code Context
 
 ## Project Overview
 
-**GuideRail** is a creator-to-learner transformation delivery SaaS. Creators build structured weekly programs (not courses); learners buy and complete them on a calm, drip-paced timeline. First-lane focus is fitness/movement programs (MVP).
+**JourneyLine.AI** is a creator-to-learner transformation delivery SaaS. Creators build structured programs (not courses); learners buy and complete them on a calm, paced timeline. First-lane focus is fitness/movement programs (MVP).
 
-Typical flow: Creator pastes YouTube links → AI suggests structure → Creator approves → Publishes with price → Learner buys → Completes weekly actions → Creator gets paid 90%.
+Typical flow: Creator pastes YouTube links → AI suggests structure → Creator approves → Publishes with price → Learner buys → Completes actions → Creator gets paid 90%.
 
 ---
 
@@ -99,8 +100,8 @@ Schema: [apps/web/prisma/schema.prisma](apps/web/prisma/schema.prisma)
 |---|---|
 | `User` | Creators (clerkId) and learners (email). Same table, `role` field distinguishes. |
 | `Program` | Creator-owned program. Has `stripeProductId`, `stripePriceId`, `skinId`, `pacingMode`, `videoGroups`, `sectionBoundaries`. |
-| `Week → Session → Action` | Hierarchical content. Actions are WATCH / READ / DO / REFLECT. |
-| `Entitlement` | Purchase record. Tracks `currentWeek`, `status` (ACTIVE/REVOKED/EXPIRED). Unique on `(userId, programId)`. |
+| `Week → Session → Action` | Hierarchical content (DB model is `Week` but displayed as "Lesson" in UI). Actions are WATCH / READ / DO / REFLECT. |
+| `Entitlement` | Purchase record. Tracks `currentWeek` (legacy name, represents current lesson), `status` (ACTIVE/REVOKED/EXPIRED). Unique on `(userId, programId)`. |
 | `LearnerProgress` | Per-action completion + reflection text. |
 | `MagicLink` | Short-lived learner auth tokens. |
 | `ProgramArtifact` | PDF/DOCX uploads — metadata + extracted text stored in DB. |
@@ -182,7 +183,7 @@ Uploaded videos are transcoded by Mux into HLS for universal browser playback.
 2. **Video segmentation** ([packages/ai/src/video-segmentation.ts](packages/ai/src/video-segmentation.ts)): long videos (>10 min) are split into virtual child records using Gemini topic timestamps — no physical file splitting
 3. HuggingFace generates embeddings from video metadata/transcripts ([packages/ai/src/hf-embeddings.ts](packages/ai/src/hf-embeddings.ts))
 4. K-means clustering groups related videos ([packages/ai/src/clustering.ts](packages/ai/src/clustering.ts))
-5. LLM generates a structured program draft (weeks/sessions/actions) ([packages/ai/src/llm-adapter.ts](packages/ai/src/llm-adapter.ts))
+5. LLM generates a structured program draft (lessons/sessions/actions) ([packages/ai/src/llm-adapter.ts](packages/ai/src/llm-adapter.ts))
 6. Gemini 2.5 Flash analyzes individual videos for full topic extraction, segment boundaries, transcripts ([packages/ai/src/gemini-video-analyzer.ts](packages/ai/src/gemini-video-analyzer.ts))
 7. Async generation pipeline handles segmented videos as independent content pieces
 8. Creator reviews the `ProgramDraft` and approves or edits before publishing
@@ -201,7 +202,7 @@ Use `LLM_PROVIDER=stub` locally to skip all LLM API calls.
 |---|---|---|---|
 | 1 | Basics | `StepBasics` | Title + target transformation only (description/outcome removed from UI but kept in data model) |
 | 2 | Content | `StepContent` | YouTube URLs + file artifact uploads |
-| 3 | Lessons flow | `StepDuration` | Program length presets + pacing mode (drip vs unlock-on-complete) |
+| 3 | Lessons flow | `StepDuration` | Program length presets + pacing mode (drip vs unlock-on-complete). Uses "Lesson" terminology throughout. |
 | 4 | Theme | `StepReview` | `SkinPicker` as hero; `vibePrompt` + `skinId` saved on generation |
 
 - Wizard state auto-persists to `localStorage` (artifacts' `extractedText` excluded to avoid quota issues)
@@ -213,15 +214,15 @@ Use `LLM_PROVIDER=stub` locally to skip all LLM API calls.
 
 Tab-based editor (`ProgramBuilderSplit`) with four tabs:
 
-- **Curriculum** — drag-and-drop week/session tree (`TreeNavigation`), single `DndContext` to avoid nested sensor interference, cross-group session moves, inline rename on click
+- **Curriculum** — drag-and-drop lesson/session tree (`TreeNavigation`), single `DndContext` to avoid nested sensor interference, cross-group session moves, inline rename on click
 - **Settings** — program metadata
 - **Pricing** — price, promo codes
 - **Preview** — live skin preview
 
 Drag-and-drop notes:
-- Week reordering uses a two-pass DB transaction to avoid unique constraint conflicts on `sortOrder`
-- Session moves send `weekId` to support cross-group (cross-week) moves
-- "Week" label swaps to "Lesson" in display when `pacingMode = UNLOCK_ON_COMPLETE`
+- Lesson reordering uses a two-pass DB transaction to avoid unique constraint conflicts on `sortOrder` (DB model is still `Week`)
+- Session moves send `weekId` to support cross-group (cross-lesson) moves
+- UI uses "Lesson" terminology everywhere; the DB model remains `Week` for backwards compatibility
 
 ---
 
