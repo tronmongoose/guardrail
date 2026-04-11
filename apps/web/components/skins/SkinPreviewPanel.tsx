@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { getSkinTokens } from "@/lib/skin-bundles/registry";
 import { getTokenCSSVars } from "@/lib/skin-bridge";
 import { getSkinCatalogEntry } from "@/lib/skin-bundles/catalog";
-import { getSkinDecorations, getHeadingEffectStyle, resolveColorKey } from "@/lib/skin-decorations";
+import { getSkinDecorations, resolveColorKey } from "@/lib/skin-decorations";
 import type { FloatingElement, BackgroundPatternConfig } from "@/lib/skin-decorations";
 import { getPatternCSS } from "@/lib/decoration-patterns";
 import type { CSSProperties } from "react";
@@ -201,7 +201,7 @@ function ColorSwatch({ name, value }: { name: string; value: string }) {
 // Mirrors the layout of apps/web/app/p/[slug]/page.tsx
 // viewMode="mobile"  → single-column (hero + what you get + pricing)
 // viewMode="desktop" → 2-col hero with video preview + what you get + pricing
-function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitle, headingStyle }: { viewMode?: "desktop" | "mobile"; thumbnailUrl?: string | null; displayTitle: string; headingStyle?: CSSProperties }) {
+function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitle }: { viewMode?: "desktop" | "mobile"; thumbnailUrl?: string | null; displayTitle: string }) {
   const weeks = [
     { week: 1, title: "Foundation" },
     { week: 2, title: "Progressive Overload" },
@@ -297,7 +297,6 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitl
             lineHeight: "1.1",
             color: "var(--token-color-text-primary)",
             marginBottom: "8px",
-            ...headingStyle,
           }}>
             {displayTitle}
           </h1>
@@ -434,7 +433,6 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitl
             fontWeight: "var(--token-text-heading-xl-weight)",
             lineHeight: "1.05",
             color: "var(--token-color-text-primary)",
-            ...headingStyle,
           }}>
             {displayTitle}
           </h1>
@@ -1375,7 +1373,6 @@ export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, to
   const cssVars = useMemo(() => getTokenCSSVars(tokens), [tokens]);
   const entry = getSkinCatalogEntry(skinId);
   const decorations = useMemo(() => getSkinDecorations(skinId, tokens), [skinId, tokens]);
-  const headingStyle = useMemo(() => getHeadingEffectStyle(decorations.headingEffect, tokens), [decorations, tokens]);
 
   return (
     <div
@@ -1414,7 +1411,7 @@ export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, to
         {/* Decoration overlays */}
         {/* ── Section 1: Public program page ── */}
         <SectionHeader label="Public program page" />
-        <MarketingLanderSection viewMode={viewMode} thumbnailUrl={thumbnailUrl} displayTitle={displayTitle} headingStyle={headingStyle} />
+        <MarketingLanderSection viewMode={viewMode} thumbnailUrl={thumbnailUrl} displayTitle={displayTitle} />
 
         {/* ── Section 2: Learner timeline ── */}
         <SectionHeader label="Learner timeline" />
