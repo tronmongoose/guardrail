@@ -20,7 +20,6 @@ export const proCreatorTokens: SkinTokens = {
       elevated: "#F5F3FF",
       hero: "#FFFFFF",
       surface: "#F9FAFB",
-      gradient: "linear-gradient(90deg, #8E51FF 0%, #AD46FF 100%)",
     },
     border: { subtle: "#EDE9FE" },
     text: {

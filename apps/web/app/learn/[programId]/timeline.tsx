@@ -53,6 +53,7 @@ interface Props {
   skinId: string;
   skinCSSVars: Record<string, string>;
   creatorName: string | null;
+  creatorAvatarUrl: string | null;
   targetTransformation: string | null;
   durationWeeks: number;
 }
@@ -65,12 +66,13 @@ export function LearnerTimeline({
   completedWeeks,
   pacingMode,
   creatorName,
+  creatorAvatarUrl,
   targetTransformation,
   durationWeeks,
 }: Props) {
   const { showToast } = useToast();
 
-  const groupLabel = pacingMode === "UNLOCK_ON_COMPLETE" ? "Lesson" : "Week";
+  const groupLabel = "Lesson";
   const [unlockedWeekNumber, setUnlockedWeekNumber] = useState(currentWeek);
   const [completedWeeksState, setCompletedWeeksState] = useState<Set<number>>(
     () => new Set(completedWeeks)
@@ -329,6 +331,29 @@ export function LearnerTimeline({
         >
           {/* Program identity */}
           <div>
+            {creatorAvatarUrl && (
+              <div className="mb-3">
+                <div
+                  className="w-16 h-16 rounded-full"
+                  style={{
+                    padding: "1.5px",
+                    background: "linear-gradient(135deg, var(--token-color-accent), #ec4899, #a855f7)",
+                  }}
+                >
+                  <div
+                    className="w-full h-full rounded-full overflow-hidden"
+                    style={{ backgroundColor: "var(--token-color-bg-elevated)" }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={creatorAvatarUrl}
+                      alt=""
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
             <h1
               className="text-lg font-bold leading-tight mb-1"
               style={{ color: "var(--token-color-text-primary)" }}
@@ -457,20 +482,45 @@ export function LearnerTimeline({
               border: "1px solid var(--token-color-border-subtle)",
             }}
           >
-            <h2
-              className="text-base font-bold leading-tight mb-0.5"
-              style={{ color: "var(--token-color-text-primary)" }}
-            >
-              {program.title}
-            </h2>
-            {creatorName && (
-              <p
-                className="text-xs mb-1"
-                style={{ color: "var(--token-color-text-secondary)" }}
-              >
-                by {creatorName}
-              </p>
-            )}
+            <div className="flex items-center gap-3 mb-1">
+              {creatorAvatarUrl && (
+                <div
+                  className="w-12 h-12 rounded-full flex-shrink-0"
+                  style={{
+                    padding: "1.5px",
+                    background: "linear-gradient(135deg, var(--token-color-accent), #ec4899, #a855f7)",
+                  }}
+                >
+                  <div
+                    className="w-full h-full rounded-full overflow-hidden"
+                    style={{ backgroundColor: "var(--token-color-bg-elevated)" }}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={creatorAvatarUrl}
+                      alt=""
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </div>
+                </div>
+              )}
+              <div className="min-w-0">
+                <h2
+                  className="text-base font-bold leading-tight"
+                  style={{ color: "var(--token-color-text-primary)" }}
+                >
+                  {program.title}
+                </h2>
+                {creatorName && (
+                  <p
+                    className="text-xs"
+                    style={{ color: "var(--token-color-text-secondary)" }}
+                  >
+                    by {creatorName}
+                  </p>
+                )}
+              </div>
+            </div>
             {targetTransformation && (
               <p
                 className="text-xs leading-relaxed line-clamp-2 mt-1"

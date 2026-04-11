@@ -66,7 +66,15 @@ export async function GET(
       );
     }
 
-    return NextResponse.json(program, {
+    // Map private blob URL to public proxy URL for avatar rendering
+    const response = {
+      ...program,
+      creatorAvatarUrl: program.creatorAvatarUrl
+        ? `/api/programs/${program.id}/avatar`
+        : null,
+    };
+
+    return NextResponse.json(response, {
       headers: { "Cache-Control": "no-store, max-age=0" }
     });
   } catch (err) {
@@ -141,6 +149,7 @@ export async function PATCH(
       data.transitionMode = body.transitionMode;
     }
   }
+  if (body.creatorAvatarUrl !== undefined) data.creatorAvatarUrl = body.creatorAvatarUrl;
 
   const program = await prisma.program.update({ where: { id }, data });
   return NextResponse.json(program);

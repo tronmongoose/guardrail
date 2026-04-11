@@ -104,7 +104,7 @@ export function generateWithStub(input: StubInput): ProgramDraft {
     const lessonIdx = weekNum - 1;
     const planLesson = plan?.lessons[lessonIdx];
 
-    // Determine which content items are relevant for this week
+    // Determine which content items are relevant for this lesson
     // Use plan clips to find video IDs, or fall back to simple slice distribution
     const weekVideoIds = planLesson
       ? [...new Set(planLesson.clips.map((c) => c.videoId))]
@@ -149,12 +149,12 @@ export function generateWithStub(input: StubInput): ProgramDraft {
     // Add a DO action
     const doInstructions = weekDigest && weekDigest.keyConcepts.length > 0
       ? `Apply the "${weekDigest.keyConcepts[0]}" concept:\n1. Review the framework presented in the content\n2. Identify a real situation where this applies to you\n3. Practice using the ${weekDigest.skillsIntroduced[0] || "technique"} on that situation\n4. Document your results and insights`
-      : `Apply what you learned this week:\n1. Review your notes from the content\n2. Identify one key concept to practice\n3. Complete a hands-on exercise applying that concept\n4. Document what you learned`;
+      : `Apply what you learned this lesson:\n1. Review your notes from the content\n2. Identify one key concept to practice\n3. Complete a hands-on exercise applying that concept\n4. Document what you learned`;
 
     actions.push({
       title: weekDigest
-        ? `Practice: ${weekDigest.keyConcepts[0]?.slice(0, 40) || `Week ${weekNum} Exercise`}`
-        : `Practice: Week ${weekNum} Exercise`,
+        ? `Practice: ${weekDigest.keyConcepts[0]?.slice(0, 40) || `Lesson ${weekNum} Exercise`}`
+        : `Practice: Lesson ${weekNum} Exercise`,
       type: "do" as const,
       instructions: doInstructions,
       orderIndex: orderIndex++,
@@ -164,13 +164,13 @@ export function generateWithStub(input: StubInput): ProgramDraft {
     const reflectionPrompt = weekDigest && weekDigest.memorableExamples.length > 0
       ? `Thinking about the ${weekDigest.memorableExamples[0]}, how does this parallel your own experience? What would you do differently now that you understand ${weekDigest.keyConcepts[0] || "this concept"}?`
       : input.outcomeStatement
-        ? `How does what you learned this week connect to your goal of: "${input.outcomeStatement}"? What will you do differently?`
-        : `What was your biggest insight from week ${weekNum}? How will you apply it in practice?`;
+        ? `How does what you learned this lesson connect to your goal of: "${input.outcomeStatement}"? What will you do differently?`
+        : `What was your biggest insight from lesson ${weekNum}? How will you apply it in practice?`;
 
     actions.push({
-      title: `Reflect: Week ${weekNum} Insights`,
+      title: `Reflect: Lesson ${weekNum} Insights`,
       type: "reflect" as const,
-      instructions: "Take time to reflect on your learning journey this week.",
+      instructions: "Take time to reflect on your learning journey this lesson.",
       reflectionPrompt,
       orderIndex: orderIndex++,
     });
@@ -188,10 +188,10 @@ export function generateWithStub(input: StubInput): ProgramDraft {
             `Apply practical techniques to your own situation`,
             input.targetTransformation
               ? `Progress toward: ${input.targetTransformation.slice(0, 80)}`
-              : `Build foundational skills for week ${weekNum + 1}`,
+              : `Build foundational skills for lesson ${weekNum + 1}`,
           ]
         : [
-            `Consolidate your learning from previous weeks`,
+            `Consolidate your learning from previous lessons`,
             `Identify gaps in your understanding`,
             `Prepare for advanced application`,
           ];
@@ -216,7 +216,7 @@ export function generateWithStub(input: StubInput): ProgramDraft {
       overlays = [
         {
           type: "TITLE_CARD",
-          content: { title: `Learning Session`, subtitle: `Week ${weekNum}` },
+          content: { title: `Learning Session`, subtitle: `Lesson ${weekNum}` },
           position: "CENTER",
           durationMs: 4000,
           orderIndex: 0,
@@ -274,7 +274,7 @@ export function generateWithStub(input: StubInput): ProgramDraft {
 
       overlays.push({
         type: "TITLE_CARD",
-        content: { title: weekContent.length > 0 ? `Learning Session` : `Review Session`, subtitle: `Week ${weekNum}` },
+        content: { title: weekContent.length > 0 ? `Learning Session` : `Review Session`, subtitle: `Lesson ${weekNum}` },
         position: "CENTER",
         durationMs: 4000,
         orderIndex: 0,
@@ -295,17 +295,17 @@ export function generateWithStub(input: StubInput): ProgramDraft {
     }
 
     weeks.push({
-      title: `Week ${weekNum}: ${weekTitle}`,
+      title: `Lesson ${weekNum}: ${weekTitle}`,
       summary: weekDigest
         ? weekDigest.summary.slice(0, 500)
         : weekContent.length > 0
           ? `Explore ${weekContent.length} content source(s) and practice key concepts`
-          : `Review previous weeks and consolidate your learning`,
+          : `Review previous lessons and consolidate your learning`,
       weekNumber: weekNum,
       sessions: [
         {
           title: weekContent.length > 0 ? `Learning Session` : `Review Session`,
-          summary: `Week ${weekNum} core activities`,
+          summary: `Lesson ${weekNum} core activities`,
           keyTakeaways,
           orderIndex: 0,
           actions,

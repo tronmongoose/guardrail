@@ -36,7 +36,7 @@ export async function POST(
 
   const week = await prisma.week.create({
     data: {
-      title: title || `Week ${finalWeekNumber}`,
+      title: title || `Lesson ${finalWeekNumber}`,
       weekNumber: finalWeekNumber,
       programId,
     },

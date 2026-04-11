@@ -20,7 +20,6 @@ export const activityWorkshopTokens: SkinTokens = {
       elevated: "#FFF7ED",
       hero: "#FFFFFF",
       surface: "#F9FAFB",
-      gradient: "linear-gradient(90deg, #F54900 0%, #E17100 100%)",
     },
     border: { subtle: "#FED7AA" },
     text: {

@@ -20,7 +20,6 @@ export const lifestyleScienceTokens: SkinTokens = {
       elevated: "#F0FDFA",
       hero: "#FFFFFF",
       surface: "#F9FAFB",
-      gradient: "linear-gradient(90deg, #00BBA7 0%, #00B8DB 100%)",
     },
     border: { subtle: "#CBFBF1" },
     text: {

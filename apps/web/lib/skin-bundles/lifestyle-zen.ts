@@ -20,7 +20,6 @@ export const lifestyleZenTokens: SkinTokens = {
       elevated: "#F5F5F4",
       hero: "#FAFAF9",
       surface: "#F9FAFB",
-      gradient: "linear-gradient(135deg, #44403B 0%, #016630 100%)",
     },
     border: { subtle: "#E7E5E4" },
     text: {

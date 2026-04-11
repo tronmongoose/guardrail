@@ -12,12 +12,16 @@ import {
   type SessionData,
 } from "@/components/builder";
 import { ProgramWizard } from "@/components/wizard/ProgramWizard";
-import { SkinPicker } from "@/components/skins/SkinPicker";
+import { SkinSidebar } from "@/components/skins/SkinSidebar";
 import { getSkinTokens } from "@/lib/skin-bundles/registry";
+import { getSkinCatalogEntry } from "@/lib/skin-bundles/catalog";
 import type { SkinTokens } from "@guide-rail/shared";
 import { tokensToSkin, getTokenCSSVars } from "@/lib/skin-bridge";
+import { getSkinDecorations, getHeadingEffectStyle, resolveColorKey } from "@/lib/skin-decorations";
+import { getPatternCSS } from "@/lib/decoration-patterns";
 import { ProgramOverviewPreview } from "@/components/preview/ProgramOverviewPreview";
 import { SessionPreview } from "@/components/preview/SessionPreview";
+import { CreatorAvatarUpload } from "@/components/builder/CreatorAvatarUpload";
 import { useGenerationSteps } from "@/components/generation/useGenerationSteps";
 import { GenerationSteps } from "@/components/generation/GenerationSteps";
 import { useGeneration } from "@/components/generation/GenerationProvider";
@@ -51,6 +55,7 @@ interface Program {
   customSkinId: string | null;
   customSkin: { id: string; tokens: unknown } | null;
   transitionMode: "NONE" | "SIMPLE" | "BRANDED";
+  creatorAvatarUrl: string | null;
   durationWeeks: number;
   pacingMode: "DRIP_BY_WEEK" | "UNLOCK_ON_COMPLETE";
   slug: string;
@@ -146,6 +151,8 @@ export default function ProgramEditPage() {
   const [previewView, setPreviewView] = useState<"overview" | "session">("overview");
   const [previewDeviceMode, setPreviewDeviceMode] = useState<"desktop" | "mobile">("desktop");
   const [previewSelectedSessionId, setPreviewSelectedSessionId] = useState<string | null>(null);
+  const [skinSidebarOpen, setSkinSidebarOpen] = useState(true);
+  const [hoveredSkinId, setHoveredSkinId] = useState<string | null>(null);
 
   const [generating, setGenerating] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -353,24 +360,13 @@ export default function ProgramEditPage() {
     setGenerating(true);
     setLastGenError(null);
     try {
-      // Step 1: auto-structure (embeddings + clustering)
-      const s1 = await fetch(`/api/programs/${id}/auto-structure`, { method: "POST" });
-      if (!s1.ok) {
-        const data = await s1.json().catch(() => ({}));
-        const errorMsg = data.detail ? `${data.error}: ${data.detail}` : data.error || "Auto-structure failed";
-        throw new Error(errorMsg);
+      const res = await fetch(`/api/programs/${id}/generate-async`, { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Generation failed");
       }
-
-      // Step 2: generate full draft via LLM
-      const s2 = await fetch(`/api/programs/${id}/generate`, { method: "POST" });
-      if (!s2.ok) {
-        const data = await s2.json().catch(() => ({}));
-        const errorMsg = data.detail ? `${data.error}: ${data.detail}` : data.error || "Draft generation failed";
-        throw new Error(errorMsg);
-      }
-
-      await load();
-      showToast("Program structure generated!", "success");
+      setAsyncGenerating(true);
+      showToast("Generation started — this may take a minute", "info");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Generation failed", "error");
     } finally {
@@ -571,7 +567,18 @@ export default function ProgramEditPage() {
     ? (program.customSkin.tokens as SkinTokens)
     : getSkinTokens(program.skinId);
   const previewSkin = tokensToSkin(previewTokens);
-  const previewCssVars = getTokenCSSVars(previewTokens);
+
+  // Hover-aware tokens for live preview: when hovering a skin in the sidebar,
+  // temporarily swap CSS vars so the real program preview updates instantly.
+  const effectiveTokens: SkinTokens = (() => {
+    if (!hoveredSkinId) return previewTokens;
+    if (hoveredSkinId === "auto-generate") return previewTokens;
+    if (hoveredSkinId.startsWith("custom:")) return previewTokens; // custom skins need async load, skip hover
+    return getSkinTokens(hoveredSkinId);
+  })();
+  const previewCssVars = getTokenCSSVars(effectiveTokens);
+  const effectiveSkinId = hoveredSkinId && hoveredSkinId !== "auto-generate" && !hoveredSkinId.startsWith("custom:") ? hoveredSkinId : program.skinId;
+  const previewDecorations = getSkinDecorations(effectiveSkinId, effectiveTokens);
   const previewSelectedSession = previewSelectedSessionId
     ? program.weeks.flatMap((w) => w.sessions).find((s) => s.id === previewSelectedSessionId)
     : null;
@@ -1003,6 +1010,15 @@ export default function ProgramEditPage() {
             }}
             className="space-y-8"
           >
+            {/* Creator Avatar */}
+            <CreatorAvatarUpload
+              programId={id}
+              avatarUrl={program.creatorAvatarUrl}
+              onUploaded={(url) => {
+                setProgram((prev) => prev ? { ...prev, creatorAvatarUrl: url } : prev);
+              }}
+            />
+
             <div className="space-y-4">
               <button
                 type="button"
@@ -1115,27 +1131,26 @@ export default function ProgramEditPage() {
             </div>
           </form>
 
-          {/* Theme selector — below save/regenerate buttons */}
-          <div className="space-y-3 mt-8 pt-8 border-t border-gray-800">
-            <h2 className="text-base font-semibold text-white">Theme</h2>
-            <SkinPicker
-              value={program.customSkinId ? `custom:${program.customSkinId}` : program.skinId}
-              onChange={handleSkinChange}
-              onGenerateSkin={handleGenerateSkin}
-              programTitle={program.title}
-              thumbnailUrl={(() => {
-                const muxId =
-                  program.videos[0]?.muxPlaybackId ??
-                  program.weeks
-                    .flatMap((w) => w.sessions)
-                    .flatMap((s) => s.actions)
-                    .find((a) => a.muxPlaybackId)?.muxPlaybackId;
-                return (
-                  program.videos[0]?.thumbnailUrl ??
-                  (muxId ? `https://image.mux.com/${muxId}/thumbnail.jpg?time=2` : null)
-                );
-              })()}
-            />
+          {/* Theme — compact link to Preview tab */}
+          <div className="flex items-center justify-between mt-8 pt-8 border-t border-gray-800">
+            <div>
+              <h2 className="text-base font-semibold text-white">Theme</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
+                Current: <span className="text-gray-300">{program.customSkin ? "AI Custom Skin" : previewSkin.name}</span>
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setActiveTab("preview");
+                setSkinSidebarOpen(true);
+              }}
+              className="px-4 py-2 text-sm font-medium text-teal-400 bg-teal-900/20 border border-teal-700 rounded-lg hover:bg-teal-900/40 transition flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+              </svg>
+              Change Theme
+            </button>
           </div>
         </div>
       )}
@@ -1358,9 +1373,24 @@ export default function ProgramEditPage() {
             {/* Preview toolbar */}
             <div className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-700">
               <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-400">Preview</span>
+                {/* Theme sidebar toggle */}
+                <button
+                  onClick={() => setSkinSidebarOpen(!skinSidebarOpen)}
+                  className={`flex items-center gap-2 px-3 py-1 rounded-lg text-xs font-medium transition ${
+                    skinSidebarOpen
+                      ? "bg-teal-900/30 text-teal-400 border border-teal-700"
+                      : "bg-gray-800 text-gray-400 hover:text-white border border-transparent"
+                  }`}
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                  </svg>
+                  Theme
+                </button>
                 <span className="text-xs px-2 py-0.5 bg-gray-800 rounded text-gray-500">
-                  {program.customSkin ? "AI Custom Skin" : previewSkin.name}
+                  {hoveredSkinId && hoveredSkinId !== "auto-generate" && !hoveredSkinId.startsWith("custom:")
+                    ? (getSkinCatalogEntry(hoveredSkinId)?.name ?? hoveredSkinId)
+                    : program.customSkin ? "AI Custom Skin" : previewSkin.name}
                 </span>
               </div>
               <div className="flex items-center gap-4">
@@ -1405,41 +1435,112 @@ export default function ProgramEditPage() {
                 </div>
               </div>
             </div>
-            {/* Preview frame */}
-            <div className="flex-1 flex items-center justify-center p-4 overflow-auto bg-gray-900">
-              <div
-                className={`h-full overflow-auto transition-all ${previewDeviceMode === "desktop" ? "w-full max-w-5xl" : "w-[375px]"}`}
-                style={{
-                  ...previewCssVars,
-                  background: "var(--token-color-bg-gradient, var(--token-color-bg-default))",
-                  borderRadius: previewDeviceMode === "mobile" ? "24px" : "8px",
-                  boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-                }}
-              >
-                {previewView === "overview" ? (
-                  <ProgramOverviewPreview
-                    program={program}
-                    skin={previewSkin}
-                    layout={previewDeviceMode === "mobile" ? "mobile" : "auto"}
-                    onSelectSession={(sessionId) => {
-                      setPreviewSelectedSessionId(sessionId);
-                      setPreviewView("session");
-                    }}
-                  />
-                ) : previewSelectedSession ? (
-                  <SessionPreview
-                    session={previewSelectedSession as SessionData & { keyTakeaways?: string[] }}
-                    skin={previewSkin}
-                    onBack={() => {
-                      setPreviewView("overview");
-                      setPreviewSelectedSessionId(null);
-                    }}
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-64">
-                    <p style={{ color: previewSkin.colors.textMuted }}>Select a session from the overview</p>
-                  </div>
-                )}
+            {/* Preview body: sidebar + frame */}
+            <div className="flex-1 flex overflow-hidden">
+              {/* Skin sidebar */}
+              <SkinSidebar
+                value={program.customSkinId ? `custom:${program.customSkinId}` : program.skinId}
+                onChange={handleSkinChange}
+                onHover={setHoveredSkinId}
+                onGenerateSkin={handleGenerateSkin}
+                isOpen={skinSidebarOpen}
+                onToggle={() => setSkinSidebarOpen(!skinSidebarOpen)}
+              />
+              {/* Preview frame */}
+              <div className="flex-1 flex items-center justify-center p-4 overflow-auto bg-gray-900">
+                <div
+                  className={`h-full overflow-auto transition-all relative ${previewDeviceMode === "desktop" ? "w-full max-w-5xl" : "w-[375px]"}`}
+                  style={{
+                    ...previewCssVars,
+                    background: "var(--token-color-bg-gradient, var(--token-color-bg-default))",
+                    borderRadius: previewDeviceMode === "mobile" ? "24px" : "8px",
+                    boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+                  }}
+                >
+                  {previewView === "overview" ? (
+                    <ProgramOverviewPreview
+                      program={program}
+                      skin={previewSkin}
+                      layout={previewDeviceMode === "mobile" ? "mobile" : "auto"}
+                      onSelectSession={(sessionId) => {
+                        setPreviewSelectedSessionId(sessionId);
+                        setPreviewView("session");
+                      }}
+                    />
+                  ) : previewSelectedSession ? (
+                    <SessionPreview
+                      session={previewSelectedSession as SessionData & { keyTakeaways?: string[] }}
+                      skin={previewSkin}
+                      onBack={() => {
+                        setPreviewView("overview");
+                        setPreviewSelectedSessionId(null);
+                      }}
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-64">
+                      <p style={{ color: previewSkin.colors.textMuted }}>Select a session from the overview</p>
+                    </div>
+                  )}
+                  {/* Decoration overlays — rendered ON TOP of content */}
+                  {previewDecorations.backgroundPattern && (() => {
+                    const patColor = resolveColorKey(previewDecorations.backgroundPattern.colorKey, effectiveTokens);
+                    const patCss = getPatternCSS({ type: previewDecorations.backgroundPattern.type, color: patColor, spacing: previewDecorations.backgroundPattern.spacing, size: previewDecorations.backgroundPattern.size });
+                    return (
+                      <div
+                        className="absolute inset-0 pointer-events-none z-10"
+                        style={{
+                          backgroundImage: patCss.backgroundImage,
+                          backgroundSize: patCss.backgroundSize,
+                          backgroundPosition: patCss.backgroundPosition,
+                          opacity: previewDecorations.backgroundPattern.opacity,
+                          borderRadius: previewDeviceMode === "mobile" ? "24px" : "8px",
+                        }}
+                      />
+                    );
+                  })()}
+                  {previewDecorations.floatingElements.length > 0 && (
+                    <div className="absolute inset-0 pointer-events-none overflow-hidden z-0" style={{ borderRadius: previewDeviceMode === "mobile" ? "24px" : "8px" }}>
+                      {previewDecorations.floatingElements.map((el, i) => {
+                        const color = el.color === "accent" ? effectiveTokens.color.accent.primary
+                          : el.color === "accent-secondary" ? effectiveTokens.color.accent.secondary
+                          : el.color === "text-primary" ? effectiveTokens.color.text.primary
+                          : el.color === "text-secondary" ? effectiveTokens.color.text.secondary
+                          : el.color === "white" ? "#ffffff"
+                          : effectiveTokens.color.accent.primary;
+                        const cls = `prev-deco-${i}`;
+                        const delay = el.animationDelay ?? "0s";
+                        const animStr = !el.animation ? "none"
+                          : el.animation === "float" ? `deco-float 6s ease-in-out ${delay} infinite`
+                          : el.animation === "float-slow" ? `deco-float-slow 8s ease-in-out ${delay} infinite`
+                          : el.animation === "float-reverse" ? `deco-float-reverse 7s ease-in-out ${delay} infinite`
+                          : el.animation === "pulse-gentle" ? `deco-pulse 4s ease-in-out ${delay} infinite`
+                          : el.animation === "drift" ? `deco-drift 12s ease-in-out ${delay} infinite`
+                          : el.animation === "wander" ? `deco-wander 14s ease-in-out ${delay} infinite`
+                          : "none";
+                        const isEmoji = el.shape === "emoji";
+                        const style: React.CSSProperties = {
+                          position: "absolute", top: el.top, left: el.left, right: el.right, bottom: el.bottom,
+                          width: el.size, height: el.size,
+                          ...(isEmoji ? {
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: el.size, lineHeight: 1, color, userSelect: "none" as const,
+                          } : {
+                            backgroundColor: el.shape === "ring" ? "transparent" : color,
+                            borderRadius: el.shape === "circle" || el.shape === "ring" ? "50%" : 2,
+                            border: el.shape === "ring" ? `1.5px solid ${color}` : undefined,
+                            transform: el.shape === "diamond" ? "rotate(45deg)" : undefined,
+                          }),
+                        };
+                        return (
+                          <div key={i} className={cls} style={style}>
+                            {isEmoji && el.emoji ? el.emoji : null}
+                            <style>{`.${cls} { opacity: ${el.opacity}; animation: ${animStr}; --el-opacity: ${el.opacity}; --el-opacity-peak: ${Math.min(el.opacity * 1.5, 1)}; }`}</style>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

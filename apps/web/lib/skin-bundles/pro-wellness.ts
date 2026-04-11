@@ -20,7 +20,6 @@ export const proWellnessTokens: SkinTokens = {
       elevated: "#F0FDFA",
       hero: "#FFFFFF",
       surface: "#F9FAFB",
-      gradient: "linear-gradient(90deg, #00D492 0%, #00BBA7 100%)",
     },
     border: { subtle: "#CBFBF1" },
     text: {

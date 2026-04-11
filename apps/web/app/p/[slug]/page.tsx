@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { EnrollButton } from "./enroll-button";
 import { resolveTokens } from "@/lib/resolve-tokens";
 import { getTokenCSSVars } from "@/lib/skin-bridge";
+import { getSkinDecorations, resolveColorKey } from "@/lib/skin-decorations";
+import { getPatternCSS } from "@/lib/decoration-patterns";
 import { getActionTypeBg, ACTION_TYPE_LABELS } from "@/lib/action-type-styles";
 import type { Metadata } from "next";
 import { logger } from "@/lib/logger";
@@ -97,8 +99,14 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
     // Not logged in — that's fine
   }
 
+  // Map private blob URL to public proxy URL for avatar rendering
+  if (program.creatorAvatarUrl) {
+    program.creatorAvatarUrl = `/api/programs/${program.id}/avatar`;
+  }
+
   const tokens = await resolveTokens(program);
   const skinCSSVars = getTokenCSSVars(tokens);
+  const decorations = getSkinDecorations(program.skinId, tokens);
 
   const priceDisplay =
     program.priceInCents === 0
@@ -113,13 +121,12 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
     {} as Record<string, number>
   );
   const pacingLabel = program.pacingMode === "DRIP_BY_WEEK" ? "Drip-paced" : "Self-paced";
-  const groupLabel = program.pacingMode === "UNLOCK_ON_COMPLETE" ? "Lesson" : "Week";
+  const groupLabel = "Lesson";
 
-  // Feature cards: up to 3 sessions with keyTakeaways or summary
+  // Feature cards: sessions with keyTakeaways or summary
   const featureCards = program.weeks
     .flatMap((w) => w.sessions)
-    .filter((s) => (s.keyTakeaways && s.keyTakeaways.length > 0) || s.summary)
-    .slice(0, 3);
+    .filter((s) => (s.keyTakeaways && s.keyTakeaways.length > 0) || s.summary);
 
   // Helper: derive thumbnail URL for a session from its first WATCH action.
   // Checks action.muxPlaybackId directly (uploaded videos) before falling back to youtubeVideo.
@@ -157,7 +164,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
 
   return (
     <div
-      className="min-h-screen"
+      className="min-h-screen relative"
       data-skin={program.skinId}
       style={{
         ...(skinCSSVars as React.CSSProperties),
@@ -166,26 +173,109 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
         fontFamily: "var(--token-text-body-md-font)",
       }}
     >
+      {/* ── Skin decoration overlays ──────────────────────────────────────── */}
+      {decorations.backgroundPattern && (() => {
+        const patColor = resolveColorKey(decorations.backgroundPattern.colorKey, tokens);
+        const patCss = getPatternCSS({ type: decorations.backgroundPattern.type, color: patColor, spacing: decorations.backgroundPattern.spacing, size: decorations.backgroundPattern.size });
+        return (
+          <div
+            className="fixed inset-0 pointer-events-none z-10"
+            style={{
+              backgroundImage: patCss.backgroundImage,
+              backgroundSize: patCss.backgroundSize,
+              backgroundPosition: patCss.backgroundPosition,
+              opacity: decorations.backgroundPattern.opacity,
+            }}
+          />
+        );
+      })()}
+      {decorations.floatingElements.length > 0 && (
+        <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+          {decorations.floatingElements.map((el, i) => {
+            const color = el.color === "accent" ? tokens.color.accent.primary
+              : el.color === "accent-secondary" ? tokens.color.accent.secondary
+              : el.color === "text-primary" ? tokens.color.text.primary
+              : el.color === "text-secondary" ? tokens.color.text.secondary
+              : el.color === "white" ? "#ffffff"
+              : tokens.color.accent.primary;
+            const cls = `pub-deco-${i}`;
+            const delay = el.animationDelay ?? "0s";
+            const animStr = !el.animation ? "none"
+              : el.animation === "float" ? `deco-float 6s ease-in-out ${delay} infinite`
+              : el.animation === "float-slow" ? `deco-float-slow 8s ease-in-out ${delay} infinite`
+              : el.animation === "float-reverse" ? `deco-float-reverse 7s ease-in-out ${delay} infinite`
+              : el.animation === "pulse-gentle" ? `deco-pulse 4s ease-in-out ${delay} infinite`
+              : el.animation === "drift" ? `deco-drift 12s ease-in-out ${delay} infinite`
+              : el.animation === "wander" ? `deco-wander 14s ease-in-out ${delay} infinite`
+              : "none";
+            const isEmoji = el.shape === "emoji";
+            const style: React.CSSProperties = {
+              position: "absolute", top: el.top, left: el.left, right: el.right, bottom: el.bottom,
+              width: el.size, height: el.size,
+              ...(isEmoji ? {
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: el.size, lineHeight: 1, color, userSelect: "none" as const,
+              } : {
+                backgroundColor: el.shape === "ring" ? "transparent" : color,
+                borderRadius: el.shape === "circle" || el.shape === "ring" ? "50%" : 2,
+                border: el.shape === "ring" ? `1.5px solid ${color}` : undefined,
+                transform: el.shape === "diamond" ? "rotate(45deg)" : undefined,
+              }),
+            };
+            return (
+              <div key={i} className={cls} style={style}>
+                {isEmoji && el.emoji ? el.emoji : null}
+                <style>{`.${cls} { opacity: ${el.opacity}; animation: ${animStr}; --el-opacity: ${el.opacity}; --el-opacity-peak: ${Math.min(el.opacity * 1.5, 1)}; }`}</style>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {/* ── Hero ─────────────────────────────────────────────────────────────── */}
       <section className="px-6 pt-16 pb-8 max-w-5xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-center">
 
           {/* Left: text */}
           <div className="flex flex-col gap-6 min-w-0 overflow-hidden">
-            {/* Creator label */}
-            {program.creator.name && (
-              <p
-                style={{
-                  fontFamily: "var(--token-text-label-sm-font)",
-                  fontSize: "var(--token-text-label-sm-size)",
-                  fontWeight: "var(--token-text-label-sm-weight)",
-                  color: "var(--token-color-text-secondary)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.15em",
-                }}
-              >
-                Coach {program.creator.name}
-              </p>
+            {/* Creator label with optional avatar */}
+            {(program.creator.name || program.creatorAvatarUrl) && (
+              <div className="flex items-center gap-3">
+                {program.creatorAvatarUrl && (
+                  <div
+                    className="w-14 h-14 rounded-full flex-shrink-0"
+                    style={{
+                      padding: "1.5px",
+                      background: "linear-gradient(135deg, var(--token-color-accent), #ec4899, #a855f7)",
+                    }}
+                  >
+                    <div
+                      className="w-full h-full rounded-full overflow-hidden"
+                      style={{ backgroundColor: "var(--token-color-bg-elevated)" }}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={program.creatorAvatarUrl}
+                        alt={program.creator.name ? `${program.creator.name}'s avatar` : "Creator avatar"}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
+                    </div>
+                  </div>
+                )}
+                {program.creator.name && (
+                  <p
+                    style={{
+                      fontFamily: "var(--token-text-label-sm-font)",
+                      fontSize: "var(--token-text-label-sm-size)",
+                      fontWeight: "var(--token-text-label-sm-weight)",
+                      color: "var(--token-color-text-secondary)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.15em",
+                    }}
+                  >
+                    Coach {program.creator.name}
+                  </p>
+                )}
+              </div>
             )}
 
             {/* Big heading */}

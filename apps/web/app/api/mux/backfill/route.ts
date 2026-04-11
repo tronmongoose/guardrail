@@ -36,8 +36,8 @@ export async function GET() {
   });
 
   for (const v of videos) {
-    // Skip if playback ID already looks valid (40+ chars)
-    if (v.muxPlaybackId && v.muxPlaybackId.length >= 40) continue;
+    // Skip if playback ID already present
+    if (v.muxPlaybackId) continue;
 
     try {
       let assetId = v.muxAssetId;
@@ -83,8 +83,8 @@ export async function GET() {
   });
 
   for (const a of actions) {
-    // Skip if playback ID already looks valid
-    if (a.muxPlaybackId && a.muxPlaybackId.length >= 40) continue;
+    // Skip if playback ID already present
+    if (a.muxPlaybackId) continue;
 
     try {
       let assetId = a.muxAssetId;

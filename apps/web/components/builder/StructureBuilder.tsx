@@ -117,7 +117,7 @@ export function StructureBuilder({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          title: `Week ${nextWeekNumber}`,
+          title: `Lesson ${nextWeekNumber}`,
           weekNumber: nextWeekNumber,
         }),
       });

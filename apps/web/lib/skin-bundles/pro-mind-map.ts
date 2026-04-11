@@ -20,7 +20,6 @@ export const proMindMapTokens: SkinTokens = {
       elevated: "#EFF6FF",
       hero: "#FFFFFF",
       surface: "#F9FAFB",
-      gradient: "linear-gradient(90deg, #2B7FFF 0%, #00B8DB 100%)",
     },
     border: { subtle: "#DBEAFE" },
     text: {

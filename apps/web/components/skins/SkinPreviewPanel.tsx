@@ -4,8 +4,100 @@ import { useMemo } from "react";
 import { getSkinTokens } from "@/lib/skin-bundles/registry";
 import { getTokenCSSVars } from "@/lib/skin-bridge";
 import { getSkinCatalogEntry } from "@/lib/skin-bundles/catalog";
+import { getSkinDecorations, getHeadingEffectStyle, resolveColorKey } from "@/lib/skin-decorations";
+import type { FloatingElement, BackgroundPatternConfig } from "@/lib/skin-decorations";
+import { getPatternCSS } from "@/lib/decoration-patterns";
 import type { CSSProperties } from "react";
 import type { SkinTokens } from "@guide-rail/shared";
+
+// ── Decoration overlay components ────────────────────────────────────────────
+
+function BackgroundPatternOverlay({ pattern, tokens }: { pattern?: BackgroundPatternConfig; tokens: SkinTokens }) {
+  if (!pattern) return null;
+  const color = resolveColorKey(pattern.colorKey, tokens);
+  const patternCss = getPatternCSS({ type: pattern.type, color, spacing: pattern.spacing, size: pattern.size });
+  return (
+    <div
+      className="absolute inset-0 pointer-events-none z-10"
+      style={{
+        backgroundImage: patternCss.backgroundImage,
+        backgroundSize: patternCss.backgroundSize,
+        backgroundPosition: patternCss.backgroundPosition,
+        opacity: pattern.opacity,
+      }}
+    />
+  );
+}
+
+function FloatingDecorations({ elements, tokens }: { elements: FloatingElement[]; tokens: SkinTokens }) {
+  if (elements.length === 0) return null;
+
+  return (
+    <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
+      {elements.map((el, i) => {
+        const color = el.color === "accent" ? tokens.color.accent.primary
+          : el.color === "accent-secondary" ? tokens.color.accent.secondary
+          : el.color === "text-primary" ? tokens.color.text.primary
+          : el.color === "text-secondary" ? tokens.color.text.secondary
+          : el.color === "white" ? "#ffffff"
+          : tokens.color.accent.primary;
+
+        const isEmoji = el.shape === "emoji";
+
+        const style: CSSProperties = {
+          position: "absolute",
+          top: el.top, left: el.left, right: el.right, bottom: el.bottom,
+          width: el.size, height: el.size,
+          ...(isEmoji ? {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: el.size,
+            lineHeight: 1,
+            color,
+            userSelect: "none" as const,
+          } : {
+            backgroundColor: el.shape === "ring" ? "transparent" : color,
+            borderRadius: el.shape === "circle" || el.shape === "ring" ? "50%" : 2,
+            border: el.shape === "ring" ? `1.5px solid ${color}` : undefined,
+            transform: el.shape === "diamond" ? "rotate(45deg)" : undefined,
+          }),
+        };
+
+        // Compose a unique class with animation via inline <style>
+        const cls = `deco-el-${i}`;
+
+        return (
+          <div key={i} className={cls} style={style}>
+            {isEmoji && el.emoji ? el.emoji : null}
+            <style>{`
+              .${cls} {
+                opacity: ${el.opacity};
+                --el-opacity: ${el.opacity};
+                --el-opacity-peak: ${Math.min(el.opacity * 1.5, 1)};
+                animation: ${getAnimCSS(el.animation, el.animationDelay)};
+              }
+            `}</style>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function getAnimCSS(anim?: string, delay?: string): string {
+  if (!anim) return "none";
+  const d = delay ?? "0s";
+  switch (anim) {
+    case "float":         return `deco-float 6s ease-in-out ${d} infinite`;
+    case "float-slow":    return `deco-float-slow 8s ease-in-out ${d} infinite`;
+    case "float-reverse": return `deco-float-reverse 7s ease-in-out ${d} infinite`;
+    case "pulse-gentle":  return `deco-pulse 4s ease-in-out ${d} infinite`;
+    case "drift":         return `deco-drift 12s ease-in-out ${d} infinite`;
+    case "wander":        return `deco-wander 14s ease-in-out ${d} infinite`;
+    default:              return "none";
+  }
+}
 
 interface SkinPreviewPanelProps {
   skinId: string;
@@ -109,7 +201,7 @@ function ColorSwatch({ name, value }: { name: string; value: string }) {
 // Mirrors the layout of apps/web/app/p/[slug]/page.tsx
 // viewMode="mobile"  → single-column (hero + what you get + pricing)
 // viewMode="desktop" → 2-col hero with video preview + what you get + pricing
-function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitle }: { viewMode?: "desktop" | "mobile"; thumbnailUrl?: string | null; displayTitle: string }) {
+function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitle, headingStyle }: { viewMode?: "desktop" | "mobile"; thumbnailUrl?: string | null; displayTitle: string; headingStyle?: CSSProperties }) {
   const weeks = [
     { week: 1, title: "Foundation" },
     { week: 2, title: "Progressive Overload" },
@@ -138,7 +230,7 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitl
           letterSpacing: "0.1em",
           lineHeight: 1,
         }}>
-          Week {week}
+          Lesson {week}
         </p>
         <p style={{
           fontFamily: "var(--token-text-body-sm-font)",
@@ -177,7 +269,7 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitl
   );
 
   const wrapper: React.CSSProperties = {
-    backgroundColor: "var(--token-color-bg-default)",
+    background: "var(--token-color-bg-gradient, var(--token-color-bg-default))",
     fontFamily: "var(--token-text-body-md-font)",
   };
 
@@ -205,6 +297,7 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitl
             lineHeight: "1.1",
             color: "var(--token-color-text-primary)",
             marginBottom: "8px",
+            ...headingStyle,
           }}>
             {displayTitle}
           </h1>
@@ -341,6 +434,7 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitl
             fontWeight: "var(--token-text-heading-xl-weight)",
             lineHeight: "1.05",
             color: "var(--token-color-text-primary)",
+            ...headingStyle,
           }}>
             {displayTitle}
           </h1>
@@ -562,7 +656,7 @@ function LearnerJourneySection({ displayTitle }: { displayTitle: string }) {
           12 of 32 actions complete
         </p>
 
-        {/* Week 1 — Unlocked */}
+        {/* Lesson 1 — Unlocked */}
         <section>
           {/* Week header — mirrors <div className="flex items-center mb-3"> */}
           <div className="flex items-center mb-2">
@@ -574,7 +668,7 @@ function LearnerJourneySection({ displayTitle }: { displayTitle: string }) {
                 color: "var(--token-color-text-primary)",
               }}
             >
-              Week 1: Foundation &amp; Mobility
+              Lesson 1: Foundation &amp; Mobility
             </h2>
             <span
               className="ml-auto"
@@ -722,7 +816,7 @@ function LearnerJourneySection({ displayTitle }: { displayTitle: string }) {
                   color: "var(--token-color-text-secondary)",
                 }}
               >
-                Week {week}: {title}
+                Lesson {week}: {title}
               </h2>
             </div>
             <div
@@ -748,7 +842,7 @@ function LearnerJourneySection({ displayTitle }: { displayTitle: string }) {
                   opacity: 0.6,
                 }}
               >
-                Complete Week {week - 1} to unlock
+                Complete Lesson {week - 1} to unlock
               </p>
             </div>
           </section>
@@ -1280,13 +1374,15 @@ export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, to
   const tokens = useMemo(() => tokenOverride ?? getSkinTokens(skinId), [skinId, tokenOverride]);
   const cssVars = useMemo(() => getTokenCSSVars(tokens), [tokens]);
   const entry = getSkinCatalogEntry(skinId);
+  const decorations = useMemo(() => getSkinDecorations(skinId, tokens), [skinId, tokens]);
+  const headingStyle = useMemo(() => getHeadingEffectStyle(decorations.headingEffect, tokens), [decorations, tokens]);
 
   return (
     <div
       className="flex flex-col h-full overflow-hidden"
       style={{
         ...(cssVars as CSSProperties),
-        backgroundColor: "var(--token-color-bg-default)",
+        background: "var(--token-color-bg-gradient, var(--token-color-bg-default))",
         color: "var(--token-color-text-primary)",
         fontFamily: "var(--token-text-body-md-font)",
       }}
@@ -1314,11 +1410,11 @@ export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, to
       </div>
 
       {/* Scrollable multi-section content */}
-      <div className="flex-1 overflow-y-auto">
-
+      <div className="flex-1 overflow-y-auto relative">
+        {/* Decoration overlays */}
         {/* ── Section 1: Public program page ── */}
         <SectionHeader label="Public program page" />
-        <MarketingLanderSection viewMode={viewMode} thumbnailUrl={thumbnailUrl} displayTitle={displayTitle} />
+        <MarketingLanderSection viewMode={viewMode} thumbnailUrl={thumbnailUrl} displayTitle={displayTitle} headingStyle={headingStyle} />
 
         {/* ── Section 2: Learner timeline ── */}
         <SectionHeader label="Learner timeline" />
@@ -1335,6 +1431,10 @@ export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, to
         {/* ── Section 5: Design Tokens ── */}
         <SectionHeader label="Design Tokens" />
         <DesignTokensSection tokens={tokens} />
+
+        {/* Decoration overlays — ON TOP of content, pointer-events:none */}
+        <BackgroundPatternOverlay pattern={decorations.backgroundPattern} tokens={tokens} />
+        <FloatingDecorations elements={decorations.floatingElements} tokens={tokens} />
 
       </div>
     </div>

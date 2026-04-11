@@ -20,7 +20,6 @@ export const proAtelierTokens: SkinTokens = {
       elevated: "#F5F5F4",
       hero: "#FAFAF9",
       surface: "#F9FAFB",
-      gradient: "linear-gradient(90deg, #7F22FE 0%, #981AFA 100%)",
     },
     border: { subtle: "#E7E5E4" },
     text: {

@@ -20,7 +20,6 @@ export const classicStudioTokens: SkinTokens = {
       elevated: "#FFFFFF",
       hero: "#FAFAFA",
       surface: "#F4F4F4",
-      gradient: "linear-gradient(90deg, #BB4D00 0%, #E56000 100%)",
     },
     border: { subtle: "#E5E5E5" },
     text: {

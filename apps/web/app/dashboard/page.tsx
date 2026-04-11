@@ -24,7 +24,7 @@ interface Metrics {
 }
 
 function getGreeting(firstName: string | null | undefined): string {
-  const hour = new Date().getHours();
+  const hour = Number(new Date().toLocaleString("en-US", { hour: "numeric", hour12: false, timeZone: "America/New_York" }));
   const time = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
   const name = firstName?.trim() ? `, ${firstName.trim()}` : "";
   return `Good ${time}${name}`;

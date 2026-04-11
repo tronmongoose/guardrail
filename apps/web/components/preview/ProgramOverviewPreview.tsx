@@ -35,6 +35,7 @@ interface ProgramOverviewPreviewProps {
     durationWeeks?: number;
     pacingMode?: string;
     creator?: { name: string | null } | null;
+    creatorAvatarUrl?: string | null;
     weeks: WeekData[];
   };
   // skin kept for backwards compat — CSS vars are injected by the parent frame
@@ -76,11 +77,10 @@ export function ProgramOverviewPreview({
       ? `$${(program.priceInCents / 100).toFixed(2)}`
       : null;
 
-  // Feature cards: up to 3 sessions with keyTakeaways or summary
+  // Feature cards: sessions with keyTakeaways or summary
   const featureCards = program.weeks
     .flatMap((w) => w.sessions)
-    .filter((s) => (s.keyTakeaways && s.keyTakeaways.length > 0) || s.summary)
-    .slice(0, 3);
+    .filter((s) => (s.keyTakeaways && s.keyTakeaways.length > 0) || s.summary);
 
   const hasWhoSection = !!(program.targetAudience || program.outcomeStatement);
   const creatorName = program.creator?.name;
@@ -111,19 +111,31 @@ export function ProgramOverviewPreview({
 
           {/* Left: text */}
           <div className="flex flex-col gap-6 min-w-0 overflow-hidden">
-            {creatorName && (
-              <p
-                style={{
-                  fontFamily: "var(--token-text-label-sm-font)",
-                  fontSize: "var(--token-text-label-sm-size)",
-                  fontWeight: "var(--token-text-label-sm-weight)",
-                  color: "var(--token-color-text-secondary)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.15em",
-                }}
-              >
-                Coach {creatorName}
-              </p>
+            {(creatorName || program.creatorAvatarUrl) && (
+              <div className="flex items-center gap-3">
+                {program.creatorAvatarUrl && (
+                  <div className="w-14 h-14 rounded-full p-[1.5px] bg-gradient-to-br from-teal-400 via-pink-500 to-purple-500 flex-shrink-0">
+                    <div className="w-full h-full rounded-full overflow-hidden" style={{ backgroundColor: "var(--token-color-bg-elevated)" }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={program.creatorAvatarUrl} alt="" className="w-full h-full object-cover" />
+                    </div>
+                  </div>
+                )}
+                {creatorName && (
+                  <p
+                    style={{
+                      fontFamily: "var(--token-text-label-sm-font)",
+                      fontSize: "var(--token-text-label-sm-size)",
+                      fontWeight: "var(--token-text-label-sm-weight)",
+                      color: "var(--token-color-text-secondary)",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.15em",
+                    }}
+                  >
+                    Coach {creatorName}
+                  </p>
+                )}
+              </div>
             )}
 
             <h1
@@ -158,9 +170,9 @@ export function ProgramOverviewPreview({
                 style={{
                   width: "100%",
                   padding: "12px 24px",
-                  borderRadius: "100px",
+                  borderRadius: "var(--token-comp-btn-primary-radius, 100px)",
                   background:
-                    "linear-gradient(90deg, #AD46FF 0%, #F6339A 100%)",
+                    "linear-gradient(90deg, var(--token-color-accent), var(--token-color-accent-secondary, var(--token-color-accent)))",
                   color: "#fff",
                   fontFamily: "var(--token-text-body-sm-font)",
                   fontSize: "var(--token-text-body-sm-size)",
@@ -515,7 +527,7 @@ export function ProgramOverviewPreview({
                         letterSpacing: "0.1em",
                       }}
                     >
-                      Week {week.weekNumber}
+                      Lesson {week.weekNumber}
                     </p>
                     {week.sessions.length > 0 && (
                       <span
@@ -688,8 +700,8 @@ export function ProgramOverviewPreview({
               style={{
                 width: "100%",
                 padding: "12px 24px",
-                borderRadius: "100px",
-                background: "linear-gradient(90deg, #AD46FF 0%, #F6339A 100%)",
+                borderRadius: "var(--token-comp-btn-primary-radius, 100px)",
+                background: "linear-gradient(90deg, var(--token-color-accent), var(--token-color-accent-secondary, var(--token-color-accent)))",
                 color: "#fff",
                 fontFamily: "var(--token-text-body-sm-font)",
                 fontSize: "var(--token-text-body-sm-size)",

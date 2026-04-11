@@ -183,7 +183,7 @@ export function WeekCard({ week, programId, videos, onUpdate }: WeekCardProps) {
           </svg>
         </button>
 
-        <span className="text-xs text-neon-cyan font-medium">Week {week.weekNumber}</span>
+        <span className="text-xs text-neon-cyan font-medium">Lesson {week.weekNumber}</span>
 
         {editing ? (
           <input

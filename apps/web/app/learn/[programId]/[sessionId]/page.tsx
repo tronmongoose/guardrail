@@ -219,7 +219,7 @@ export default async function SessionPage({
             muxStatus,
             muxToken: muxPlaybackId ? muxPlaybackTokens[muxPlaybackId] : undefined,
             blobUrl,
-            title: ytVideo.title ?? c.chapterTitle ?? "Untitled",
+            title: c.chapterTitle ?? ytVideo.title ?? "Untitled",
             chapterTitle: c.chapterTitle ?? ytVideo.title ?? "Untitled",
             chapterDescription: c.chapterDescription ?? undefined,
             thumbnailUrl: ytVideo.thumbnailUrl ?? undefined,

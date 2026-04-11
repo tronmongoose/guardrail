@@ -265,6 +265,44 @@ body {
   animation: viewer-slide-out-kf ease-in-out forwards;
 }
 
+/* ── Skin decoration keyframes ──────────────────────────────────────────────── */
+
+@keyframes deco-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-35px) rotate(8deg); }
+}
+
+@keyframes deco-float-slow {
+  0%, 100% { transform: translateY(0) translateX(0) rotate(0deg); }
+  33% { transform: translateY(-28px) translateX(18px) rotate(-5deg); }
+  66% { transform: translateY(20px) translateX(-14px) rotate(5deg); }
+}
+
+@keyframes deco-float-reverse {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(30px) rotate(-6deg); }
+}
+
+@keyframes deco-pulse {
+  0%, 100% { transform: scale(1) rotate(0deg); opacity: var(--el-opacity, 0.3); }
+  50% { transform: scale(1.25) rotate(10deg); opacity: var(--el-opacity-peak, 0.5); }
+}
+
+@keyframes deco-drift {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  25% { transform: translate(24px, -20px) rotate(8deg); }
+  50% { transform: translate(-16px, -32px) rotate(-5deg); }
+  75% { transform: translate(-24px, 16px) rotate(6deg); }
+}
+
+@keyframes deco-wander {
+  0%, 100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+  20% { transform: translate(18px, -15px) rotate(8deg) scale(1.08); }
+  40% { transform: translate(-12px, -24px) rotate(-6deg) scale(0.95); }
+  60% { transform: translate(15px, 10px) rotate(5deg) scale(1.05); }
+  80% { transform: translate(-18px, -6px) rotate(-8deg) scale(1); }
+}
+
 /* Gradient text — hero headings and action type labels */
 .gradient-text {
   background: linear-gradient(90deg, #C27AFF 0%, #FB64B6 100%);

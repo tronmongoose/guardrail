@@ -20,7 +20,6 @@ export const activityCulinaryTokens: SkinTokens = {
       elevated: "#FFF7ED",
       hero: "#FFFFFF",
       surface: "#F9FAFB",
-      gradient: "linear-gradient(90deg, #FB2C36 0%, #FF6900 100%)",
     },
     border: { subtle: "#FFD6A8" },
     text: {

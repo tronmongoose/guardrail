@@ -43,6 +43,11 @@ const config: Config = {
         "step-pulse": "step-pulse 2s ease-in-out infinite",
         "step-complete": "step-complete 0.4s ease-out",
         "text-shimmer": "text-shimmer 3s linear infinite",
+        // Skin decoration animations
+        "float-slow": "float-slow 8s ease-in-out infinite",
+        "float-reverse": "float-reverse 7s ease-in-out infinite",
+        "pulse-gentle": "pulse-gentle 4s ease-in-out infinite",
+        "drift": "drift 12s ease-in-out infinite",
       },
       keyframes: {
         "glow-pulse": {
@@ -79,6 +84,26 @@ const config: Config = {
         "text-shimmer": {
           "0%": { backgroundPosition: "-200% center" },
           "100%": { backgroundPosition: "200% center" },
+        },
+        // Skin decoration keyframes
+        "float-slow": {
+          "0%, 100%": { transform: "translateY(0) translateX(0)" },
+          "33%": { transform: "translateY(-8px) translateX(4px)" },
+          "66%": { transform: "translateY(4px) translateX(-4px)" },
+        },
+        "float-reverse": {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(8px)" },
+        },
+        "pulse-gentle": {
+          "0%, 100%": { opacity: "var(--el-opacity, 0.3)", transform: "scale(1)" },
+          "50%": { opacity: "var(--el-opacity-peak, 0.45)", transform: "scale(1.08)" },
+        },
+        "drift": {
+          "0%, 100%": { transform: "translate(0, 0)" },
+          "25%": { transform: "translate(6px, -4px)" },
+          "50%": { transform: "translate(-4px, -8px)" },
+          "75%": { transform: "translate(-6px, 4px)" },
         },
       },
     },

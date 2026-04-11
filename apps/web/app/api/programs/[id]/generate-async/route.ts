@@ -457,10 +457,13 @@ async function processGenerationJob(jobId: string, programId: string) {
 
     let clipDistributionPlan: DistributionPlan | undefined;
 
-    // When AI decides, use video count as baseline for clip distribution
-    // (the LLM will determine the final lesson count based on content)
+    // When AI decides, use total Gemini topic count as the baseline so each
+    // topic can become its own lesson. Fall back to video count if no topics.
+    const totalTopics = enrichedOnly.reduce(
+      (sum, d) => sum + (d.topics?.length ?? 0), 0
+    );
     const effectiveWeeks = program.aiStructured
-      ? Math.max(2, videosForPipeline.length)
+      ? Math.max(2, totalTopics > 0 ? totalTopics : videosForPipeline.length)
       : program.durationWeeks;
 
     if (enrichedOnly.length > 0) {

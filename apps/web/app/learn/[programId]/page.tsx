@@ -87,6 +87,11 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
   const tokens = await resolveTokens(program);
   const skinCSSVars = getTokenCSSVars(tokens);
 
+  // Map private blob URL to public proxy URL for avatar rendering
+  const avatarProxyUrl = program.creatorAvatarUrl
+    ? `/api/programs/${program.id}/avatar`
+    : null;
+
   return (
     <SkinThemeProvider tokens={tokens}>
       <LearnerTimeline
@@ -99,6 +104,7 @@ export default async function LearnPage({ params }: { params: Promise<{ programI
         skinId={program.skinId}
         skinCSSVars={skinCSSVars}
         creatorName={program.creator.name}
+        creatorAvatarUrl={avatarProxyUrl}
         targetTransformation={program.targetTransformation}
         durationWeeks={program.durationWeeks}
       />

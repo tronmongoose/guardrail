@@ -345,7 +345,7 @@ export function formatDistributionPlanForPrompt(plan: DistributionPlan): string 
   ];
 
   for (const lesson of plan.lessons) {
-    lines.push(`Lesson ${lesson.lessonIndex + 1} (Week ${lesson.weekNumber}, Session ${lesson.sessionIndex + 1}):`);
+    lines.push(`Lesson ${lesson.lessonIndex + 1} (Session ${lesson.sessionIndex + 1}):`);
 
     for (let i = 0; i < lesson.clips.length; i++) {
       const clip = lesson.clips[i];
@@ -446,12 +446,88 @@ export function validateAndFixClipDistribution(
     }
   }
 
+  // Check 5: Structural match — week/session layout must match the plan
+  const expectedWeekNumbers = [...new Set(plan.lessons.map((l) => l.weekNumber))].sort((a, b) => a - b);
+  const expectedWeekCount = expectedWeekNumbers.length;
+  let structuralMismatch = false;
+
+  if ((draft.weeks ?? []).length !== expectedWeekCount) {
+    errors.push(
+      `Structural mismatch: plan has ${expectedWeekCount} lessons but draft has ${(draft.weeks ?? []).length} weeks`,
+    );
+    structuralMismatch = true;
+  } else {
+    for (let w = 0; w < expectedWeekCount; w++) {
+      const expectedSessions = plan.lessons.filter((l) => l.weekNumber === expectedWeekNumbers[w]).length;
+      const actualSessions = (draft.weeks[w]?.sessions ?? []).length;
+      if (actualSessions !== expectedSessions) {
+        errors.push(
+          `Structural mismatch: lesson ${w + 1} should have ${expectedSessions} session(s) but has ${actualSessions}`,
+        );
+        structuralMismatch = true;
+      }
+    }
+  }
+
   if (errors.length === 0) {
     return { valid: true, errors: [] };
   }
 
-  // Auto-fix: replace clips in each session with plan clips
-  const fixedDraft = JSON.parse(JSON.stringify(draft));
+  // Auto-fix: if structural mismatch, restructure the draft to match the plan
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let fixedDraft: any;
+
+  if (structuralMismatch) {
+    // Flatten all sessions from the draft, preserving their content
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const flatSessions: any[] = [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const week of (draft.weeks ?? [])) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const session of (week.sessions ?? [])) {
+        flatSessions.push(JSON.parse(JSON.stringify(session)));
+      }
+    }
+
+    // Build the correct week/session structure from the plan
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const newWeeks: any[] = [];
+    let sessionIdx = 0;
+
+    for (const weekNum of expectedWeekNumbers) {
+      const lessonsForWeek = plan.lessons.filter((l) => l.weekNumber === weekNum);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sessions: any[] = [];
+
+      for (let s = 0; s < lessonsForWeek.length; s++) {
+        // Reuse the corresponding flat session if available, otherwise create a stub
+        const source = sessionIdx < flatSessions.length
+          ? flatSessions[sessionIdx]
+          : { title: `Session ${s + 1}`, summary: "", keyTakeaways: [], orderIndex: s, actions: [] };
+        source.orderIndex = s;
+        sessions.push(source);
+        sessionIdx++;
+      }
+
+      // Find the original week data for title/summary if it existed
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const origWeek = (draft.weeks ?? []).find((w: any) => w.weekNumber === weekNum);
+      newWeeks.push({
+        title: origWeek?.title ?? `Lesson ${weekNum}`,
+        summary: origWeek?.summary ?? sessions[0]?.summary ?? "",
+        weekNumber: weekNum,
+        sessions,
+      });
+    }
+
+    fixedDraft = JSON.parse(JSON.stringify(draft));
+    fixedDraft.weeks = newWeeks;
+    fixedDraft.durationWeeks = expectedWeekCount;
+  } else {
+    fixedDraft = JSON.parse(JSON.stringify(draft));
+  }
+
+  // Now fix clips in each session to match the plan
   let planLessonIdx = 0;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -488,7 +564,7 @@ export function validateAndFixClipDistribution(
         session.overlays = [
           {
             type: "TITLE_CARD",
-            content: { title: session.title, subtitle: `Week ${week.weekNumber}` },
+            content: { title: session.title, subtitle: `Lesson ${week.weekNumber}` },
             position: "CENTER",
             durationMs: 4000,
             orderIndex: 0,

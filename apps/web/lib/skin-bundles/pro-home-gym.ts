@@ -20,7 +20,6 @@ export const proHomeGymTokens: SkinTokens = {
       elevated: "#1D293D",
       hero: "#0F172B",
       surface: "#182035",
-      gradient: "linear-gradient(90deg, #00BC7D 0%, #00BBA7 100%)",
     },
     border: { subtle: "rgba(0, 188, 125, 0.2)" },
     text: {

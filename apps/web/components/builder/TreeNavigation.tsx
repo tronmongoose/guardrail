@@ -329,7 +329,7 @@ export function TreeNavigation({
 }: TreeNavigationProps) {
   const [addingWeek, setAddingWeek] = useState(false);
 
-  const groupLabel = pacingMode === "UNLOCK_ON_COMPLETE" ? "Lesson" : "Week";
+  const groupLabel = "Lesson";
   const weekIds = weeks.map((w) => w.id);
 
   const sensors = useSensors(

@@ -488,24 +488,39 @@ Apply this style throughout all titles, descriptions, instructions, and reflecti
 
     const distributionRule = hasPlan
       ? `2. Follow the VIDEO ASSIGNMENT PLAN exactly — clip assignments are pre-computed and mandatory. Do NOT change youtubeVideoId, startSeconds, or endSeconds values. You may only add chapterTitle, chapterDescription, transitionType, and overlay details.`
-      : `2. Distribute content logically across all ${input.durationWeeks} weeks (~${contentPerWeek} source(s) per week)`;
+      : `2. Distribute content logically across all ${input.durationWeeks} lessons (~${contentPerWeek} source(s) per lesson)`;
+
+    // When a distribution plan exists, it already pre-computed the correct lesson count.
+    // Override aiStructured flexibility — the plan's structure is mandatory.
+    const planWeekCount = hasPlan
+      ? new Set(input.clipDistributionPlan!.lessons.map((l) => l.weekNumber)).size
+      : 0;
 
     // Duration instruction depends on whether user chose a specific count or let AI decide
-    const durationInstruction = input.aiStructured
-      ? `- Duration: Determine the ideal number of lessons based on the content below. Use approximately ${input.durationWeeks} as a starting point, but adjust up or down to whatever count best fits the natural topic structure. Each lesson should have 5-15 minutes of meaningful content.`
-      : `- Duration: EXACTLY ${input.durationWeeks} weeks (you MUST create ${input.durationWeeks} weeks)`;
+    // BUT if a distribution plan exists, always enforce the plan's structure
+    const durationInstruction = hasPlan
+      ? `- Duration: EXACTLY ${planWeekCount} lessons with 1 session each, matching the pre-computed video assignment plan below.`
+      : input.aiStructured
+        ? `- Duration: Determine the ideal number of lessons based on the content below. Use approximately ${input.durationWeeks} as a starting point, but adjust up or down to whatever count best fits the natural topic structure. Each lesson should have 5-15 minutes of meaningful content.`
+        : `- Duration: EXACTLY ${input.durationWeeks} lessons (you MUST create ${input.durationWeeks} lessons)`;
 
-    const weekCountRule = input.aiStructured
-      ? `1. Choose the ideal number of weeks based on the content — each lesson should have 5-15 minutes of clip content. You may create more or fewer than ${input.durationWeeks} weeks if the content warrants it.`
-      : `1. Generate EXACTLY ${input.durationWeeks} weeks (weekNumber 1 through ${input.durationWeeks})`;
+    const weekCountRule = hasPlan
+      ? `1. Generate EXACTLY ${planWeekCount} lessons (weekNumber 1 through ${planWeekCount}) with EXACTLY 1 session per lesson — this matches the VIDEO ASSIGNMENT PLAN. Do NOT merge lessons or create multiple sessions per lesson.`
+      : input.aiStructured
+        ? `1. Choose the ideal number of lessons based on the content — each lesson should have 5-15 minutes of clip content. You may create more or fewer than ${input.durationWeeks} lessons if the content warrants it.`
+        : `1. Generate EXACTLY ${input.durationWeeks} lessons (weekNumber 1 through ${input.durationWeeks})`;
 
-    const taskInstruction = input.aiStructured
-      ? `Create a scene-based program with the ideal number of lessons for this content. Each session is a curated playlist of video clips from the source material, with transitions and overlays.`
-      : `Create a ${input.durationWeeks}-week scene-based program. Each session is a curated playlist of video clips from the source material, with transitions and overlays.`;
+    const taskInstruction = hasPlan
+      ? `Create a ${planWeekCount}-lesson scene-based program. Each lesson has exactly 1 session — a curated playlist of video clips from the source material, with transitions and overlays.`
+      : input.aiStructured
+        ? `Create a scene-based program with the ideal number of lessons for this content. Each session is a curated playlist of video clips from the source material, with transitions and overlays.`
+        : `Create a ${input.durationWeeks}-lesson scene-based program. Each session is a curated playlist of video clips from the source material, with transitions and overlays.`;
 
-    const durationWeeksOutput = input.aiStructured
-      ? `"<number of weeks you chose>"`
-      : `${input.durationWeeks}`;
+    const durationWeeksOutput = hasPlan
+      ? `${planWeekCount}`
+      : input.aiStructured
+        ? `"<number of lessons you chose>"`
+        : `${input.durationWeeks}`;
 
     return `You are an expert curriculum designer creating a scene-based learning program with video clips, transitions, and overlays.
 
@@ -534,12 +549,12 @@ LESSON SHAPING RULES:
 - Each session starts with a TITLE_CARD overlay
 - Add KEY_POINTS overlay after major topic transitions
 - Use FADE transition between clips from different videos, NONE for contiguous clips from the same video
-- Progressive complexity: foundational → applied → integration across weeks
+- Progressive complexity: foundational → applied → integration across lessons
 
 CRITICAL REQUIREMENTS:
 ${weekCountRule}
 ${distributionRule}
-3. Each week needs a clear theme building toward the transformation
+3. Each lesson needs a clear theme building toward the transformation
 4. Each session MUST include keyTakeaways (2-3 items)
 5. Each session MUST include a "clips" array with video clip segments
 6. Each session MUST include an "overlays" array (at minimum a TITLE_CARD)
@@ -555,8 +570,8 @@ OUTPUT FORMAT (JSON only, no markdown):
   "durationWeeks": ${durationWeeksOutput},
   "weeks": [
     {
-      "title": "Week 1: [Theme]",
-      "summary": "What learners achieve this week",
+      "title": "Lesson 1: [Theme]",
+      "summary": "What learners achieve in this lesson",
       "weekNumber": 1,
       "sessions": [
         {
@@ -589,7 +604,7 @@ OUTPUT FORMAT (JSON only, no markdown):
           "overlays": [
             {
               "type": "TITLE_CARD",
-              "content": { "title": "Session title", "subtitle": "Week 1" },
+              "content": { "title": "Session title", "subtitle": "Lesson 1" },
               "position": "CENTER",
               "durationMs": 4000,
               "orderIndex": 0,
@@ -639,7 +654,7 @@ QUALITY GUIDELINES:
 - Create focused clips around specific topics, NOT "watch the whole video" actions
 - Use topic timestamps to pick the most valuable segments
 - Key moments marked [high] significance are the best candidates for clips
-- Build complexity progressively across weeks
+- Build complexity progressively across lessons
 - DO exercises should reference real techniques from the clips
 - REFLECT prompts should connect clip content to the learner's personal context
 - Final week should synthesize and prepare for real-world application`;
@@ -659,7 +674,7 @@ QUALITY GUIDELINES:
     actionInstructions.push(`  * READ action(s) — for DOCUMENT content, create reading assignments that reference the document's key points`);
   }
   actionInstructions.push(`  * DO action — practical exercise applying what was learned`);
-  actionInstructions.push(`  * REFLECT action (at least one per week) — thought-provoking prompt connecting to the transformation`);
+  actionInstructions.push(`  * REFLECT action (at least one per lesson) — thought-provoking prompt connecting to the transformation`);
 
   const actionExamples = [];
   if (hasVideos) {
@@ -693,18 +708,28 @@ QUALITY GUIDELINES:
               "orderIndex": ${actionExamples.length}
             }`);
 
-  // Duration instruction depends on whether user chose a specific count or let AI decide
-  const classicDurationInstruction = input.aiStructured
-    ? `- Duration: Determine the ideal number of lessons based on the content below. Use approximately ${input.durationWeeks} as a starting point, but adjust up or down to whatever count best fits the natural topic structure. Each lesson should have 5-15 minutes of meaningful content.`
-    : `- Duration: EXACTLY ${input.durationWeeks} weeks (you MUST create ${input.durationWeeks} weeks)`;
+  // Classic prompt also respects the distribution plan when present
+  const classicPlanWeekCount = hasPlanClassic
+    ? new Set(input.clipDistributionPlan!.lessons.map((l) => l.weekNumber)).size
+    : 0;
 
-  const classicWeekCountRule = input.aiStructured
-    ? `1. Choose the ideal number of weeks based on the content — each lesson should have 5-15 minutes of content. You may create more or fewer than ${input.durationWeeks} weeks if the content warrants it.`
-    : `1. Generate EXACTLY ${input.durationWeeks} weeks (weekNumber 1 through ${input.durationWeeks})`;
+  const classicDurationInstruction = hasPlanClassic
+    ? `- Duration: EXACTLY ${classicPlanWeekCount} lessons with 1 session each, matching the pre-computed video assignment plan below.`
+    : input.aiStructured
+      ? `- Duration: Determine the ideal number of lessons based on the content below. Use approximately ${input.durationWeeks} as a starting point, but adjust up or down to whatever count best fits the natural topic structure. Each lesson should have 5-15 minutes of meaningful content.`
+      : `- Duration: EXACTLY ${input.durationWeeks} lessons (you MUST create ${input.durationWeeks} lessons)`;
 
-  const classicTaskInstruction = input.aiStructured
-    ? `Create a structured learning program with the ideal number of lessons that transforms ${input.targetAudience || "learners"} toward ${input.targetTransformation || "the intended outcome"}.`
-    : `Create a ${input.durationWeeks}-week structured learning program that transforms ${input.targetAudience || "learners"} toward ${input.targetTransformation || "the intended outcome"}.`;
+  const classicWeekCountRule = hasPlanClassic
+    ? `1. Generate EXACTLY ${classicPlanWeekCount} lessons (weekNumber 1 through ${classicPlanWeekCount}) with EXACTLY 1 session per lesson — this matches the VIDEO ASSIGNMENT PLAN. Do NOT merge lessons or create multiple sessions per lesson.`
+    : input.aiStructured
+      ? `1. Choose the ideal number of lessons based on the content — each lesson should have 5-15 minutes of content. You may create more or fewer than ${input.durationWeeks} lessons if the content warrants it.`
+      : `1. Generate EXACTLY ${input.durationWeeks} lessons (weekNumber 1 through ${input.durationWeeks})`;
+
+  const classicTaskInstruction = hasPlanClassic
+    ? `Create a ${classicPlanWeekCount}-lesson structured learning program that transforms ${input.targetAudience || "learners"} toward ${input.targetTransformation || "the intended outcome"}.`
+    : input.aiStructured
+      ? `Create a structured learning program with the ideal number of lessons that transforms ${input.targetAudience || "learners"} toward ${input.targetTransformation || "the intended outcome"}.`
+      : `Create a ${input.durationWeeks}-lesson structured learning program that transforms ${input.targetAudience || "learners"} toward ${input.targetTransformation || "the intended outcome"}.`;
 
   const classicDurationWeeksOutput = input.aiStructured
     ? `"<number of weeks you chose>"`
@@ -731,16 +756,16 @@ ${classicTaskInstruction}
 CRITICAL REQUIREMENTS:
 ${classicWeekCountRule}
 ${hasPlanClassic
-    ? `2. Follow the VIDEO ASSIGNMENT PLAN exactly — use the specified video IDs for WATCH actions in each week. Every video must appear at least once.`
-    : `2. Distribute content logically across all ${input.durationWeeks} weeks (approximately ${contentPerWeek} source(s) per week)`}
-3. Each week needs a clear theme that builds toward the transformation
+    ? `2. Follow the VIDEO ASSIGNMENT PLAN exactly — use the specified video IDs for WATCH actions in each lesson. Every video must appear at least once.`
+    : `2. Distribute content logically across all ${input.durationWeeks} lessons (approximately ${contentPerWeek} source(s) per lesson)`}
+3. Each lesson needs a clear theme that builds toward the transformation
 4. Content from the same cluster shares related topics — use this to group them logically
 5. Each session MUST include 2-3 key takeaways (keyTakeaways array)
 ${hasVideos ? `6. For VIDEO content: create WATCH actions with the exact youtubeVideoId` : ""}
 ${hasDocs ? `${hasVideos ? "7" : "6"}. For DOCUMENT content: create READ actions referencing key points from the document` : ""}
 
-STRUCTURE EACH WEEK WITH:
-- 1-2 sessions per week
+STRUCTURE EACH LESSON WITH:
+- 1 session per lesson
 - Each session should have:
   * keyTakeaways: 2-3 concise bullet points summarizing what learners will gain
 ${actionInstructions.join("\n")}
@@ -754,8 +779,8 @@ OUTPUT FORMAT (JSON only, no markdown):
   "durationWeeks": ${classicDurationWeeksOutput},
   "weeks": [
     {
-      "title": "Week 1: [Theme]",
-      "summary": "What learners will achieve this week",
+      "title": "Lesson 1: [Theme]",
+      "summary": "What learners will achieve in this lesson",
       "weekNumber": 1,
       "sessions": [
         {
@@ -777,7 +802,7 @@ ${actionExamples.join(",\n")}
 }
 
 QUALITY GUIDELINES:
-- Week titles should be engaging and transformation-oriented (e.g., "Week 1: Building Your Foundation")
+- Lesson titles should be engaging and transformation-oriented (e.g., "Lesson 1: Building Your Foundation")
 - Key takeaways should be specific, actionable outcomes — not vague promises
 - Instructions should be specific and actionable, not generic
 - DO actions should have concrete exercises learners can complete

@@ -90,6 +90,7 @@ model Program {
   targetAudience       String?   @db.Text  // "Who it's for" / industry
   targetTransformation String?   @db.Text  // 1-2 sentence transformation goal
   vibePrompt           String?   @db.Text  // AI generation style guidance
+  creatorAvatarUrl     String?   @db.Text  // Creator profile avatar image URL (Vercel Blob)
   skinId               String    @default("classic-minimal")
   customSkinId         String?
   customSkin           CustomSkin? @relation(fields: [customSkinId], references: [id])
