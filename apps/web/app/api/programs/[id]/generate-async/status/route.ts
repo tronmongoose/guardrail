@@ -29,7 +29,7 @@ export async function GET(
   }
 
   // Detect stuck jobs
-  const STALE_THRESHOLD_MS = 5 * 60 * 1000;
+  const STALE_THRESHOLD_MS = 3 * 60 * 1000; // Match the POST route's stale threshold
   let isStale = false;
 
   if (job.status === "PENDING" || job.status === "PROCESSING") {

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateProgramDraft, extractContentDigests, analyzeUploadedVideoWithGemini, distributeClipsToLessons, validateAndFixClipDistribution } from "@guide-rail/ai";
@@ -10,7 +10,7 @@ import { generateSkinFromVibe } from "@/lib/generate-skin";
 import { sendProgramReadyEmail } from "@/lib/email";
 import { getMux, isMuxConfigured } from "@/lib/mux";
 
-export const maxDuration = 300; // Vercel Pro: keep function alive while background job runs
+export const maxDuration = 800; // Vercel Pro (Fluid Compute): keep function alive for long video analysis
 
 /**
  * Async program generation endpoint.
@@ -100,9 +100,14 @@ export async function POST(
     },
   });
 
-  // Start async processing (fire and forget)
-  processGenerationJob(job.id, programId).catch((err) => {
-    console.error("[generate-async] Background job failed:", err);
+  // Start async processing after the response is sent.
+  // after() tells Vercel to keep the function alive for background work (up to maxDuration).
+  after(async () => {
+    try {
+      await processGenerationJob(job.id, programId);
+    } catch (err) {
+      console.error("[generate-async] Background job failed:", err);
+    }
   });
 
   return NextResponse.json({
@@ -119,7 +124,7 @@ export async function POST(
  * Updates job status/progress as it runs.
  * Processes both YouTube videos and uploaded artifacts (PDFs, DOCXs, etc.).
  */
-const JOB_TIMEOUT_MS = 12 * 60 * 1000; // 12 minutes (within Vercel Pro 300s maxDuration)
+const JOB_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes (within Vercel Pro 800s maxDuration with buffer)
 
 async function processGenerationJob(jobId: string, programId: string) {
   const timer = createTimer();

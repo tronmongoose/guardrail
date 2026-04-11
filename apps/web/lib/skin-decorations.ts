@@ -183,15 +183,16 @@ const CATEGORY_DECORATIONS: Record<string, SkinDecorationConfig> = {
   classic: {
     backgroundPattern: { type: "dots", colorKey: "accent", opacity: 0.08, spacing: 28, size: 1.5 },
     floatingElements: [
-      // Left margin
-      { shape: "emoji", emoji: "✦", size: 36, top: "3%", left: "-1%", color: "accent", opacity: 0.3, animation: "wander", animationDelay: "0s" },
-      { shape: "emoji", emoji: "✦", size: 28, top: "32%", left: "0%", color: "accent-secondary", opacity: 0.25, animation: "float-slow", animationDelay: "2s" },
-      // Right margin
-      { shape: "emoji", emoji: "✦", size: 32, top: "5%", right: "-1%", color: "accent", opacity: 0.25, animation: "drift", animationDelay: "1s" },
-      { shape: "emoji", emoji: "✦", size: 24, top: "45%", right: "0%", color: "accent-secondary", opacity: 0.2, animation: "float-reverse", animationDelay: "3.5s" },
-      // Bottom area
-      { shape: "emoji", emoji: "✦", size: 28, bottom: "8%", left: "2%", color: "accent-secondary", opacity: 0.2, animation: "drift", animationDelay: "5s" },
-      { shape: "emoji", emoji: "✦", size: 24, bottom: "5%", right: "3%", color: "accent", opacity: 0.2, animation: "wander", animationDelay: "4s" },
+      // Above creator label (top-left whitespace)
+      { shape: "emoji", emoji: "✦", size: 28, top: "2%", left: "8%", color: "accent", opacity: 0.25, animation: "wander", animationDelay: "0s" },
+      // Column gap between text and video
+      { shape: "emoji", emoji: "✦", size: 36, top: "10%", left: "47%", color: "accent", opacity: 0.3, animation: "float-slow", animationDelay: "1s" },
+      { shape: "emoji", emoji: "✦", size: 24, top: "22%", left: "50%", color: "accent-secondary", opacity: 0.25, animation: "wander", animationDelay: "3s" },
+      // Below hero (between enroll btn and stats)
+      { shape: "emoji", emoji: "✦", size: 28, top: "36%", left: "15%", color: "accent-secondary", opacity: 0.22, animation: "drift", animationDelay: "2s" },
+      { shape: "emoji", emoji: "✦", size: 24, top: "38%", right: "15%", color: "accent", opacity: 0.2, animation: "float-reverse", animationDelay: "4s" },
+      // Around divider / lower section
+      { shape: "emoji", emoji: "✦", size: 20, top: "52%", left: "48%", color: "accent-secondary", opacity: 0.18, animation: "float-slow", animationDelay: "5s" },
     ],
     headingEffect: { type: "none" },
   },
@@ -199,31 +200,34 @@ const CATEGORY_DECORATIONS: Record<string, SkinDecorationConfig> = {
   creative: {
     backgroundPattern: { type: "dots", colorKey: "accent", opacity: 0.1, spacing: 32, size: 2 },
     floatingElements: [
-      // Left margin
-      { shape: "emoji", emoji: "✨", size: 44, top: "2%", left: "-1%", color: "accent", opacity: 0.4, animation: "wander", animationDelay: "0s" },
-      { shape: "emoji", emoji: "✨", size: 32, top: "28%", left: "0%", color: "accent-secondary", opacity: 0.3, animation: "float-slow", animationDelay: "2s" },
-      // Right margin
-      { shape: "emoji", emoji: "✨", size: 36, top: "4%", right: "-1%", color: "accent-secondary", opacity: 0.35, animation: "float", animationDelay: "1s" },
-      { shape: "emoji", emoji: "✨", size: 28, top: "40%", right: "0%", color: "accent", opacity: 0.3, animation: "float-reverse", animationDelay: "3s" },
-      // Bottom area
-      { shape: "emoji", emoji: "✨", size: 28, bottom: "10%", left: "2%", color: "accent-secondary", opacity: 0.25, animation: "drift", animationDelay: "4s" },
-      { shape: "emoji", emoji: "✨", size: 24, bottom: "6%", right: "3%", color: "accent", opacity: 0.25, animation: "wander", animationDelay: "5s" },
-      { shape: "emoji", emoji: "✨", size: 20, top: "60%", left: "1%", color: "accent", opacity: 0.2, animation: "pulse-gentle", animationDelay: "6s" },
+      // Above creator label
+      { shape: "emoji", emoji: "✨", size: 32, top: "1%", left: "10%", color: "accent", opacity: 0.35, animation: "wander", animationDelay: "0s" },
+      // Column gap
+      { shape: "emoji", emoji: "✨", size: 40, top: "8%", left: "46%", color: "accent", opacity: 0.4, animation: "float-slow", animationDelay: "0.5s" },
+      { shape: "emoji", emoji: "✨", size: 28, top: "20%", left: "50%", color: "accent-secondary", opacity: 0.3, animation: "wander", animationDelay: "2s" },
+      // Below hero
+      { shape: "emoji", emoji: "✨", size: 32, top: "35%", left: "12%", color: "accent-secondary", opacity: 0.3, animation: "float", animationDelay: "1.5s" },
+      { shape: "emoji", emoji: "✨", size: 28, top: "37%", right: "12%", color: "accent", opacity: 0.28, animation: "float-reverse", animationDelay: "3s" },
+      // Around divider
+      { shape: "emoji", emoji: "✨", size: 24, top: "50%", left: "46%", color: "accent", opacity: 0.22, animation: "drift", animationDelay: "4s" },
+      // Lower section gaps
+      { shape: "emoji", emoji: "✨", size: 20, top: "65%", left: "48%", color: "accent-secondary", opacity: 0.2, animation: "float-slow", animationDelay: "5s" },
     ],
     headingEffect: { type: "gradient" },
   },
 
   lifestyle: {
     floatingElements: [
-      // Left margin
-      { shape: "emoji", emoji: "🌿", size: 44, top: "3%", left: "-1%", color: "accent", opacity: 0.35, animation: "wander", animationDelay: "0s" },
-      { shape: "emoji", emoji: "🌿", size: 32, top: "30%", left: "0%", color: "accent-secondary", opacity: 0.3, animation: "float-slow", animationDelay: "2s" },
-      // Right margin
-      { shape: "emoji", emoji: "🌿", size: 36, top: "5%", right: "-1%", color: "accent-secondary", opacity: 0.3, animation: "drift", animationDelay: "1s" },
-      { shape: "emoji", emoji: "🌿", size: 28, top: "42%", right: "0%", color: "accent", opacity: 0.25, animation: "float-reverse", animationDelay: "3s" },
-      // Bottom area
-      { shape: "emoji", emoji: "🌿", size: 32, bottom: "10%", left: "2%", color: "accent-secondary", opacity: 0.25, animation: "wander", animationDelay: "4s" },
-      { shape: "emoji", emoji: "🌿", size: 24, bottom: "5%", right: "2%", color: "accent", opacity: 0.2, animation: "float-slow", animationDelay: "5s" },
+      // Above creator label
+      { shape: "emoji", emoji: "🌿", size: 32, top: "1%", left: "12%", color: "accent", opacity: 0.3, animation: "wander", animationDelay: "0s" },
+      // Column gap
+      { shape: "emoji", emoji: "🌿", size: 40, top: "8%", left: "46%", color: "accent", opacity: 0.35, animation: "float-slow", animationDelay: "1s" },
+      { shape: "emoji", emoji: "🌿", size: 28, top: "22%", left: "49%", color: "accent-secondary", opacity: 0.28, animation: "wander", animationDelay: "3s" },
+      // Below hero
+      { shape: "emoji", emoji: "🌿", size: 30, top: "36%", left: "18%", color: "accent-secondary", opacity: 0.25, animation: "drift", animationDelay: "2s" },
+      { shape: "emoji", emoji: "🌿", size: 26, top: "38%", right: "18%", color: "accent", opacity: 0.22, animation: "float-reverse", animationDelay: "4s" },
+      // Around divider
+      { shape: "emoji", emoji: "🌿", size: 24, top: "52%", left: "47%", color: "accent", opacity: 0.2, animation: "float-slow", animationDelay: "5s" },
     ],
     headingEffect: { type: "gradient" },
   },
@@ -231,31 +235,34 @@ const CATEGORY_DECORATIONS: Record<string, SkinDecorationConfig> = {
   activity: {
     backgroundPattern: { type: "diagonal-lines", colorKey: "accent", opacity: 0.08, spacing: 14, size: 1 },
     floatingElements: [
-      // Left margin
-      { shape: "emoji", emoji: "⚡", size: 44, top: "2%", left: "-1%", color: "accent", opacity: 0.4, animation: "wander", animationDelay: "0s" },
-      { shape: "emoji", emoji: "⚡", size: 32, top: "25%", left: "0%", color: "accent-secondary", opacity: 0.35, animation: "float", animationDelay: "1s" },
-      // Right margin
-      { shape: "emoji", emoji: "⚡", size: 40, top: "4%", right: "-1%", color: "accent", opacity: 0.35, animation: "float-reverse", animationDelay: "0.5s" },
-      { shape: "emoji", emoji: "⚡", size: 28, top: "38%", right: "0%", color: "accent-secondary", opacity: 0.3, animation: "pulse-gentle", animationDelay: "2s" },
-      // Bottom area
-      { shape: "emoji", emoji: "⚡", size: 32, bottom: "8%", left: "2%", color: "accent", opacity: 0.3, animation: "drift", animationDelay: "3s" },
-      { shape: "emoji", emoji: "⚡", size: 28, bottom: "5%", right: "3%", color: "accent-secondary", opacity: 0.25, animation: "wander", animationDelay: "4s" },
-      { shape: "emoji", emoji: "⚡", size: 24, top: "55%", left: "1%", color: "accent", opacity: 0.25, animation: "float-slow", animationDelay: "5s" },
+      // Above creator label
+      { shape: "emoji", emoji: "⚡", size: 32, top: "1%", left: "10%", color: "accent", opacity: 0.35, animation: "wander", animationDelay: "0s" },
+      // Column gap
+      { shape: "emoji", emoji: "⚡", size: 42, top: "7%", left: "45%", color: "accent", opacity: 0.4, animation: "float", animationDelay: "0.5s" },
+      { shape: "emoji", emoji: "⚡", size: 30, top: "20%", left: "50%", color: "accent-secondary", opacity: 0.35, animation: "wander", animationDelay: "2s" },
+      // Below hero
+      { shape: "emoji", emoji: "⚡", size: 32, top: "35%", left: "14%", color: "accent-secondary", opacity: 0.3, animation: "float-reverse", animationDelay: "1.5s" },
+      { shape: "emoji", emoji: "⚡", size: 28, top: "37%", right: "14%", color: "accent", opacity: 0.28, animation: "pulse-gentle", animationDelay: "3s" },
+      // Around divider
+      { shape: "emoji", emoji: "⚡", size: 26, top: "50%", left: "47%", color: "accent", opacity: 0.25, animation: "drift", animationDelay: "4s" },
+      // Lower section
+      { shape: "emoji", emoji: "⚡", size: 22, top: "64%", left: "48%", color: "accent-secondary", opacity: 0.2, animation: "float-slow", animationDelay: "5s" },
     ],
     headingEffect: { type: "gradient" },
   },
 
   entertainment: {
     floatingElements: [
-      // Left margin
-      { shape: "emoji", emoji: "🎬", size: 44, top: "2%", left: "-1%", color: "accent", opacity: 0.4, animation: "wander", animationDelay: "0s" },
-      { shape: "emoji", emoji: "🎬", size: 32, top: "28%", left: "0%", color: "accent-secondary", opacity: 0.3, animation: "pulse-gentle", animationDelay: "2s" },
-      // Right margin
-      { shape: "emoji", emoji: "🎬", size: 40, top: "4%", right: "-1%", color: "accent-secondary", opacity: 0.35, animation: "float-slow", animationDelay: "1s" },
-      { shape: "emoji", emoji: "🎬", size: 28, top: "40%", right: "0%", color: "accent", opacity: 0.3, animation: "drift", animationDelay: "3s" },
-      // Bottom area
-      { shape: "emoji", emoji: "🎬", size: 32, bottom: "8%", left: "2%", color: "accent-secondary", opacity: 0.25, animation: "float", animationDelay: "4s" },
-      { shape: "emoji", emoji: "🎬", size: 28, bottom: "5%", right: "3%", color: "accent", opacity: 0.25, animation: "wander", animationDelay: "5s" },
+      // Above creator label
+      { shape: "emoji", emoji: "🎬", size: 32, top: "1%", left: "10%", color: "accent", opacity: 0.35, animation: "wander", animationDelay: "0s" },
+      // Column gap
+      { shape: "emoji", emoji: "🎬", size: 40, top: "8%", left: "46%", color: "accent", opacity: 0.4, animation: "float-slow", animationDelay: "0.5s" },
+      { shape: "emoji", emoji: "🎬", size: 28, top: "21%", left: "50%", color: "accent-secondary", opacity: 0.3, animation: "wander", animationDelay: "2s" },
+      // Below hero
+      { shape: "emoji", emoji: "🎬", size: 30, top: "36%", left: "16%", color: "accent-secondary", opacity: 0.28, animation: "pulse-gentle", animationDelay: "1.5s" },
+      { shape: "emoji", emoji: "🎬", size: 26, top: "38%", right: "16%", color: "accent", opacity: 0.25, animation: "drift", animationDelay: "3s" },
+      // Around divider
+      { shape: "emoji", emoji: "🎬", size: 24, top: "52%", left: "47%", color: "accent", opacity: 0.22, animation: "float", animationDelay: "4s" },
     ],
     headingEffect: { type: "glow" },
   },
@@ -263,16 +270,18 @@ const CATEGORY_DECORATIONS: Record<string, SkinDecorationConfig> = {
   music: {
     backgroundPattern: { type: "waves", colorKey: "accent", opacity: 0.08, spacing: 20, size: 1.5 },
     floatingElements: [
-      // Left margin
-      { shape: "emoji", emoji: "♪", size: 44, top: "2%", left: "-1%", color: "accent", opacity: 0.4, animation: "wander", animationDelay: "0s" },
-      { shape: "emoji", emoji: "♪", size: 32, top: "30%", left: "0%", color: "accent-secondary", opacity: 0.3, animation: "pulse-gentle", animationDelay: "1s" },
-      // Right margin
-      { shape: "emoji", emoji: "♪", size: 40, top: "5%", right: "-1%", color: "accent", opacity: 0.35, animation: "float", animationDelay: "0.5s" },
-      { shape: "emoji", emoji: "♪", size: 28, top: "42%", right: "0%", color: "accent-secondary", opacity: 0.3, animation: "pulse-gentle", animationDelay: "2s" },
-      // Bottom area
-      { shape: "emoji", emoji: "♪", size: 32, bottom: "10%", left: "2%", color: "accent", opacity: 0.3, animation: "float-slow", animationDelay: "3s" },
-      { shape: "emoji", emoji: "♪", size: 28, bottom: "5%", right: "3%", color: "accent-secondary", opacity: 0.25, animation: "wander", animationDelay: "4s" },
-      { shape: "emoji", emoji: "♪", size: 24, top: "58%", left: "1%", color: "accent", opacity: 0.2, animation: "drift", animationDelay: "5s" },
+      // Above creator label
+      { shape: "emoji", emoji: "♪", size: 32, top: "1%", left: "12%", color: "accent", opacity: 0.35, animation: "wander", animationDelay: "0s" },
+      // Column gap
+      { shape: "emoji", emoji: "♪", size: 42, top: "8%", left: "46%", color: "accent", opacity: 0.4, animation: "pulse-gentle", animationDelay: "0.5s" },
+      { shape: "emoji", emoji: "♪", size: 28, top: "22%", left: "50%", color: "accent-secondary", opacity: 0.3, animation: "wander", animationDelay: "2s" },
+      // Below hero
+      { shape: "emoji", emoji: "♪", size: 30, top: "36%", left: "15%", color: "accent-secondary", opacity: 0.28, animation: "pulse-gentle", animationDelay: "1.5s" },
+      { shape: "emoji", emoji: "♪", size: 26, top: "38%", right: "15%", color: "accent", opacity: 0.25, animation: "float", animationDelay: "3s" },
+      // Around divider
+      { shape: "emoji", emoji: "♪", size: 26, top: "51%", left: "47%", color: "accent", opacity: 0.25, animation: "float-slow", animationDelay: "4s" },
+      // Lower section
+      { shape: "emoji", emoji: "♪", size: 20, top: "65%", left: "48%", color: "accent-secondary", opacity: 0.2, animation: "drift", animationDelay: "5s" },
     ],
     headingEffect: { type: "glow" },
   },
@@ -280,15 +289,16 @@ const CATEGORY_DECORATIONS: Record<string, SkinDecorationConfig> = {
   media: {
     backgroundPattern: { type: "cross-hatch", colorKey: "accent", opacity: 0.06, spacing: 16, size: 1 },
     floatingElements: [
-      // Left margin
-      { shape: "emoji", emoji: "◉", size: 40, top: "3%", left: "-1%", color: "accent", opacity: 0.35, animation: "wander", animationDelay: "0s" },
-      { shape: "emoji", emoji: "◉", size: 28, top: "32%", left: "0%", color: "accent-secondary", opacity: 0.25, animation: "drift", animationDelay: "2s" },
-      // Right margin
-      { shape: "emoji", emoji: "◉", size: 36, top: "5%", right: "-1%", color: "accent-secondary", opacity: 0.3, animation: "drift", animationDelay: "1s" },
-      { shape: "emoji", emoji: "◉", size: 24, top: "45%", right: "0%", color: "accent", opacity: 0.25, animation: "float-slow", animationDelay: "3s" },
-      // Bottom area
-      { shape: "emoji", emoji: "◉", size: 28, bottom: "8%", left: "2%", color: "accent-secondary", opacity: 0.2, animation: "drift", animationDelay: "4s" },
-      { shape: "emoji", emoji: "◉", size: 24, bottom: "5%", right: "3%", color: "accent", opacity: 0.2, animation: "wander", animationDelay: "5s" },
+      // Above creator label
+      { shape: "emoji", emoji: "◉", size: 28, top: "2%", left: "10%", color: "accent", opacity: 0.3, animation: "wander", animationDelay: "0s" },
+      // Column gap
+      { shape: "emoji", emoji: "◉", size: 36, top: "9%", left: "47%", color: "accent", opacity: 0.35, animation: "drift", animationDelay: "1s" },
+      { shape: "emoji", emoji: "◉", size: 26, top: "22%", left: "50%", color: "accent-secondary", opacity: 0.28, animation: "wander", animationDelay: "3s" },
+      // Below hero
+      { shape: "emoji", emoji: "◉", size: 28, top: "36%", left: "16%", color: "accent-secondary", opacity: 0.25, animation: "float-slow", animationDelay: "2s" },
+      { shape: "emoji", emoji: "◉", size: 24, top: "38%", right: "16%", color: "accent", opacity: 0.22, animation: "drift", animationDelay: "4s" },
+      // Around divider
+      { shape: "emoji", emoji: "◉", size: 22, top: "52%", left: "48%", color: "accent-secondary", opacity: 0.2, animation: "float-slow", animationDelay: "5s" },
     ],
     headingEffect: { type: "gradient" },
   },
@@ -296,15 +306,16 @@ const CATEGORY_DECORATIONS: Record<string, SkinDecorationConfig> = {
   professional: {
     backgroundPattern: { type: "dots", colorKey: "accent", opacity: 0.06, spacing: 22, size: 1.5 },
     floatingElements: [
-      // Left margin
-      { shape: "emoji", emoji: "◆", size: 36, top: "3%", left: "-1%", color: "accent", opacity: 0.3, animation: "wander", animationDelay: "0s" },
-      { shape: "emoji", emoji: "◆", size: 24, top: "35%", left: "0%", color: "accent-secondary", opacity: 0.2, animation: "float-slow", animationDelay: "2s" },
-      // Right margin
-      { shape: "emoji", emoji: "◆", size: 32, top: "5%", right: "-1%", color: "accent-secondary", opacity: 0.25, animation: "drift", animationDelay: "1s" },
-      { shape: "emoji", emoji: "◆", size: 22, top: "48%", right: "0%", color: "accent", opacity: 0.2, animation: "float-reverse", animationDelay: "3s" },
-      // Bottom area
-      { shape: "emoji", emoji: "◆", size: 24, bottom: "8%", left: "2%", color: "accent-secondary", opacity: 0.18, animation: "drift", animationDelay: "4s" },
-      { shape: "emoji", emoji: "◆", size: 20, bottom: "5%", right: "3%", color: "accent", opacity: 0.18, animation: "wander", animationDelay: "5s" },
+      // Above creator label
+      { shape: "emoji", emoji: "◆", size: 24, top: "2%", left: "10%", color: "accent", opacity: 0.25, animation: "wander", animationDelay: "0s" },
+      // Column gap
+      { shape: "emoji", emoji: "◆", size: 32, top: "10%", left: "47%", color: "accent", opacity: 0.3, animation: "float-slow", animationDelay: "1s" },
+      { shape: "emoji", emoji: "◆", size: 22, top: "22%", left: "50%", color: "accent-secondary", opacity: 0.22, animation: "wander", animationDelay: "3s" },
+      // Below hero
+      { shape: "emoji", emoji: "◆", size: 24, top: "37%", left: "18%", color: "accent-secondary", opacity: 0.2, animation: "drift", animationDelay: "2s" },
+      { shape: "emoji", emoji: "◆", size: 20, top: "38%", right: "18%", color: "accent", opacity: 0.18, animation: "float-reverse", animationDelay: "4s" },
+      // Around divider
+      { shape: "emoji", emoji: "◆", size: 20, top: "52%", left: "48%", color: "accent", opacity: 0.18, animation: "drift", animationDelay: "5s" },
     ],
     headingEffect: { type: "gradient" },
   },

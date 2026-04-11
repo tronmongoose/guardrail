@@ -138,7 +138,7 @@ export default function ProgramEditPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { showToast } = useToast();
-  const { activeGenerations } = useGeneration();
+  const { activeGenerations, dismissGeneration } = useGeneration();
   const { user } = useUser();
   const creatorEmail = user?.primaryEmailAddress?.emailAddress;
 
@@ -305,6 +305,8 @@ export default function ProgramEditPage() {
         if (res.status === 404) {
           clearInterval(interval);
           setAsyncGenerating(false);
+          dismissGeneration(id);
+          setLastGenError("Generation ended unexpectedly. Please try again.");
           return;
         }
         if (!res.ok) return;

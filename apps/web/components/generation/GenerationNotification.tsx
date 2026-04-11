@@ -62,8 +62,8 @@ export function GenerationNotification({
         const res = await fetch(`/api/programs/${programId}/generate-async/status`);
         if (stopped) return;
 
-        // 404 = no job found — stop polling
-        if (res.status === 404) { stop(); return; }
+        // 404 = no job found — stop polling and clean up activeGenerations
+        if (res.status === 404) { stop(); onDismissRef.current?.(); return; }
         if (!res.ok) {
           consecutiveErrors++;
           if (consecutiveErrors >= 3) stop(); // give up after 3 consecutive errors
