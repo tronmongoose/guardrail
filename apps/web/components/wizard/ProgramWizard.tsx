@@ -119,18 +119,6 @@ export function ProgramWizard({
   });
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Track how many videos existed at mount so we don't auto-generate on localStorage restores
-  const initialVideoCount = useRef(state.content.videos.length);
-
-  // Auto-advance to Lessons flow step when the first new video is uploaded (or upload starts) on the Content step
-  useEffect(() => {
-    if (currentStep !== 1) return;
-    const hasNewContent = state.content.videos.length > initialVideoCount.current || uploadingCount > 0;
-    if (!hasNewContent) return;
-    setCurrentStep(2); // advance to Lessons flow
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.content.videos.length, uploadingCount]);
-
   // Track analysis status for uploaded videos — used for the footer badge
   const [analysisStatus, setAnalysisStatus] = useState<Record<string, boolean>>({});
   const analysisPollerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -243,7 +231,7 @@ export function ProgramWizard({
       default:
         return false;
     }
-  }, [currentStep, state]);
+  }, [currentStep, state, uploadingCount]);
 
   // Auto-select middle preset when entering the duration step if current value isn't one of the presets
   // Skip when AI mode is active — weeks is derived from topic analysis instead

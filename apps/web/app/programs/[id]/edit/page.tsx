@@ -180,6 +180,7 @@ export default function ProgramEditPage() {
   const [asyncProgress, setAsyncProgress] = useState(0);
   const [lastGenError, setLastGenError] = useState<string | null>(null);
   const [isProgramDetailsOpen, setIsProgramDetailsOpen] = useState(true);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
 
   // Controlled state for program details form fields — synced from `program` whenever it loads/reloads
   const [detailsTitle, setDetailsTitle] = useState("");
@@ -324,6 +325,7 @@ export default function ProgramEditPage() {
           setAsyncGenerating(false);
           await load();
           showToast("Program generated!", "success");
+          setShowWelcomeModal(true);
         } else if (data.status === "FAILED") {
           setAsyncGenerating(false);
           setLastGenError(data.error || "Generation failed");
@@ -585,8 +587,130 @@ export default function ProgramEditPage() {
     ? program.weeks.flatMap((w) => w.sessions).find((s) => s.id === previewSelectedSessionId)
     : null;
 
+  const weekCount = program.weeks.length;
+  const sessionCount = program.weeks.reduce((sum, w) => sum + w.sessions.length, 0);
+
   return (
     <>
+    {/* Welcome / Post-Generation Modal */}
+    {showWelcomeModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div className="bg-gray-950 border border-gray-800 rounded-2xl max-w-2xl w-full overflow-hidden shadow-2xl shadow-black/50 animate-slide-up">
+          {/* Hero */}
+          <div className="relative px-8 pt-8 pb-6 border-b border-gray-800 bg-gradient-to-br from-teal-500/10 via-transparent to-pink-500/10">
+            <button
+              onClick={() => setShowWelcomeModal(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-gray-500 hover:text-white hover:bg-gray-800 transition"
+              aria-label="Close"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-500 to-pink-500 flex items-center justify-center mb-4 shadow-lg shadow-teal-500/20">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">
+              Here&apos;s your Journeyline
+            </h2>
+            <p className="text-gray-400 text-sm leading-relaxed">
+              We&apos;ve shaped <span className="text-white font-medium">&ldquo;{program.title}&rdquo;</span> into{" "}
+              <span className="text-teal-400 font-medium">
+                {weekCount} {weekCount === 1 ? "lesson" : "lessons"}
+              </span>
+              {" · "}
+              <span className="text-teal-400 font-medium">
+                {sessionCount} {sessionCount === 1 ? "session" : "sessions"}
+              </span>
+              . Everything is yours to refine — use the tabs up top to shape the details, flow, pricing, and look.
+            </p>
+          </div>
+
+          {/* Tab tiles */}
+          <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              onClick={() => { setActiveTab("details"); setShowWelcomeModal(false); }}
+              className="text-left p-4 rounded-xl bg-gray-900/60 border border-gray-800 hover:border-teal-500/60 hover:bg-gray-900 transition group"
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <svg className="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                <span className="text-sm font-semibold text-white">Program Details</span>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Fine-tune your title, description, and the transformation you promise.
+              </p>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab("curriculum"); setShowWelcomeModal(false); }}
+              className="text-left p-4 rounded-xl bg-gray-900/60 border border-gray-800 hover:border-teal-500/60 hover:bg-gray-900 transition group"
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <svg className="w-4 h-4 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                </svg>
+                <span className="text-sm font-semibold text-white">Curriculum</span>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Reorder lessons, rename sessions, and polish each action.
+              </p>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab("payments"); setShowWelcomeModal(false); }}
+              className="text-left p-4 rounded-xl bg-gray-900/60 border border-gray-800 hover:border-teal-500/60 hover:bg-gray-900 transition group"
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <svg className="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm font-semibold text-white">Payments</span>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Set your price, create promo codes, and connect Stripe for payouts.
+              </p>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab("preview"); setShowWelcomeModal(false); }}
+              className="text-left p-4 rounded-xl bg-gray-900/60 border border-gray-800 hover:border-teal-500/60 hover:bg-gray-900 transition group"
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <svg className="w-4 h-4 text-pink-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                </svg>
+                <span className="text-sm font-semibold text-white">Preview &amp; Theme</span>
+              </div>
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Swap skins and see exactly what your learners will experience.
+              </p>
+            </button>
+          </div>
+
+          {/* Footer */}
+          <div className="px-5 pb-5 pt-1 flex flex-col-reverse sm:flex-row gap-2">
+            <button
+              onClick={() => setShowWelcomeModal(false)}
+              className="flex-1 px-4 py-2.5 rounded-lg text-sm text-gray-400 hover:text-white border border-gray-800 hover:border-gray-600 transition"
+            >
+              I&apos;ll look around
+            </button>
+            <button
+              onClick={() => { setActiveTab("curriculum"); setShowWelcomeModal(false); }}
+              className="flex-1 px-4 py-2.5 rounded-lg text-sm font-semibold bg-gradient-to-r from-teal-500 to-pink-500 text-white hover:opacity-90 transition shadow-lg shadow-teal-500/10"
+            >
+              Start with the curriculum →
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
     {/* Publish Confirmation Modal */}
     {showPublishConfirm && program && (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">

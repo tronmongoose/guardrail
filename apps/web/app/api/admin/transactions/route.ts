@@ -40,15 +40,23 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
   });
 
-  const PLATFORM_FEE = 0.1;
+  // JourneyLine business model: $99 one-time fee per published program.
+  // Creators keep 100% of what their audience pays them.
+  const JOURNEYLINE_FEE_CENTS_PER_PROGRAM = 9900;
 
-  // Summary totals
-  const totalRevenueCents = entitlements.reduce(
+  // Count published programs as a proxy for paid platform fees
+  // (until the $99 Stripe checkout is wired and a dedicated paid flag exists).
+  const publishedProgramCount = await prisma.program.count({
+    where: { published: true },
+  });
+  const journeylineRevenueCents =
+    publishedProgramCount * JOURNEYLINE_FEE_CENTS_PER_PROGRAM;
+
+  // Creator revenue = gross learner payments (all of it goes to creators).
+  const creatorRevenueCents = entitlements.reduce(
     (sum, e) => sum + e.program.priceInCents,
     0
   );
-  const platformCutCents = Math.round(totalRevenueCents * PLATFORM_FEE);
-  const creatorPayoutsCents = totalRevenueCents - platformCutCents;
   const totalEnrollments = entitlements.length;
   const freeEnrollments = entitlements.filter(
     (e) => e.program.priceInCents === 0
@@ -73,6 +81,37 @@ export async function GET() {
     .map(([id, data]) => ({ id, ...data }))
     .sort((a, b) => b.revenueCents - a.revenueCents);
 
+  // Revenue per creator
+  const creatorMap = new Map<
+    string,
+    {
+      email: string;
+      name: string | null;
+      enrollments: number;
+      grossRevenueCents: number;
+    }
+  >();
+  for (const e of entitlements) {
+    const key = e.program.creator.email;
+    const existing = creatorMap.get(key) ?? {
+      email: e.program.creator.email,
+      name: e.program.creator.name,
+      enrollments: 0,
+      grossRevenueCents: 0,
+    };
+    existing.enrollments += 1;
+    existing.grossRevenueCents += e.program.priceInCents;
+    creatorMap.set(key, existing);
+  }
+  const byCreator = Array.from(creatorMap.values())
+    .map((c) => ({
+      email: c.email,
+      name: c.name,
+      enrollments: c.enrollments,
+      grossRevenueCents: c.grossRevenueCents,
+    }))
+    .sort((a, b) => b.grossRevenueCents - a.grossRevenueCents);
+
   // Enrollments by day (last 30 days)
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -86,7 +125,7 @@ export async function GET() {
     .map(([date, count]) => ({ date, count }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  // Recent 50 transactions
+  // Recent 50 transactions (learner → creator payments)
   const recentTransactions = entitlements.slice(0, 50).map((e) => ({
     id: e.id,
     date: e.createdAt.toISOString(),
@@ -95,21 +134,22 @@ export async function GET() {
     creatorEmail: e.program.creator.email,
     creatorName: e.program.creator.name,
     amountCents: e.program.priceInCents,
-    platformFeeCents: Math.round(e.program.priceInCents * PLATFORM_FEE),
     stripeSessionId: e.stripeSessionId ?? null,
   }));
 
-  logger.info({ operation: "admin.transactions.success", userId, totalEnrollments, totalRevenueCents });
+  logger.info({ operation: "admin.transactions.success", userId, totalEnrollments, creatorRevenueCents, journeylineRevenueCents });
 
   return NextResponse.json({
     summary: {
-      totalRevenueCents,
-      platformCutCents,
-      creatorPayoutsCents,
+      journeylineRevenueCents,
+      publishedProgramCount,
+      journeylineFeeCentsPerProgram: JOURNEYLINE_FEE_CENTS_PER_PROGRAM,
+      creatorRevenueCents,
       totalEnrollments,
       freeEnrollments,
     },
     byProgram,
+    byCreator,
     byDay,
     recentTransactions,
   });

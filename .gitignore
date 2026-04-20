@@ -7,3 +7,5 @@ dist/
 .vercel
 .mcp.json
 .env*.local
+.claude/
+apps/web/scripts/

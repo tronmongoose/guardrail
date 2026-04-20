@@ -7,9 +7,6 @@ import { logger } from "@/lib/logger";
 import { notifyAdminEnrollment } from "@/lib/email";
 import Stripe from "stripe";
 
-// Platform fee percentage (e.g., 10%)
-const PLATFORM_FEE_PERCENT = 10;
-
 interface CheckoutRequestBody {
   email?: string;
   name?: string;
@@ -216,12 +213,10 @@ export async function POST(
     customer_email: user.email,
   };
 
-  // If creator has Stripe Connect, use destination charges for split payments
+  // Route 100% of the learner payment to the creator via Stripe Connect.
+  // JourneyLine's revenue comes from a separate $99 platform fee, not a rev split.
   if (program.creator.stripeAccountId && program.creator.stripeOnboardingComplete) {
-    const applicationFee = Math.round(program.priceInCents * (PLATFORM_FEE_PERCENT / 100));
-
     sessionConfig.payment_intent_data = {
-      application_fee_amount: applicationFee,
       transfer_data: {
         destination: program.creator.stripeAccountId,
       },
@@ -232,7 +227,6 @@ export async function POST(
       userId: user.id,
       programId,
       creatorAccountId: program.creator.stripeAccountId,
-      applicationFee,
     });
   } else {
     // No Stripe Connect - all funds go to platform

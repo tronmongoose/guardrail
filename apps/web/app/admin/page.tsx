@@ -13,7 +13,6 @@ interface Transaction {
   creatorEmail: string;
   creatorName: string | null;
   amountCents: number;
-  platformFeeCents: number;
   stripeSessionId: string | null;
 }
 
@@ -24,6 +23,13 @@ interface ProgramStat {
   revenueCents: number;
 }
 
+interface CreatorStat {
+  email: string;
+  name: string | null;
+  enrollments: number;
+  grossRevenueCents: number;
+}
+
 interface DayStat {
   date: string;
   count: number;
@@ -31,13 +37,15 @@ interface DayStat {
 
 interface AdminData {
   summary: {
-    totalRevenueCents: number;
-    platformCutCents: number;
-    creatorPayoutsCents: number;
+    journeylineRevenueCents: number;
+    publishedProgramCount: number;
+    journeylineFeeCentsPerProgram: number;
+    creatorRevenueCents: number;
     totalEnrollments: number;
     freeEnrollments: number;
   };
   byProgram: ProgramStat[];
+  byCreator: CreatorStat[];
   byDay: DayStat[];
   recentTransactions: Transaction[];
 }
@@ -99,7 +107,7 @@ export default function AdminPage() {
 
   if (!data) return null;
 
-  const { summary, byProgram, byDay, recentTransactions } = data;
+  const { summary, byProgram, byCreator, byDay, recentTransactions } = data;
   const maxDayCount = Math.max(...byDay.map((d) => d.count), 1);
 
   return (
@@ -123,13 +131,28 @@ export default function AdminPage() {
 
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-10">
         {/* Summary cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: "Total Revenue", value: formatUSD(summary.totalRevenueCents), sub: "all paid enrollments" },
-            { label: "Platform Cut", value: formatUSD(summary.platformCutCents), sub: "10% fee" },
-            { label: "Creator Payouts", value: formatUSD(summary.creatorPayoutsCents), sub: "90% to creators" },
-            { label: "Total Enrollments", value: summary.totalEnrollments.toLocaleString(), sub: `${summary.freeEnrollments} free` },
-            { label: "Paid Enrollments", value: (summary.totalEnrollments - summary.freeEnrollments).toLocaleString(), sub: "with payment" },
+            {
+              label: "JourneyLine Revenue",
+              value: formatUSD(summary.journeylineRevenueCents),
+              sub: `${summary.publishedProgramCount} published × ${formatUSD(summary.journeylineFeeCentsPerProgram)}`,
+            },
+            {
+              label: "Creator Revenue",
+              value: formatUSD(summary.creatorRevenueCents),
+              sub: "paid by learners to creators (100%)",
+            },
+            {
+              label: "Total Enrollments",
+              value: summary.totalEnrollments.toLocaleString(),
+              sub: `${summary.freeEnrollments} free`,
+            },
+            {
+              label: "Paid Enrollments",
+              value: (summary.totalEnrollments - summary.freeEnrollments).toLocaleString(),
+              sub: "with payment",
+            },
           ].map((card) => (
             <div key={card.label} className="bg-gray-900 border border-gray-800 rounded-xl p-4">
               <p className="text-xs text-gray-500 mb-1">{card.label}</p>
@@ -180,8 +203,7 @@ export default function AdminPage() {
                   <tr className="border-b border-gray-800">
                     <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">Program</th>
                     <th className="text-right px-4 py-3 text-xs text-gray-500 font-medium">Enrollments</th>
-                    <th className="text-right px-4 py-3 text-xs text-gray-500 font-medium">Revenue</th>
-                    <th className="text-right px-4 py-3 text-xs text-gray-500 font-medium">Platform cut</th>
+                    <th className="text-right px-4 py-3 text-xs text-gray-500 font-medium">Creator revenue</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -190,7 +212,40 @@ export default function AdminPage() {
                       <td className="px-4 py-3 text-white font-medium truncate max-w-xs">{p.title}</td>
                       <td className="px-4 py-3 text-gray-300 text-right">{p.enrollments}</td>
                       <td className="px-4 py-3 text-teal-400 text-right font-mono">{formatUSD(p.revenueCents)}</td>
-                      <td className="px-4 py-3 text-gray-500 text-right font-mono">{formatUSD(Math.round(p.revenueCents * 0.1))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Creators table */}
+        {byCreator.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">
+              By creator
+            </h2>
+            <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-x-auto">
+              <table className="w-full text-sm min-w-[640px]">
+                <thead>
+                  <tr className="border-b border-gray-800">
+                    <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">Creator</th>
+                    <th className="text-right px-4 py-3 text-xs text-gray-500 font-medium">Enrollments</th>
+                    <th className="text-right px-4 py-3 text-xs text-gray-500 font-medium">Revenue earned</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {byCreator.map((c, i) => (
+                    <tr key={c.email} className={i !== byCreator.length - 1 ? "border-b border-gray-800/50" : ""}>
+                      <td className="px-4 py-3 text-white font-medium truncate max-w-xs">
+                        {c.name ?? c.email}
+                        {c.name && (
+                          <span className="block text-xs text-gray-500 font-normal truncate">{c.email}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-300 text-right">{c.enrollments}</td>
+                      <td className="px-4 py-3 text-teal-400 text-right font-mono">{formatUSD(c.grossRevenueCents)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -216,7 +271,6 @@ export default function AdminPage() {
                     <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">Learner</th>
                     <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">Creator</th>
                     <th className="text-right px-4 py-3 text-xs text-gray-500 font-medium">Amount</th>
-                    <th className="text-right px-4 py-3 text-xs text-gray-500 font-medium">Platform fee</th>
                     <th className="text-left px-4 py-3 text-xs text-gray-500 font-medium">Stripe session</th>
                   </tr>
                 </thead>
@@ -229,9 +283,6 @@ export default function AdminPage() {
                       <td className="px-4 py-3 text-gray-400 truncate max-w-[140px]">{t.creatorName ?? t.creatorEmail}</td>
                       <td className="px-4 py-3 text-right font-mono text-teal-400">
                         {t.amountCents === 0 ? <span className="text-gray-600">Free</span> : formatUSD(t.amountCents)}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono text-gray-500">
-                        {t.platformFeeCents === 0 ? "—" : formatUSD(t.platformFeeCents)}
                       </td>
                       <td className="px-4 py-3">
                         {t.stripeSessionId ? (

@@ -2,6 +2,7 @@
 
 import type { Skin } from "@/lib/skins";
 import type { SessionData } from "@/components/builder";
+import { stripWrappingQuotes } from "@/lib/strip-quotes";
 
 interface SessionPreviewProps {
   session: SessionData & { keyTakeaways?: string[] };
@@ -32,7 +33,7 @@ export function SessionPreview({ session, skin, onBack }: SessionPreviewProps) {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h1 className="font-semibold truncate">{session.title}</h1>
+        <h1 className="font-semibold truncate">{stripWrappingQuotes(session.title)}</h1>
       </div>
 
       {/* Content */}

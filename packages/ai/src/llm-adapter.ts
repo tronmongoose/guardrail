@@ -505,6 +505,15 @@ LESSON ORDER RULE:
   intended lesson sequence. Do not reorder lessons based on title keywords
   like "intro", "welcome", "overview", or "framework".
 
+LESSON TOPIC COHERENCE RULE:
+- Each lesson must have a single governing concept. When distributing clips
+  across lessons, only include clips whose content directly supports that
+  lesson's core concept. Do not include clips from unrelated topics simply
+  to balance lesson duration. A shorter, coherent lesson is always better
+  than a longer lesson that mixes distinct concepts (e.g. combining a
+  macronutrient-ratio concept with a vegetarian-protein concept and a
+  tool/Sifter demo into one lesson is wrong — those are three lessons).
+
 LESSON TITLE RULES:
 - Titles must describe what the learner will DO or UNDERSTAND after the lesson.
 - Name the outcome, not the topic.

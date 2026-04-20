@@ -67,7 +67,12 @@ Extract the following information as a single JSON object (no markdown, no code 
 
 REQUIREMENTS:
 - segments: Break the video into segments at natural topic boundaries (roughly every 30-90 seconds). Include the spoken text for each segment.
-- topics: Group segments into broader topic sections. Each topic should be 2-10 minutes.
+- topics: Group segments by THEMATIC DISTINCTNESS, not by time. Prefer fewer, broader topics.
+    * For videos under 8 minutes: return 1 topic unless the video genuinely covers two UNRELATED subjects (e.g. not "intro + demo" — that is ONE topic).
+    * For videos 8-20 minutes: return 1-3 topics.
+    * For videos over 20 minutes: return 2-5 topics.
+    * A single tool demo, walkthrough, or concept explanation is ONE topic regardless of its length or internal sub-steps.
+    * Do NOT split a video into topics just because it has an intro section followed by instruction — that is one topic.
 - keyMoments: Identify the most important moments — memorable analogies, case studies, exercise demonstrations, key insights, transitions between major sections. Mark significance as "high" for must-see moments, "medium" for notable, "low" for minor.
   - type should be one of: "insight", "example", "exercise", "transition", "summary"
 - people: List anyone who appears or is prominently mentioned, with their role (host, guest, expert, etc.)

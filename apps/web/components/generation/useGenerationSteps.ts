@@ -32,85 +32,78 @@ interface UseGenerationStepsResult {
   displayProgress: number;
 }
 
+// Per-stage ceiling for the simulated progress value. The simulation is clamped
+// to the ceiling of the CURRENT stage so it never overruns reality. Real backend
+// progress always wins if it's higher than the simulated value.
+const STAGE_CEILING: Record<string, number> = {
+  queued: 3,
+  preparing: 6,
+  fetching_transcripts: 24,
+  analyzing: 44,
+  generating: 84,
+  validating: 89,
+  persisting: 95,
+  generating_skin: 97,
+  complete: 100,
+};
+
+// Expected total runtime used to shape the easing curve. Actual jobs may finish
+// faster (real progress pulls the bar forward) or slower (simulation asymptotes
+// at the current stage ceiling until the backend advances).
+const EXPECTED_TOTAL_MS = 4 * 60 * 1000;
+
 /**
  * Maps backend generation {stage, progress} to 8 rich frontend steps.
  *
- * Backend stages: preparing(2-5) → fetching_transcripts(5-25) → analyzing(25-45) → generating(45-85) → validating → persisting
+ * Backend stages: preparing(2-5) → fetching_transcripts(5-25) → analyzing(25-45)
+ *   → generating(45-85) → validating(85) → persisting(90) → complete(100)
  *
- * The "generating" stage (45-85%) is a single long LLM call with no intermediate
- * updates. This hook simulates smooth sub-step progression client-side using a
- * logarithmic timer, so steps 5-8 animate naturally.
- *
- * Each step dwells for a minimum of 2.5s before transitioning, so the experience
- * feels deliberate rather than rushed.
+ * A single continuous, time-driven simulation drives the bar so it moves
+ * evenly even when the backend is stuck inside a long-running stage (Gemini
+ * analysis, the LLM extraction call, the generation LLM call). The simulation
+ * is clamped to the current stage's ceiling so it can't outrun reality, and
+ * the real backend progress acts as a floor so we can never fall behind.
  */
 export function useGenerationSteps(input: UseGenerationStepsInput): UseGenerationStepsResult {
   const { stage, progress, status } = input;
 
   const [simulatedProgress, setSimulatedProgress] = useState(0);
-  const generatingStartRef = useRef<number | null>(null);
-
-  // Early-stage simulation: gentle progress during preparing/video_analysis
-  const [earlySimulated, setEarlySimulated] = useState(0);
-  const earlyStartRef = useRef<number | null>(null);
+  const simulationStartRef = useRef<number | null>(null);
 
   // Track step completion timestamps for minimum dwell time
   const [displayedActiveIndex, setDisplayedActiveIndex] = useState(0);
   const lastStepChangeRef = useRef<number>(Date.now());
 
-  // Simulate smooth progress during early stages (preparing + fetching_transcripts)
-  // so the bar starts moving immediately instead of sitting at 0%
+  // Single continuous simulation — ticks the bar forward on wall-clock time so
+  // long stages (Gemini analysis, LLM extraction, generation) still feel alive.
   useEffect(() => {
-    const isEarlyStage = (stage === "preparing" || stage === "fetching_transcripts") && status === "PROCESSING";
-    if (!isEarlyStage) {
-      earlyStartRef.current = null;
-      setEarlySimulated(0);
-      return;
-    }
-
-    if (!earlyStartRef.current) {
-      earlyStartRef.current = Date.now();
-    }
-
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - (earlyStartRef.current || Date.now());
-      // Ease from 2 toward 20 over ~60 seconds (gentle crawl through transcript fetch)
-      const t = Math.min(elapsed / 60000, 1);
-      const simulated = 2 + 18 * (1 - Math.pow(1 - t, 2));
-      setEarlySimulated(Math.min(simulated, 20));
-    }, 800);
-
-    return () => clearInterval(interval);
-  }, [stage, status]);
-
-  // Simulate smooth progress during the "generating" stage
-  useEffect(() => {
-    if (stage !== "generating" || status !== "PROCESSING") {
-      generatingStartRef.current = null;
+    if (status !== "PROCESSING") {
+      simulationStartRef.current = null;
       setSimulatedProgress(0);
       return;
     }
 
-    if (!generatingStartRef.current) {
-      generatingStartRef.current = Date.now();
+    if (!simulationStartRef.current) {
+      simulationStartRef.current = Date.now();
     }
 
     const interval = setInterval(() => {
-      const elapsed = Date.now() - (generatingStartRef.current || Date.now());
-      // Ease from 45 toward 84 over ~45 seconds (slower for more theatrical feel)
-      const t = Math.min(elapsed / 45000, 1);
-      const simulated = 45 + 39 * (1 - Math.pow(1 - t, 2));
-      setSimulatedProgress(Math.min(simulated, 84));
-    }, 800);
+      const elapsed = Date.now() - (simulationStartRef.current || Date.now());
+      const t = Math.min(elapsed / EXPECTED_TOTAL_MS, 1);
+      // Ease out toward 95 over the expected duration. Clamping to the stage
+      // ceiling happens at render time, not here — that way when a stage flips,
+      // the simulation already has momentum to carry through the new range.
+      const simulated = 95 * (1 - Math.pow(1 - t, 1.5));
+      setSimulatedProgress(simulated);
+    }, 400);
 
     return () => clearInterval(interval);
-  }, [stage, status]);
+  }, [status]);
 
-  const displayProgress = (stage === "preparing" || stage === "fetching_transcripts")
-    ? Math.max(progress, earlySimulated)
-    : stage === "generating"
-    ? Math.max(progress, simulatedProgress)
-    : progress;
+  const stageCeiling = STAGE_CEILING[stage ?? "queued"] ?? 95;
+  const displayProgress = stage === "complete"
+    ? 100
+    : Math.max(progress, Math.min(simulatedProgress, stageCeiling));
 
   const rawSteps = useMemo((): GenerationStep[] => {
     return STEP_DEFINITIONS.map((def, i) => ({

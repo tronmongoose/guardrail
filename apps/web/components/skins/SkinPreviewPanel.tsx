@@ -7,6 +7,7 @@ import { getSkinCatalogEntry } from "@/lib/skin-bundles/catalog";
 import { getSkinDecorations, resolveColorKey } from "@/lib/skin-decorations";
 import type { FloatingElement, BackgroundPatternConfig } from "@/lib/skin-decorations";
 import { getPatternCSS } from "@/lib/decoration-patterns";
+import { stripWrappingQuotes } from "@/lib/strip-quotes";
 import type { CSSProperties } from "react";
 import type { SkinTokens } from "@guide-rail/shared";
 
@@ -213,17 +214,70 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitl
     { title: "Progressive Loading", desc: "Build strength systematically with guided progression protocols" },
   ];
 
-  // Shared sub-components (inline, scaled for preview)
-  const WeekItem = ({ week, title }: { week: number; title: string }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+  // Sneak peek card — small video thumb + title (mirrors the carousel cards on /p/[slug])
+  const SneakCard = ({ title }: { title: string }) => (
+    <div style={{
+      flex: 1,
+      minWidth: 0,
+      borderRadius: "var(--token-radius-lg)",
+      backgroundColor: "var(--token-color-bg-elevated)",
+      border: "1px solid var(--token-color-border-subtle)",
+      boxShadow: "var(--token-shadow-sm)",
+      overflow: "hidden",
+      display: "flex",
+      flexDirection: "column",
+    }}>
       <div style={{
-        width: "16px", height: "16px", borderRadius: "50%", flexShrink: 0,
+        aspectRatio: "16/9",
+        background: "linear-gradient(135deg, color-mix(in srgb, var(--token-color-accent), transparent 60%), color-mix(in srgb, var(--token-color-accent-secondary, var(--token-color-accent)), transparent 60%))",
+        position: "relative",
+      }}>
+        <div style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}>
+          <div style={{
+            width: "18px", height: "18px", borderRadius: "50%",
+            background: "var(--token-color-accent)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <svg width="6" height="6" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z" /></svg>
+          </div>
+        </div>
+      </div>
+      <p style={{
+        padding: "6px 8px",
+        fontFamily: "var(--token-text-body-sm-font)",
+        fontSize: "10px",
+        fontWeight: "700",
+        color: "var(--token-color-text-primary)",
+        lineHeight: "1.2",
+      }}>{title}</p>
+    </div>
+  );
+
+  // Lesson row — full width card (mirrors the new /p/[slug] curriculum row)
+  const LessonRow = ({ week, title }: { week: number; title: string }) => (
+    <div style={{
+      display: "flex",
+      alignItems: "flex-start",
+      gap: "8px",
+      padding: "8px 10px",
+      borderRadius: "var(--token-radius-lg)",
+      backgroundColor: "var(--token-color-bg-elevated)",
+      border: "1px solid var(--token-color-border-subtle)",
+    }}>
+      <div style={{
+        width: "12px", height: "12px", borderRadius: "50%", flexShrink: 0, marginTop: "2px",
         border: "1.5px solid var(--token-color-accent)",
       }} />
-      <div>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{
           fontFamily: "var(--token-text-label-sm-font)",
-          fontSize: "9px",
+          fontSize: "8px",
           fontWeight: "var(--token-text-label-sm-weight)",
           color: "var(--token-color-accent)",
           textTransform: "uppercase" as const,
@@ -237,6 +291,7 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitl
           fontSize: "var(--token-text-body-sm-size)",
           fontWeight: "500",
           color: "var(--token-color-text-primary)",
+          marginTop: "2px",
         }}>
           {title}
         </p>
@@ -244,27 +299,35 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitl
     </div>
   );
 
-  const FeatureCard = ({ title, desc }: { title: string; desc: string }) => (
-    <div style={{
-      padding: "10px 12px",
-      borderRadius: "var(--token-radius-lg)",
-      backgroundColor: "var(--token-color-bg-elevated)",
-      border: "1.5px solid var(--token-color-accent)",
-      boxShadow: "var(--token-shadow-sm)",
-    }}>
+  // Unified "What you get" block — sneak peek row + full-width lessons
+  const WhatYouGet = () => (
+    <div style={{ padding: "12px 16px" }}>
       <p style={{
-        fontFamily: "var(--token-text-body-sm-font)",
-        fontSize: "var(--token-text-body-sm-size)",
-        fontWeight: "700",
+        fontFamily: "var(--token-text-heading-md-font)",
+        fontSize: "var(--token-text-heading-md-size)",
+        fontWeight: "var(--token-text-heading-md-weight)",
         color: "var(--token-color-text-primary)",
-        marginBottom: "3px",
-      }}>{title}</p>
+        marginBottom: "8px",
+      }}>
+        What you get
+      </p>
       <p style={{
-        fontFamily: "var(--token-text-body-sm-font)",
-        fontSize: "10px",
-        color: "var(--token-color-text-secondary)",
-        lineHeight: "1.4",
-      }}>{desc}</p>
+        fontFamily: "var(--token-text-label-sm-font)",
+        fontSize: "8px",
+        fontWeight: "var(--token-text-label-sm-weight)",
+        color: "var(--token-color-accent)",
+        textTransform: "uppercase" as const,
+        letterSpacing: "0.15em",
+        marginBottom: "6px",
+      }}>
+        Sneak peek
+      </p>
+      <div style={{ display: "flex", gap: "6px", marginBottom: "10px" }}>
+        {featureCards.map((c) => <SneakCard key={c.title} title={c.title} />)}
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+        {weeks.map(({ week, title }) => <LessonRow key={week} week={week} title={title} />)}
+      </div>
     </div>
   );
 
@@ -353,27 +416,7 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitl
         <div style={{ borderTop: "1.5px solid var(--token-color-accent)", margin: "0 16px" }} />
 
         {/* What you get */}
-        <div style={{ padding: "12px 16px" }}>
-          <p style={{
-            fontFamily: "var(--token-text-heading-md-font)",
-            fontSize: "var(--token-text-heading-md-size)",
-            fontWeight: "var(--token-text-heading-md-weight)",
-            color: "var(--token-color-text-primary)",
-            marginBottom: "10px",
-          }}>
-            What you get
-          </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "10px" }}>
-            {weeks.map(({ week, title }) => (
-              <WeekItem key={week} week={week} title={title} />
-            ))}
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-            {featureCards.map((c) => (
-              <FeatureCard key={c.title} title={c.title} desc={c.desc} />
-            ))}
-          </div>
-        </div>
+        <WhatYouGet />
 
         {/* Pricing */}
         <div style={{ padding: "10px 16px 16px" }}>
@@ -492,31 +535,7 @@ function MarketingLanderSection({ viewMode = "mobile", thumbnailUrl, displayTitl
       <div style={{ borderTop: "1.5px solid var(--token-color-accent)", margin: "0 16px" }} />
 
       {/* What you get */}
-      <div style={{ padding: "12px 16px" }}>
-        <p style={{
-          fontFamily: "var(--token-text-heading-md-font)",
-          fontSize: "var(--token-text-heading-md-size)",
-          fontWeight: "var(--token-text-heading-md-weight)",
-          color: "var(--token-color-accent)",
-          marginBottom: "10px",
-        }}>
-          What you get
-        </p>
-        <div style={{ display: "flex", gap: "12px" }}>
-          {/* Left: weeks */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "8px" }}>
-            {weeks.map(({ week, title }) => (
-              <WeekItem key={week} week={week} title={title} />
-            ))}
-          </div>
-          {/* Right: feature cards */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: "6px" }}>
-            {featureCards.map((c) => (
-              <FeatureCard key={c.title} title={c.title} desc={c.desc} />
-            ))}
-          </div>
-        </div>
-      </div>
+      <WhatYouGet />
 
       {/* Pricing */}
       <div style={{ padding: "10px 16px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
@@ -1368,7 +1387,7 @@ function DesignTokensSection({ tokens }: { tokens: SkinTokens }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, tokens: tokenOverride, programTitle }: SkinPreviewPanelProps) {
-  const displayTitle = programTitle?.trim() || "8-Week Strength Foundation";
+  const displayTitle = stripWrappingQuotes(programTitle ?? "").trim() || "8-Week Strength Foundation";
   const tokens = useMemo(() => tokenOverride ?? getSkinTokens(skinId), [skinId, tokenOverride]);
   const cssVars = useMemo(() => getTokenCSSVars(tokens), [tokens]);
   const entry = getSkinCatalogEntry(skinId);

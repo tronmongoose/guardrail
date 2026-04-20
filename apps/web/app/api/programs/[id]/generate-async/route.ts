@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { generateProgramDraft, extractContentDigests, analyzeUploadedVideoWithGemini, distributeClipsToLessons, validateAndFixClipDistribution } from "@guide-rail/ai";
+import { generateProgramDraft, extractContentDigests, analyzeUploadedVideoWithGemini, distributeClipsToLessons, validateAndFixClipDistribution, validateDraftQuality } from "@guide-rail/ai";
 import type { ContentDigest, EnrichedContentDigest, DistributionPlan } from "@guide-rail/ai";
 import { ProgramDraftSchema } from "@guide-rail/shared";
 import { Prisma } from "@prisma/client";
@@ -9,6 +9,7 @@ import { aiLogger, createTimer } from "@/lib/logger";
 import { generateSkinFromVibe } from "@/lib/generate-skin";
 import { sendProgramReadyEmail } from "@/lib/email";
 import { getMux, isMuxConfigured } from "@/lib/mux";
+import { stripWrappingQuotes } from "@/lib/strip-quotes";
 
 export const maxDuration = 800; // Vercel Pro (Fluid Compute): keep function alive for long video analysis
 
@@ -186,45 +187,64 @@ async function processGenerationJob(jobId: string, programId: string) {
       data: { stage: "fetching_transcripts", progress: 5 },
     });
 
-    // Resolve muxPlaybackId from Mux API for videos that don't have it yet
-    // (webhooks may not have fired, especially in local dev)
+    // Resolve muxPlaybackId from Mux API for videos that don't have it yet.
+    // Poll in parallel until each asset reports `ready` — webhooks may be delayed,
+    // and if the user clicks Generate right after uploading, Mux is still transcoding.
     const videosWithoutPlaybackId = videosForPipeline.filter(
       (v) => !v.analysis && !v.muxPlaybackId && v.muxUploadId && isMuxConfigured()
     );
     if (videosWithoutPlaybackId.length > 0) {
       console.info(`[generate-async] [MUX] Resolving playbackId for ${videosWithoutPlaybackId.length} video(s) via Mux API`);
       const mux = getMux();
-      for (const v of videosWithoutPlaybackId) {
-        try {
-          // Get asset ID from upload
-          let assetId = v.muxAssetId;
-          if (!assetId) {
-            const upload = await mux.video.uploads.retrieve(v.muxUploadId!);
-            assetId = upload.asset_id ?? null;
-            if (assetId) {
-              await prisma.youTubeVideo.update({ where: { id: v.id }, data: { muxAssetId: assetId } });
-              (v as { muxAssetId: string | null }).muxAssetId = assetId;
-            }
-          }
-          if (!assetId) { console.warn(`[generate-async] [MUX]   "${v.title}" — no asset yet`); continue; }
+      const MUX_RESOLVE_POLL_MS = 5_000;
+      const MUX_RESOLVE_MAX_MS = 6 * 60_000; // 6 min per video (runs in parallel)
 
-          // Get playback ID from asset
-          const asset = await mux.video.assets.retrieve(assetId);
-          if (asset.status === "ready" && asset.playback_ids?.[0]?.id) {
-            const pid = asset.playback_ids[0].id;
-            await prisma.youTubeVideo.update({
-              where: { id: v.id },
-              data: { muxPlaybackId: pid, muxStatus: "ready", url: `https://stream.mux.com/${pid}` },
-            });
-            (v as { muxPlaybackId: string | null }).muxPlaybackId = pid;
-            console.info(`[generate-async] [MUX]   ✓ "${v.title}" → playbackId=${pid}`);
-          } else {
-            console.warn(`[generate-async] [MUX]   "${v.title}" — asset status=${asset.status}, not ready yet`);
+      await Promise.all(videosWithoutPlaybackId.map(async (v) => {
+        const waitUntil = Date.now() + MUX_RESOLVE_MAX_MS;
+        while (Date.now() < waitUntil && Date.now() < deadline) {
+          try {
+            let assetId = v.muxAssetId;
+            if (!assetId) {
+              const upload = await mux.video.uploads.retrieve(v.muxUploadId!);
+              assetId = upload.asset_id ?? null;
+              if (assetId) {
+                await prisma.youTubeVideo.update({ where: { id: v.id }, data: { muxAssetId: assetId } });
+                (v as { muxAssetId: string | null }).muxAssetId = assetId;
+              }
+            }
+
+            if (!assetId) {
+              console.info(`[generate-async] [MUX]   "${v.title}" — waiting for Mux to create asset...`);
+              await new Promise((r) => setTimeout(r, MUX_RESOLVE_POLL_MS));
+              continue;
+            }
+
+            const asset = await mux.video.assets.retrieve(assetId);
+            if (asset.status === "ready" && asset.playback_ids?.[0]?.id) {
+              const pid = asset.playback_ids[0].id;
+              await prisma.youTubeVideo.update({
+                where: { id: v.id },
+                data: { muxPlaybackId: pid, muxStatus: "ready", url: `https://stream.mux.com/${pid}` },
+              });
+              (v as { muxPlaybackId: string | null }).muxPlaybackId = pid;
+              console.info(`[generate-async] [MUX]   ✓ "${v.title}" → playbackId=${pid}`);
+              return;
+            }
+
+            if (asset.status === "errored") {
+              console.warn(`[generate-async] [MUX]   "${v.title}" — asset errored, giving up`);
+              return;
+            }
+
+            console.info(`[generate-async] [MUX]   "${v.title}" — status=${asset.status}, polling...`);
+            await new Promise((r) => setTimeout(r, MUX_RESOLVE_POLL_MS));
+          } catch (err) {
+            console.warn(`[generate-async] [MUX]   "${v.title}" poll error:`, err instanceof Error ? err.message : err);
+            await new Promise((r) => setTimeout(r, MUX_RESOLVE_POLL_MS));
           }
-        } catch (err) {
-          console.warn(`[generate-async] [MUX]   "${v.title}" resolve failed:`, err instanceof Error ? err.message : err);
         }
-      }
+        console.warn(`[generate-async] [MUX]   "${v.title}" — timed out waiting for asset to be ready`);
+      }));
     }
 
     const videosNeedingAnalysis = videosForPipeline.filter(
@@ -462,13 +482,12 @@ async function processGenerationJob(jobId: string, programId: string) {
 
     let clipDistributionPlan: DistributionPlan | undefined;
 
-    // When AI decides, use total Gemini topic count as the baseline so each
-    // topic can become its own lesson. Fall back to video count if no topics.
-    const totalTopics = enrichedOnly.reduce(
-      (sum, d) => sum + (d.topics?.length ?? 0), 0
-    );
+    // Lesson count is anchored to video count (one lesson per video by default),
+    // capped at 4-6 when AI decides. Prevents over-splitting where every Gemini
+    // topic became its own lesson (e.g. 11 lessons from 5 short videos).
+    const videoCount = videosForPipeline.length;
     const effectiveWeeks = program.aiStructured
-      ? Math.max(2, totalTopics > 0 ? totalTopics : videosForPipeline.length)
+      ? Math.min(6, Math.max(4, videoCount))
       : program.durationWeeks;
 
     if (enrichedOnly.length > 0) {
@@ -511,9 +530,32 @@ async function processGenerationJob(jobId: string, programId: string) {
       ...usableArtifacts.map((a) => a.originalFilename),
     ];
     const allContentTranscripts = [
-      ...videosForPipeline.map((v) => v.transcript ?? ""),
+      ...videosForPipeline.map((v) => {
+        // 1. Prefer YouTubeVideo.transcript (set by caption scraper or prior pipeline run)
+        if (v.transcript && v.transcript.length > 0) return v.transcript;
+        // 2. Fall back to VideoAnalysis.fullTranscript (set by Gemini via webhook or pipeline)
+        const ft = v.analysis?.fullTranscript;
+        if (typeof ft === "string" && ft.length > 0) return ft;
+        // 3. Reconstruct from analysis segments (Gemini always returns segment text)
+        const segs = v.analysis?.segments as unknown as { text?: string }[] | undefined;
+        if (segs && segs.length > 0) {
+          const reconstructed = segs.map((s) => s.text ?? "").filter(Boolean).join(" ");
+          if (reconstructed.length > 0) return reconstructed;
+        }
+        return "";
+      }),
       ...usableArtifacts.map((a) => a.extractedText ?? ""),
     ];
+
+    // Warn about videos with no transcript at all — these will get hallucinated content
+    const missingTranscriptVideos = videosForPipeline.filter((_v, i) => allContentTranscripts[i].length === 0);
+    if (missingTranscriptVideos.length > 0) {
+      console.warn(`[generate-async] ⚠ ${missingTranscriptVideos.length} video(s) have NO transcript — LLM will generate from metadata only:`);
+      for (const v of missingTranscriptVideos) {
+        console.warn(`[generate-async]   "${v.title}" | hasAnalysis=${!!v.analysis} | muxPlaybackId=${v.muxPlaybackId ?? "NONE"}`);
+      }
+    }
+
     const allContentTypes: ("video" | "document")[] = [
       ...videosForPipeline.map((): "video" => "video"),
       ...usableArtifacts.map((): "document" => "document"),
@@ -604,6 +646,19 @@ async function processGenerationJob(jobId: string, programId: string) {
       }
     }
 
+    // Curriculum-quality warnings (non-blocking) — surfaces weak lesson titles,
+    // missing/multiple REFLECT actions, non-question reflectionPrompts, and
+    // concept-restatement DO actions.
+    const qualityWarnings = validateDraftQuality(validated.data);
+    if (qualityWarnings.length > 0) {
+      console.warn(`[generate-async] ═══ QUALITY WARNINGS (${qualityWarnings.length}) ═══`);
+      for (const w of qualityWarnings) {
+        console.warn(`[generate-async]   ⚠ ${w}`);
+      }
+    } else {
+      console.info(`[generate-async] Quality checks passed`);
+    }
+
     await prisma.generationJob.update({
       where: { id: jobId },
       data: { stage: "persisting", progress: 90 },
@@ -633,7 +688,7 @@ async function processGenerationJob(jobId: string, programId: string) {
       const createdWeek = await prisma.week.create({
         data: {
           programId,
-          title: week.title,
+          title: stripWrappingQuotes(week.title),
           summary: week.summary,
           weekNumber: week.weekNumber,
         },
@@ -644,7 +699,7 @@ async function processGenerationJob(jobId: string, programId: string) {
         const createdSession = await prisma.session.create({
           data: {
             weekId: createdWeek.id,
-            title: session.title,
+            title: stripWrappingQuotes(session.title),
             summary: session.summary,
             keyTakeaways: session.keyTakeaways ?? [],
             orderIndex: session.orderIndex,
@@ -656,7 +711,7 @@ async function processGenerationJob(jobId: string, programId: string) {
           await prisma.action.createMany({
             data: session.actions.map((action) => ({
               sessionId: createdSession.id,
-              title: action.title,
+              title: stripWrappingQuotes(action.title),
               type: action.type.toUpperCase() as "WATCH" | "READ" | "DO" | "REFLECT",
               instructions: action.instructions,
               reflectionPrompt: action.reflectionPrompt,
@@ -708,6 +763,11 @@ async function processGenerationJob(jobId: string, programId: string) {
         }
       }
     }
+
+    await prisma.program.update({
+      where: { id: programId },
+      data: { durationWeeks: validated.data.weeks.length },
+    });
 
     aiLogger.generationSuccess(programId, timer.elapsed(), {
       weekCount: validated.data.weeks.length,

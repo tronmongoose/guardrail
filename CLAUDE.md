@@ -5,7 +5,7 @@ When working on marketing, copy, ads, or brand tasks, read JOURNEYLINEMARKETING.
 
 **JourneyLine.AI** is a creator-to-learner transformation delivery SaaS. Creators build structured programs (not courses); learners buy and complete them on a calm, paced timeline. First-lane focus is fitness/movement programs (MVP).
 
-Typical flow: Creator pastes YouTube links → AI suggests structure → Creator approves → Publishes with price → Learner buys → Completes actions → Creator gets paid 90%.
+Typical flow: Creator pastes YouTube links → AI suggests structure → Creator approves → Pays a one-time $99 platform fee to publish → Learner buys → Completes actions → Creator keeps 100% of the learner payment.
 
 ---
 
@@ -112,12 +112,18 @@ Schema: [apps/web/prisma/schema.prisma](apps/web/prisma/schema.prisma)
 
 ## Payment Flow
 
-- **Platform fee:** 10% (hardcoded `PLATFORM_FEE_PERCENT` in checkout route)
-- **Creator payout:** 90% via Stripe Connect **destination charges** — automatic transfer to creator's connected account
+JourneyLine's revenue model is a **flat $99 one-time fee per published program**. There is no revenue split on learner payments — creators keep 100% of what their audience pays them.
+
+**Learner → Creator (program purchases)**
 - **Checkout:** `POST /api/checkout/[programId]` creates a Stripe Checkout Session
+- **Payout:** 100% of the learner payment transfers to the creator's connected account via Stripe Connect **destination charges** (no `application_fee_amount`)
 - **Webhook:** `POST /api/webhooks/stripe` handles `checkout.session.completed` → upserts `Entitlement` (ACTIVE), sends magic link email to learner
 - **Publish gate:** Paid programs require `stripeOnboardingComplete = true` on the creator's `User` record
 - **Free programs** (`priceInCents = 0`) bypass Stripe entirely — immediate access granted
+
+**Creator → JourneyLine (platform fee)**
+- **Amount:** $99 one-time fee per program the creator publishes
+- **Status:** Stripe API key is configured but the $99 checkout flow is not yet wired up — there is no dedicated "platform fee paid" field on `Program` yet. Admin metrics currently use `Program.published = true` as a proxy for fees owed.
 
 Edge case: if a creator somehow lacks a Stripe Connect account at checkout time, funds go 100% to the platform (logged as a warning, not blocked).
 

@@ -15,6 +15,7 @@ import {
 import { ViewerNav } from "@/components/viewer/ViewerNav";
 import { BrandedTransitionScreen } from "@/components/viewer/BrandedTransitionScreen";
 import { SimpleTransitionScreen } from "@/components/viewer/SimpleTransitionScreen";
+import { stripWrappingQuotes } from "@/lib/strip-quotes";
 
 // --- Types ---
 
@@ -87,6 +88,9 @@ export function SessionViewer({
   const [currentClipIndex, setCurrentClipIndex] = useState(0);
   const [playbackState, setPlaybackState] = useState<PlaybackState>("LOADING");
   const [activeOverlay, setActiveOverlay] = useState<ContentOverlayItem | null>(null);
+  // Once the user has initiated playback on clip 1, subsequent clips autoplay.
+  // Clip 1 still requires a user gesture to satisfy browser autoplay policy.
+  const [hasStarted, setHasStarted] = useState(false);
   const shownOverlayIds = useRef(new Set<string>());
 
   const currentClip = clips[currentClipIndex];
@@ -135,6 +139,7 @@ export function SessionViewer({
   }, [currentClipIndex, clips.length]);
 
   const handleClipEnd = useCallback(() => {
+    setHasStarted(true);
     const isLastClip = currentClipIndex >= clips.length - 1;
 
     if (!autoAdvance || isLastClip) {
@@ -162,6 +167,7 @@ export function SessionViewer({
   }, [advanceToNextClip]);
 
   const handleChapterJump = useCallback((index: number) => {
+    setHasStarted(true);
     setCurrentClipIndex(index);
     setPlaybackState("PLAYING");
   }, []);
@@ -202,7 +208,7 @@ export function SessionViewer({
       <ViewerNav
         programId={programId}
         programTitle={programTitle}
-        sessionTitle={session.title}
+        sessionTitle={stripWrappingQuotes(session.title)}
         currentClip={currentClipIndex}
         totalClips={clips.length}
       />
@@ -222,6 +228,7 @@ export function SessionViewer({
                   title={currentClip.title}
                   startSeconds={currentClip.startSeconds}
                   endSeconds={currentClip.endSeconds}
+                  autoPlay={hasStarted || currentClipIndex > 0}
                   onClipEnd={handleClipEnd}
                   className="w-full"
                 />
@@ -252,7 +259,7 @@ export function SessionViewer({
               {playbackState === "INTRO" && effectiveMode === "BRANDED" && (
                 <BrandedTransitionScreen
                   variant="intro"
-                  sessionTitle={session.title}
+                  sessionTitle={stripWrappingQuotes(session.title)}
                   keyTakeaways={session.keyTakeaways}
                   onComplete={handleIntroComplete}
                 />
@@ -260,7 +267,7 @@ export function SessionViewer({
               {playbackState === "INTRO" && effectiveMode === "SIMPLE" && (
                 <SimpleTransitionScreen
                   variant="intro"
-                  sessionTitle={session.title}
+                  sessionTitle={stripWrappingQuotes(session.title)}
                   onComplete={handleIntroComplete}
                 />
               )}
@@ -269,7 +276,7 @@ export function SessionViewer({
               {playbackState === "OUTRO" && effectiveMode === "BRANDED" && (
                 <BrandedTransitionScreen
                   variant="outro"
-                  sessionTitle={session.title}
+                  sessionTitle={stripWrappingQuotes(session.title)}
                   keyTakeaways={session.keyTakeaways}
                   onComplete={handleOutroComplete}
                 />
@@ -277,7 +284,7 @@ export function SessionViewer({
               {playbackState === "OUTRO" && effectiveMode === "SIMPLE" && (
                 <SimpleTransitionScreen
                   variant="outro"
-                  sessionTitle={session.title}
+                  sessionTitle={stripWrappingQuotes(session.title)}
                   onComplete={handleOutroComplete}
                 />
               )}

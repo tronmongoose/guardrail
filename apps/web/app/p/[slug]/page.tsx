@@ -9,6 +9,7 @@ import { getActionTypeBg, ACTION_TYPE_LABELS } from "@/lib/action-type-styles";
 import type { Metadata } from "next";
 import { logger } from "@/lib/logger";
 import { getCurrentUser, hasEntitlement } from "@/lib/auth";
+import { stripWrappingQuotes } from "@/lib/strip-quotes";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -65,6 +66,16 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
                 actions: {
                   include: {
                     youtubeVideo: { select: { thumbnailUrl: true, muxPlaybackId: true } },
+                  },
+                },
+                compositeSession: {
+                  include: {
+                    clips: {
+                      orderBy: { orderIndex: "asc" },
+                      include: {
+                        youtubeVideo: { select: { thumbnailUrl: true, muxPlaybackId: true } },
+                      },
+                    },
                   },
                 },
               },
@@ -128,16 +139,22 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
     .flatMap((w) => w.sessions)
     .filter((s) => (s.keyTakeaways && s.keyTakeaways.length > 0) || s.summary);
 
-  // Helper: derive thumbnail URL for a session from its first WATCH action.
-  // Checks action.muxPlaybackId directly (uploaded videos) before falling back to youtubeVideo.
+  // Helper: derive thumbnail URL for a session. Scene-based sessions keep their
+  // video refs on compositeSession.clips; classic sessions keep them on WATCH actions.
   function getSessionThumbnail(session: typeof featureCards[number]): string | null {
     const watch = session.actions.find((a) => a.type === "WATCH");
-    if (!watch) return null;
-    const muxId = watch.muxPlaybackId ?? watch.youtubeVideo?.muxPlaybackId;
-    if (muxId) {
-      return `https://image.mux.com/${muxId}/thumbnail.jpg?time=2&width=640`;
+    if (watch) {
+      const muxId = watch.muxPlaybackId ?? watch.youtubeVideo?.muxPlaybackId;
+      if (muxId) return `https://image.mux.com/${muxId}/thumbnail.jpg?time=2&width=640`;
+      if (watch.youtubeVideo?.thumbnailUrl) return watch.youtubeVideo.thumbnailUrl;
     }
-    return watch.youtubeVideo?.thumbnailUrl ?? null;
+    const firstClip = session.compositeSession?.clips?.[0];
+    if (firstClip?.youtubeVideo) {
+      const muxId = firstClip.youtubeVideo.muxPlaybackId;
+      if (muxId) return `https://image.mux.com/${muxId}/thumbnail.jpg?time=2&width=640`;
+      if (firstClip.youtubeVideo.thumbnailUrl) return firstClip.youtubeVideo.thumbnailUrl;
+    }
+    return null;
   }
 
   // First available video thumbnail for the hero
@@ -289,7 +306,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
                 wordBreak: "break-word",
               }}
             >
-              {program.targetTransformation || program.title}
+              {stripWrappingQuotes(program.targetTransformation || program.title)}
             </h1>
 
             {/* Subtitle */}
@@ -626,7 +643,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
       {/* ── What's inside ────────────────────────────────────────────────────── */}
       <section className="px-6 pt-12 pb-16 max-w-5xl mx-auto">
         <h2
-          className="mb-8"
+          className="mb-6"
           style={{
             fontFamily: "var(--token-text-heading-lg-font)",
             fontSize: "var(--token-text-heading-lg-size)",
@@ -637,12 +654,129 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
           What&apos;s inside
         </h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Left: weeks list */}
-          <div className="flex flex-col gap-5">
+        {/* Sneak peek — horizontal carousel of session preview cards */}
+        {featureCards.length > 0 && (
+          <div className="mb-10">
+            <p
+              className="mb-3"
+              style={{
+                fontFamily: "var(--token-text-label-sm-font)",
+                fontSize: "var(--token-text-label-sm-size)",
+                fontWeight: "var(--token-text-label-sm-weight)",
+                color: "var(--token-color-accent)",
+                textTransform: "uppercase",
+                letterSpacing: "0.15em",
+              }}
+            >
+              Sneak peek
+            </p>
+            <div
+              className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-3 -mx-6 px-6"
+              style={{ scrollbarWidth: "thin" }}
+            >
+              {featureCards.map((session) => {
+                const thumbUrl = getSessionThumbnail(session);
+                return (
+                  <div
+                    key={session.id}
+                    className="flex-shrink-0 snap-start overflow-hidden flex flex-col"
+                    style={{
+                      width: "clamp(240px, 72vw, 300px)",
+                      borderRadius: "var(--token-radius-lg)",
+                      backgroundColor: "var(--token-color-bg-elevated)",
+                      border: "1px solid var(--token-color-border-subtle)",
+                      boxShadow: "var(--token-shadow-md)",
+                    }}
+                  >
+                    {thumbUrl && (
+                      <div style={{ position: "relative", width: "100%", aspectRatio: "16/9", overflow: "hidden" }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={thumbUrl}
+                          alt=""
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
+                      </div>
+                    )}
+                    <div className="p-4 flex flex-col gap-2">
+                      <p
+                        style={{
+                          fontFamily: "var(--token-text-body-md-font)",
+                          fontSize: "var(--token-text-body-md-size)",
+                          fontWeight: "700",
+                          color: "var(--token-color-text-primary)",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {stripWrappingQuotes(session.title)}
+                      </p>
+                      {session.keyTakeaways && session.keyTakeaways.length > 0 ? (
+                        <ul className="flex flex-col gap-1">
+                          {session.keyTakeaways.slice(0, 2).map((item, i) => (
+                            <li
+                              key={i}
+                              className="flex items-start gap-2"
+                              style={{
+                                fontFamily: "var(--token-text-body-sm-font)",
+                                fontSize: "var(--token-text-body-sm-size)",
+                                color: "var(--token-color-text-secondary)",
+                                lineHeight: "1.45",
+                              }}
+                            >
+                              <span style={{ color: "var(--token-color-accent)", flexShrink: 0 }}>✓</span>
+                              <span
+                                style={{
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                {item}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : session.summary ? (
+                        <p
+                          style={{
+                            fontFamily: "var(--token-text-body-sm-font)",
+                            fontSize: "var(--token-text-body-sm-size)",
+                            color: "var(--token-color-text-secondary)",
+                            lineHeight: "1.45",
+                            display: "-webkit-box",
+                            WebkitLineClamp: 3,
+                            WebkitBoxOrient: "vertical",
+                            overflow: "hidden",
+                          }}
+                        >
+                          {session.summary}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Curriculum — full-width lesson rows */}
+        {program.weeks.length > 0 && (
+          <div className="flex flex-col gap-3">
             {program.weeks.map((week) => (
-              <div key={week.id} className="flex items-start gap-4">
-                {/* Circle indicator */}
+              <div
+                key={week.id}
+                className="flex items-start gap-4 p-4"
+                style={{
+                  borderRadius: "var(--token-radius-lg)",
+                  backgroundColor: "var(--token-color-bg-elevated)",
+                  border: "1px solid var(--token-color-border-subtle)",
+                }}
+              >
                 <div
                   className="flex-shrink-0 mt-1"
                   style={{
@@ -673,7 +807,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
                           fontFamily: "var(--token-text-label-sm-font)",
                           fontSize: "11px",
                           color: "var(--token-color-text-secondary)",
-                          backgroundColor: "var(--token-color-bg-elevated)",
+                          backgroundColor: "var(--token-color-bg-default)",
                           borderRadius: "100px",
                           border: "1px solid var(--token-color-border-subtle)",
                         }}
@@ -691,7 +825,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
                       marginTop: "2px",
                     }}
                   >
-                    {week.title}
+                    {stripWrappingQuotes(week.title)}
                   </p>
                   {week.summary && (
                     <p
@@ -710,82 +844,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
               </div>
             ))}
           </div>
-
-          {/* Right: feature cards */}
-          {featureCards.length > 0 && (
-            <div className="flex flex-col gap-4">
-              {featureCards.map((session) => {
-                const thumbUrl = getSessionThumbnail(session);
-                return (
-                <div
-                  key={session.id}
-                  className="overflow-hidden"
-                  style={{
-                    borderRadius: "var(--token-radius-lg)",
-                    backgroundColor: "var(--token-color-bg-elevated)",
-                    border: "2px solid var(--token-color-accent)",
-                    boxShadow: "var(--token-shadow-md)",
-                  }}
-                >
-                  {thumbUrl && (
-                    <div style={{ position: "relative", width: "100%", aspectRatio: "16/9", overflow: "hidden" }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={thumbUrl}
-                        alt=""
-                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                      />
-                    </div>
-                  )}
-                  <div className="p-5">
-                  <p
-                    className="mb-2"
-                    style={{
-                      fontFamily: "var(--token-text-body-md-font)",
-                      fontSize: "var(--token-text-body-md-size)",
-                      fontWeight: "700",
-                      color: "var(--token-color-text-primary)",
-                    }}
-                  >
-                    {session.title}
-                  </p>
-                  {session.keyTakeaways && session.keyTakeaways.length > 0 ? (
-                    <ul className="flex flex-col gap-1">
-                      {session.keyTakeaways.slice(0, 3).map((item, i) => (
-                        <li
-                          key={i}
-                          className="flex items-start gap-2"
-                          style={{
-                            fontFamily: "var(--token-text-body-sm-font)",
-                            fontSize: "var(--token-text-body-sm-size)",
-                            color: "var(--token-color-text-secondary)",
-                            lineHeight: "1.5",
-                          }}
-                        >
-                          <span style={{ color: "var(--token-color-accent)", flexShrink: 0 }}>✓</span>
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p
-                      style={{
-                        fontFamily: "var(--token-text-body-sm-font)",
-                        fontSize: "var(--token-text-body-sm-size)",
-                        color: "var(--token-color-text-secondary)",
-                        lineHeight: "1.5",
-                      }}
-                    >
-                      {session.summary}
-                    </p>
-                  )}
-                  </div>
-                </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        )}
       </section>
 
       {/* ── Pricing ──────────────────────────────────────────────────────────── */}

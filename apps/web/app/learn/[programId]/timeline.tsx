@@ -6,6 +6,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 import { MuxVideoPlayer } from "@/components/viewer/MuxVideoPlayer";
 import { ACTION_TYPE_LABELS, getActionTypeColor, getActionTypeBgWithBorder } from "@/lib/action-type-styles";
+import { stripWrappingQuotes } from "@/lib/strip-quotes";
 
 interface ActionProgress {
   id: string;
@@ -558,7 +559,7 @@ export function LearnerTimeline({
                   className="text-sm font-medium"
                   style={{ color: isUnlocked ? "var(--token-color-text-primary)" : "var(--token-color-text-secondary)" }}
                 >
-                  {groupLabel} {week.weekNumber}: {week.title.replace(/^(Week|Lesson)\s+\d+:\s*/i, "")}
+                  {groupLabel} {week.weekNumber}: {stripWrappingQuotes(week.title).replace(/^(Week|Lesson)\s+\d+:\s*/i, "")}
                 </h2>
                 {isUnlocked && weekActions.length > 0 && (
                   <span
@@ -660,7 +661,7 @@ export function LearnerTimeline({
                           className="text-xs font-medium"
                           style={{ color: "var(--token-color-text-secondary)" }}
                         >
-                          {session.title}
+                          {stripWrappingQuotes(session.title)}
                         </h3>
                         <span className="text-[10px]" style={{ color: "var(--token-color-text-secondary)" }}>{sessionDone}/{sessionActions.length}</span>
                       </div>

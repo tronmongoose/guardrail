@@ -13,7 +13,7 @@ export type { TranscribeOptions, TranscribeResult } from "./whisper";
 export { analyzeVideoWithGemini, analyzeUploadedVideoWithGemini } from "./gemini-video-analyzer";
 
 // Clip distribution — deterministic video-to-lesson assignment
-export { distributeClipsToLessons, validateAndFixClipDistribution, formatDistributionPlanForPrompt } from "./clip-distributor";
+export { distributeClipsToLessons, validateAndFixClipDistribution, validateDraftQuality, formatDistributionPlanForPrompt } from "./clip-distributor";
 export type { TopicClip, LessonAssignment, DistributionPlan } from "./clip-distributor";
 
 // Smart lesson-count presets for the wizard
