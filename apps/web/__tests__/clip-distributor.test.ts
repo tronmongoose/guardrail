@@ -92,11 +92,20 @@ describe("distributeClipsToLessons", () => {
     // Total clips should match total topics (9)
     expect(plan.totalClips).toBe(9);
 
-    // No warnings for this clean case
-    expect(plan.warnings).toHaveLength(0);
+    // No fill-related warnings — we have 9 clips for 6 lessons.
+    for (const w of plan.warnings) {
+      expect(w).not.toMatch(/splitting|duplicating/i);
+    }
+
+    // Core rule: no identical clip (same videoId + startSeconds + endSeconds)
+    // may appear twice. Parts of the same video across adjacent lessons are OK.
+    const clipKeys = plan.lessons.flatMap((l) =>
+      l.clips.map((c) => `${c.videoId}:${c.startSeconds}:${c.endSeconds}`),
+    );
+    expect(new Set(clipKeys).size).toBe(clipKeys.length);
   });
 
-  it("handles fewer clips than lessons by duplicating longest", () => {
+  it("fills more lessons than clips by splitting parts, never duplicating full clips", () => {
     const enriched = [
       makeEnrichedDigest("v1", "Short Video", [
         { label: "Only topic", startSeconds: 0, endSeconds: 300 },
@@ -116,8 +125,16 @@ describe("distributeClipsToLessons", () => {
       expect(lesson.clips.length).toBeGreaterThanOrEqual(1);
     }
 
-    // Should have duplication warning
-    expect(plan.warnings.some((w) => w.includes("duplicating"))).toBe(true);
+    // Should have a splitting warning (new behavior — we split instead of duplicating)
+    expect(plan.warnings.some((w) => w.includes("splitting"))).toBe(true);
+
+    // No identical (videoId, startSeconds, endSeconds) tuple may appear in
+    // more than one lesson. Parts of the same video are fine; exact dupes are not.
+    const clipKeys = plan.lessons.flatMap((l) =>
+      l.clips.map((c) => `${c.videoId}:${c.startSeconds}:${c.endSeconds}`),
+    );
+    const uniqueKeys = new Set(clipKeys);
+    expect(uniqueKeys.size).toBe(clipKeys.length);
   });
 
   it("handles many clips in few lessons by merging", () => {
@@ -220,11 +237,13 @@ describe("distributeClipsToLessons", () => {
 
 describe("formatDistributionPlanForPrompt", () => {
   it("formats a plan as readable text", () => {
+    // Duration ≥ 480s and two distinct topic labels → distributor splits into
+    // two clips (one per lesson) so the formatter shows both topic labels.
     const enriched = [
       makeEnrichedDigest("v1", "My Video", [
-        { label: "Intro", startSeconds: 0, endSeconds: 120 },
-        { label: "Main", startSeconds: 120, endSeconds: 300 },
-      ], 300),
+        { label: "Intro", startSeconds: 0, endSeconds: 300 },
+        { label: "Main", startSeconds: 300, endSeconds: 600 },
+      ], 600),
     ];
     const plan = distributeClipsToLessons(enriched, [], 2);
     const text = formatDistributionPlanForPrompt(plan);

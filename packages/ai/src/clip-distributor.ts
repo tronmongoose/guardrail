@@ -55,13 +55,51 @@ const TARGET_LESSON_MIN_SECONDS = 5 * 60;   // 5 min
 const TARGET_LESSON_MAX_SECONDS = 15 * 60;  // 15 min
 const DEFAULT_VIDEO_DURATION = 600;          // 10 min fallback
 
+// A video only gets split into multiple lesson-clips if it exceeds this
+// duration AND has thematically distinct topics. Short single-concept videos
+// (e.g. a 5-minute tool demo) always collapse to one clip per video.
+const MIN_DURATION_FOR_SPLIT_SECONDS = 8 * 60;
+
+function bigrams(text: string): Set<string> {
+  const tokens = text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean);
+  const result = new Set<string>();
+  for (let i = 0; i < tokens.length - 1; i++) {
+    result.add(`${tokens[i]} ${tokens[i + 1]}`);
+  }
+  // Fallback to unigrams for 1-word labels
+  if (result.size === 0) for (const t of tokens) result.add(t);
+  return result;
+}
+
+/**
+ * Two topic labels count as "distinct subjects" when their bigram Jaccard
+ * overlap is below 30%. Used to decide whether a long video genuinely covers
+ * multiple topics or is just one topic narrated in stages.
+ */
+function topicsAreDistinct(a: string, b: string): boolean {
+  const ga = bigrams(a);
+  const gb = bigrams(b);
+  if (ga.size === 0 || gb.size === 0) return true;
+  let intersection = 0;
+  for (const g of ga) if (gb.has(g)) intersection++;
+  const union = ga.size + gb.size - intersection;
+  const jaccard = union === 0 ? 0 : intersection / union;
+  return jaccard < 0.3;
+}
+
 // ---------------------------------------------------------------------------
 // Distribution Algorithm
 // ---------------------------------------------------------------------------
 
 /**
  * Build a flat list of topic clips from enriched and basic digests.
- * Enriched digests produce one clip per topic; basic digests produce one full-video clip.
+ *
+ * Default is ONE clip per video. A video only contributes multiple clips
+ * when its duration exceeds MIN_DURATION_FOR_SPLIT_SECONDS AND it has ≥2
+ * topics whose labels are thematically distinct (see topicsAreDistinct).
+ *
+ * This prevents the "11 lessons from 5 short videos" pathology where every
+ * Gemini topic became its own lesson.
  */
 function collectClips(
   enrichedDigests: EnrichedContentDigest[],
@@ -70,10 +108,24 @@ function collectClips(
   const clips: TopicClip[] = [];
 
   for (const digest of enrichedDigests) {
-    if (digest.topics && digest.topics.length > 0) {
-      for (const topic of digest.topics) {
+    const fullDuration = digest.durationSeconds ?? DEFAULT_VIDEO_DURATION;
+    const topics = digest.topics ?? [];
+    const hasMultipleTopics = topics.length >= 2;
+    const longEnoughToSplit = fullDuration >= MIN_DURATION_FOR_SPLIT_SECONDS;
+
+    // Check if the video's topics are thematically distinct enough to warrant
+    // splitting. We compare every pair; if all pairs are distinct, we split.
+    let shouldSplit = false;
+    if (hasMultipleTopics && longEnoughToSplit) {
+      shouldSplit = topics.every((t, i) =>
+        topics.slice(i + 1).every((u) => topicsAreDistinct(t.label, u.label)),
+      );
+    }
+
+    if (shouldSplit) {
+      for (const topic of topics) {
         const dur = topic.endSeconds - topic.startSeconds;
-        if (dur < MIN_CLIP_DURATION_SECONDS) continue; // skip tiny topics
+        if (dur < MIN_CLIP_DURATION_SECONDS) continue;
         clips.push({
           videoId: digest.contentId,
           videoTitle: digest.contentTitle,
@@ -84,32 +136,30 @@ function collectClips(
           subtopics: topic.subtopics,
         });
       }
-      // If all topics were too short, add the full video as one clip
-      if (clips.filter((c) => c.videoId === digest.contentId).length === 0) {
-        clips.push({
-          videoId: digest.contentId,
-          videoTitle: digest.contentTitle,
-          topicLabel: digest.topics[0].label,
-          startSeconds: 0,
-          endSeconds: digest.durationSeconds ?? DEFAULT_VIDEO_DURATION,
-          durationSeconds: digest.durationSeconds ?? DEFAULT_VIDEO_DURATION,
-        });
-      }
-    } else {
-      // Enriched but no topics — single full clip
-      clips.push({
-        videoId: digest.contentId,
-        videoTitle: digest.contentTitle,
-        topicLabel: digest.contentTitle,
-        startSeconds: 0,
-        endSeconds: digest.durationSeconds ?? DEFAULT_VIDEO_DURATION,
-        durationSeconds: digest.durationSeconds ?? DEFAULT_VIDEO_DURATION,
-      });
+      // Guard: if every topic was too short, fall through to the full-video clip
+      if (clips.filter((c) => c.videoId === digest.contentId).length > 0) continue;
     }
+
+    // Default path: one full-video clip. Preserve topic labels as subtopics so
+    // the LLM and downstream UI can still see the chapter structure.
+    clips.push({
+      videoId: digest.contentId,
+      videoTitle: digest.contentTitle,
+      topicLabel: topics[0]?.label ?? digest.contentTitle,
+      startSeconds: 0,
+      endSeconds: fullDuration,
+      durationSeconds: fullDuration,
+      subtopics: topics.length > 0 ? topics.map((t) => t.label) : undefined,
+    });
   }
+
+  // Track videoIds already represented so basic digests don't duplicate
+  // videos that enriched digests already contributed (in full or as parts).
+  const enrichedVideoIds = new Set(clips.map((c) => c.videoId));
 
   for (const digest of basicDigests) {
     if (digest.contentType !== "video") continue;
+    if (enrichedVideoIds.has(digest.contentId)) continue;
     clips.push({
       videoId: digest.contentId,
       videoTitle: digest.contentTitle,
@@ -158,17 +208,43 @@ export function distributeClipsToLessons(
     };
   }
 
-  // If fewer clips than lessons, duplicate the longest clips to fill
+  // If fewer clips than lessons, split the longest clips into parts.
+  // Never shallow-clone a clip — the same (videoId, startSeconds, endSeconds)
+  // must never appear twice. Splitting creates parts of the same video, which
+  // IS allowed; duplicating the full clip is not.
   if (clips.length < totalLessons) {
     warnings.push(
-      `Only ${clips.length} topic clip(s) for ${totalLessons} lessons — duplicating longest clips to fill`,
+      `Only ${clips.length} topic clip(s) for ${totalLessons} lessons — splitting longest clips into parts to fill`,
     );
-    const sorted = [...clips].sort((a, b) => b.durationSeconds - a.durationSeconds);
-    let idx = 0;
-    while (clips.length < totalLessons) {
-      const source = sorted[idx % sorted.length];
-      clips.push({ ...source }); // shallow copy
-      idx++;
+    let safetyIterations = totalLessons * 4; // guard against pathological inputs
+    while (clips.length < totalLessons && safetyIterations-- > 0) {
+      // Pick the longest clip that can still be halved above MIN_CLIP_DURATION
+      clips.sort((a, b) => b.durationSeconds - a.durationSeconds);
+      const source = clips[0];
+      if (source.durationSeconds < MIN_CLIP_DURATION_SECONDS * 2) {
+        // No clip is long enough to split further — stop filling.
+        // Downstream code will handle short lesson counts gracefully.
+        warnings.push(
+          `Cannot fill ${totalLessons - clips.length} more lesson(s) without duplicating a full clip; stopping fill`,
+        );
+        break;
+      }
+      const mid = source.startSeconds + Math.floor(source.durationSeconds / 2);
+      const firstHalf: TopicClip = {
+        ...source,
+        endSeconds: mid,
+        durationSeconds: mid - source.startSeconds,
+      };
+      const secondHalf: TopicClip = {
+        ...source,
+        topicLabel: source.topicLabel.includes("(part")
+          ? source.topicLabel
+          : `${source.topicLabel} (part 2)`,
+        startSeconds: mid,
+        durationSeconds: source.endSeconds - mid,
+      };
+      clips[0] = firstHalf;
+      clips.push(secondHalf);
     }
   }
 
@@ -216,6 +292,23 @@ export function distributeClipsToLessons(
         lesson.clips.length >= MAX_CLIPS_PER_LESSON);
 
     if (mustAdvance || shouldAdvance) {
+      // Different-video-first preference: the next lesson should not open
+      // with the same source video that dominated this one. If the next
+      // clip in the queue shares a videoId with the clip we just placed,
+      // swap it forward with the first clip from a different video.
+      const nextIdx = i + 1;
+      if (nextIdx < clips.length && clips[nextIdx].videoId === clip.videoId) {
+        let swapIdx = -1;
+        for (let j = nextIdx + 1; j < clips.length; j++) {
+          if (clips[j].videoId !== clip.videoId) {
+            swapIdx = j;
+            break;
+          }
+        }
+        if (swapIdx !== -1) {
+          [clips[nextIdx], clips[swapIdx]] = [clips[swapIdx], clips[nextIdx]];
+        }
+      }
       currentLesson++;
     }
   }
@@ -264,6 +357,27 @@ export function distributeClipsToLessons(
       leastLoaded.totalDurationSeconds += dur;
       warnings.push(`Video "${title}" had no clips assigned — added full clip to lesson ${leastLoaded.lessonIndex + 1}`);
     }
+  }
+
+  // Final safety: no identical clip (same videoId + startSeconds + endSeconds)
+  // may appear in more than one lesson. Parts of the same video are fine
+  // (different time ranges); exact duplicates are not.
+  const seenClipKeys = new Set<string>();
+  for (const lesson of lessons) {
+    const unique: TopicClip[] = [];
+    for (const clip of lesson.clips) {
+      const key = `${clip.videoId}:${clip.startSeconds}:${clip.endSeconds}`;
+      if (seenClipKeys.has(key)) {
+        warnings.push(
+          `Removed duplicate clip "${clip.videoTitle}" (${clip.startSeconds}s-${clip.endSeconds}s) from lesson ${lesson.lessonIndex + 1}`,
+        );
+        lesson.totalDurationSeconds -= clip.durationSeconds;
+        continue;
+      }
+      seenClipKeys.add(key);
+      unique.push(clip);
+    }
+    lesson.clips = unique;
   }
 
   return {
@@ -578,4 +692,67 @@ export function validateAndFixClipDistribution(
   }
 
   return { valid: false, errors, fixedDraft };
+}
+
+/**
+ * Post-LLM curriculum-quality checks. Returns warnings (not errors) so callers
+ * can log them without blocking the draft. Enforces the reviewer's rules:
+ *   - Lesson titles must not be blank or bare "Lesson N"
+ *   - Each session has exactly one REFLECT action
+ *   - Each reflectionPrompt is a question (ends with "?")
+ *   - Each DO action title starts with an imperative verb (no "Practice:" / "Understand…")
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function validateDraftQuality(draft: any): string[] {
+  const warnings: string[] = [];
+  // Common weak lead-ins that aren't imperative verbs
+  const weakDoPrefix = /^\s*(practice|understand|learn|adopt|remember|know|recognize)\b/i;
+  const bareLessonTitle = /^\s*lesson\s*\d+\s*:?\s*$/i;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  for (const week of (draft?.weeks ?? [])) {
+    const weekNum = week.weekNumber ?? "?";
+    const title: string = typeof week.title === "string" ? week.title : "";
+    if (!title.trim() || bareLessonTitle.test(title)) {
+      warnings.push(`Lesson ${weekNum}: title is blank or missing content ("${title}")`);
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    for (const session of (week.sessions ?? [])) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const actions: any[] = session.actions ?? [];
+      const reflects = actions.filter((a) => {
+        const t = String(a?.type ?? "").toLowerCase();
+        return t === "reflect";
+      });
+      if (reflects.length !== 1) {
+        warnings.push(
+          `Lesson ${weekNum} / session "${session.title ?? ""}": expected exactly 1 REFLECT action, got ${reflects.length}`,
+        );
+      }
+      for (const r of reflects) {
+        const prompt = String(r.reflectionPrompt ?? "").trim();
+        if (!prompt.endsWith("?")) {
+          warnings.push(
+            `Lesson ${weekNum}: reflectionPrompt does not end with "?" ("${prompt.slice(0, 60)}…")`,
+          );
+        }
+      }
+
+      const dos = actions.filter((a) => String(a?.type ?? "").toLowerCase() === "do");
+      for (const d of dos) {
+        const t = String(d.title ?? "").trim();
+        if (!t) {
+          warnings.push(`Lesson ${weekNum}: DO action has no title`);
+          continue;
+        }
+        if (weakDoPrefix.test(t)) {
+          warnings.push(
+            `Lesson ${weekNum}: DO title "${t}" starts with a weak/concept verb (should be an imperative physical action)`,
+          );
+        }
+      }
+    }
+  }
+  return warnings;
 }

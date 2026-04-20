@@ -408,12 +408,23 @@ function buildPrompt(input: GenerateInput): string {
     const digest = digestMap.get(item.id);
 
     // Always include transcript/text — this is the primary content signal for curriculum quality
-    const transcriptSnippet = item.text && item.text.length > 0
+    let transcriptSnippet = item.text && item.text.length > 0
       ? `\n   TRANSCRIPT (${item.text.length} chars):\n   ${item.text.slice(0, 4000)}${item.text.length > 4000 ? "..." : ""}`
       : `\n   TRANSCRIPT: [NOT AVAILABLE — video has not been transcribed yet]`;
 
     // Enriched digest with timestamps (from Gemini analysis)
     const enriched = digest as EnrichedContentDigest | undefined;
+
+    // Safety net: if no transcript from cluster data, reconstruct from analysis segments
+    if ((!item.text || item.text.length === 0) && enriched?.segments && enriched.segments.length > 0) {
+      const segText = enriched.segments
+        .map((s: { text?: string }) => s.text ?? "")
+        .filter(Boolean)
+        .join(" ");
+      if (segText.length > 0) {
+        transcriptSnippet = `\n   TRANSCRIPT (${segText.length} chars, from segments):\n   ${segText.slice(0, 4000)}${segText.length > 4000 ? "..." : ""}`;
+      }
+    }
     if (enriched?.topics && enriched.topics.length > 0) {
       const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
       const durationStr = enriched.durationSeconds
@@ -479,6 +490,58 @@ ${input.vibePrompt}
 Apply this style throughout all titles, descriptions, instructions, and reflection prompts.`
     : "";
 
+  // Shared quality rules — prepended to both scene-based and classic prompts.
+  // These override any conflicting defaults elsewhere in the prompt.
+  const qualityRules = `
+SOURCE DISCIPLINE (non-negotiable):
+Every claim, technique, example, and takeaway in your output MUST be directly
+supported by the transcripts below. Do not infer program details, add steps the
+creator didn't mention, or invent outcomes. If the transcripts don't cover
+something, do not include it.
+
+LESSON ORDER RULE:
+- Follow the source order given in AVAILABLE CONTENT SOURCES (and the VIDEO
+  ASSIGNMENT PLAN when one is provided). The creator's upload order IS the
+  intended lesson sequence. Do not reorder lessons based on title keywords
+  like "intro", "welcome", "overview", or "framework".
+
+LESSON TITLE RULES:
+- Titles must describe what the learner will DO or UNDERSTAND after the lesson.
+- Name the outcome, not the topic.
+- Bad: "Protein Optimization" / "Macronutrient Balance" / "Introduction"
+- Good: "Hit your protein target at every meal, not just dinner"
+- Good: "Build a midlife-friendly grocery list in under 10 minutes"
+
+STEP/ACTION RULES:
+- Every action must be something the learner physically does, decides, or writes.
+- Restatements of concepts are NOT actions.
+- Bad: "Adopt the 40/30/30 ratio." / "Understand why protein matters."
+- Good: "Log everything you eat today in a macro tracker — don't change anything
+  yet, just find your current baseline."
+- Action titles must start with an imperative verb ("Track…", "List…", "Try…", "Write…").
+- Every action's \`instructions\` field MUST contain 2-3 numbered sub-steps.
+  Each sub-step must name a specific concept, number, term, or tool from the
+  transcript — not a generic category.
+- Bad (too vague): "Identify your current symptoms"
+- Good (specific, numbered): "1. Write the three midlife symptoms the video
+  names that you've experienced this month. 2. Circle the one most disruptive
+  to your sleep. 3. Note one concrete change you could try this week."
+- This rule applies equally to conceptual lessons and tool/procedure lessons.
+  Conceptual content is not an excuse for vague steps.
+
+REFLECT RULE:
+- Each lesson MUST include EXACTLY ONE REFLECT action.
+- \`reflectionPrompt\` must be an open-ended question answered in the learner's
+  own words. Not a fact to recall. Not a yes/no. Must end with "?".
+- The reflectionPrompt MUST name at least one specific concept, term, number,
+  or example from THIS lesson — never a generic category.
+- Good: "Which of your current breakfasts actually fits the 40/30/30 ratio,
+  and what would you have to change about the ones that don't?"
+- Bad (generic): "Reflect on your midlife perspective." / "What did you learn
+  about nutrition?"
+- Bad (closed): "What is the 40/30/30 ratio?" / "Do you eat enough protein?"
+`;
+
   // ── Scene-based prompt (with clips/overlays) ──
   if (useSceneMode) {
     const hasPlan = !!input.clipDistributionPlan && input.clipDistributionPlan.lessons.length > 0;
@@ -507,7 +570,7 @@ Apply this style throughout all titles, descriptions, instructions, and reflecti
     const weekCountRule = hasPlan
       ? `1. Generate EXACTLY ${planWeekCount} lessons (weekNumber 1 through ${planWeekCount}) with EXACTLY 1 session per lesson — this matches the VIDEO ASSIGNMENT PLAN. Do NOT merge lessons or create multiple sessions per lesson.`
       : input.aiStructured
-        ? `1. Choose the ideal number of lessons based on the content — each lesson should have 5-15 minutes of clip content. You may create more or fewer than ${input.durationWeeks} lessons if the content warrants it.`
+        ? `1. Choose the ideal number of lessons based on the content — each lesson should have 5-15 minutes of clip content. Target 4-6 lessons. Do NOT exceed 6 lessons under any circumstance, and never pad lesson count to hit a number.`
         : `1. Generate EXACTLY ${input.durationWeeks} lessons (weekNumber 1 through ${input.durationWeeks})`;
 
     const taskInstruction = hasPlan
@@ -523,7 +586,7 @@ Apply this style throughout all titles, descriptions, instructions, and reflecti
         : `${input.durationWeeks}`;
 
     return `You are an expert curriculum designer creating a scene-based learning program with video clips, transitions, and overlays.
-
+${qualityRules}
 PROGRAM CONTEXT:
 - Title: "${input.programTitle}"
 ${durationInstruction}
@@ -554,11 +617,11 @@ LESSON SHAPING RULES:
 CRITICAL REQUIREMENTS:
 ${weekCountRule}
 ${distributionRule}
-3. Each lesson needs a clear theme building toward the transformation
-4. Each session MUST include keyTakeaways (2-3 items)
+3. Each lesson needs an outcome-oriented title (see LESSON TITLE RULES above) and a clear theme building toward the transformation
+4. Each session MUST include keyTakeaways (2-3 items) drawn directly from the transcripts
 5. Each session MUST include a "clips" array with video clip segments
 6. Each session MUST include an "overlays" array (at minimum a TITLE_CARD)
-7. Each session also needs actions: at least one DO and one REFLECT action
+7. Each session MUST include actions: at least one DO action (imperative verb, physical activity) and EXACTLY ONE REFLECT action whose \`reflectionPrompt\` ends with "?" and is open-ended
 ${hasVideos ? `8. Use exact youtubeVideoId values from the content sources above` : ""}
 
 OUTPUT FORMAT (JSON only, no markdown):
@@ -570,7 +633,7 @@ OUTPUT FORMAT (JSON only, no markdown):
   "durationWeeks": ${durationWeeksOutput},
   "weeks": [
     {
-      "title": "Lesson 1: [Theme]",
+      "title": "[Outcome-oriented title — what the learner can do after this lesson]",
       "summary": "What learners achieve in this lesson",
       "weekNumber": 1,
       "sessions": [
@@ -622,16 +685,16 @@ OUTPUT FORMAT (JSON only, no markdown):
           ],
           "actions": [
             {
-              "title": "Practice: [Exercise name]",
+              "title": "[Imperative verb] [specific, physical activity]",
               "type": "do",
-              "instructions": "Clear, actionable exercise (3-5 steps)",
+              "instructions": "2-3 numbered sub-steps, each naming a specific concept/term/number/tool from the transcript (e.g. '1. ... 2. ... 3. ...'). No generic steps.",
               "orderIndex": 0
             },
             {
-              "title": "Reflect: [Topic]",
+              "title": "Reflect on [specific concept from this lesson]",
               "type": "reflect",
               "instructions": "Context for the reflection",
-              "reflectionPrompt": "Thought-provoking question",
+              "reflectionPrompt": "[Open-ended question the learner answers in their own words, ending with '?']",
               "orderIndex": 1
             }
           ]
@@ -655,8 +718,8 @@ QUALITY GUIDELINES:
 - Use topic timestamps to pick the most valuable segments
 - Key moments marked [high] significance are the best candidates for clips
 - Build complexity progressively across lessons
-- DO exercises should reference real techniques from the clips
-- REFLECT prompts should connect clip content to the learner's personal context
+- DO exercises must reference real techniques from the clips (see STEP/ACTION RULES above)
+- REFLECT prompts must be open-ended questions grounded in clip content (see REFLECT RULE above)
 - Final week should synthesize and prepare for real-world application`;
   }
 
@@ -673,8 +736,8 @@ QUALITY GUIDELINES:
   if (hasDocs) {
     actionInstructions.push(`  * READ action(s) — for DOCUMENT content, create reading assignments that reference the document's key points`);
   }
-  actionInstructions.push(`  * DO action — practical exercise applying what was learned`);
-  actionInstructions.push(`  * REFLECT action (at least one per lesson) — thought-provoking prompt connecting to the transformation`);
+  actionInstructions.push(`  * DO action — a physical activity the learner performs (imperative verb in the title, e.g. "Track…", "List…", "Try…"). Must be grounded in the transcript, not a concept restatement.`);
+  actionInstructions.push(`  * REFLECT action (EXACTLY ONE per lesson) — reflectionPrompt is an open-ended question ending with "?", answered in the learner's own words (not yes/no, not a fact to recall).`);
 
   const actionExamples = [];
   if (hasVideos) {
@@ -695,16 +758,16 @@ QUALITY GUIDELINES:
             }`);
   }
   actionExamples.push(`            {
-              "title": "Practice: [Exercise name]",
+              "title": "[Imperative verb] [specific physical activity]",
               "type": "do",
-              "instructions": "Clear, actionable exercise (3-5 steps)",
+              "instructions": "2-3 numbered sub-steps, each naming a specific concept/term/number/tool from the transcript (e.g. '1. ... 2. ... 3. ...'). No generic steps.",
               "orderIndex": ${actionExamples.length}
             }`);
   actionExamples.push(`            {
-              "title": "Reflect: [Topic]",
+              "title": "Reflect on [specific concept from this lesson]",
               "type": "reflect",
               "instructions": "Context for the reflection",
-              "reflectionPrompt": "Thought-provoking question connecting to the transformation",
+              "reflectionPrompt": "[Open-ended question ending with '?' — answered in the learner's own words]",
               "orderIndex": ${actionExamples.length}
             }`);
 
@@ -722,7 +785,7 @@ QUALITY GUIDELINES:
   const classicWeekCountRule = hasPlanClassic
     ? `1. Generate EXACTLY ${classicPlanWeekCount} lessons (weekNumber 1 through ${classicPlanWeekCount}) with EXACTLY 1 session per lesson — this matches the VIDEO ASSIGNMENT PLAN. Do NOT merge lessons or create multiple sessions per lesson.`
     : input.aiStructured
-      ? `1. Choose the ideal number of lessons based on the content — each lesson should have 5-15 minutes of content. You may create more or fewer than ${input.durationWeeks} lessons if the content warrants it.`
+      ? `1. Choose the ideal number of lessons based on the content — each lesson should have 5-15 minutes of content. Target 4-6 lessons. Do NOT exceed 6 lessons under any circumstance, and never pad lesson count to hit a number.`
       : `1. Generate EXACTLY ${input.durationWeeks} lessons (weekNumber 1 through ${input.durationWeeks})`;
 
   const classicTaskInstruction = hasPlanClassic
@@ -736,7 +799,7 @@ QUALITY GUIDELINES:
     : `${input.durationWeeks}`;
 
   return `You are an expert curriculum designer creating a transformational learning program.
-
+${qualityRules}
 PROGRAM CONTEXT:
 - Title: "${input.programTitle}"
 ${classicDurationInstruction}
@@ -779,7 +842,7 @@ OUTPUT FORMAT (JSON only, no markdown):
   "durationWeeks": ${classicDurationWeeksOutput},
   "weeks": [
     {
-      "title": "Lesson 1: [Theme]",
+      "title": "[Outcome-oriented title — what the learner can do after this lesson]",
       "summary": "What learners will achieve in this lesson",
       "weekNumber": 1,
       "sessions": [
@@ -802,18 +865,15 @@ ${actionExamples.join(",\n")}
 }
 
 QUALITY GUIDELINES:
-- Lesson titles should be engaging and transformation-oriented (e.g., "Lesson 1: Building Your Foundation")
-- Key takeaways should be specific, actionable outcomes — not vague promises
+- Lesson titles must be outcome-oriented (see LESSON TITLE RULES above) — avoid generic themes like "Building Your Foundation" or "Introduction"
+- Key takeaways should be specific, actionable outcomes drawn from the transcripts — not vague promises
 - Instructions should be specific and actionable, not generic
-- DO actions should have concrete exercises learners can complete
-- REFLECT prompts should encourage deep thinking and personal application
-- Build complexity progressively — earlier weeks introduce concepts, later weeks integrate them
-- Final week should synthesize learning and prepare for real-world application
+- DO actions must follow STEP/ACTION RULES above: imperative verb titles, physical activities, grounded in transcript content
+- REFLECT prompts must follow REFLECT RULE above: one per lesson, open-ended question ending with "?"
+- Build complexity progressively — earlier lessons introduce concepts, later lessons integrate them
+- Final lesson should synthesize learning and prepare for real-world application
 - If a style guide was provided, ensure all content matches that tone and energy
-- Use the specific concepts, skills, and examples from each content source to design exercises and reflection prompts
-- DO exercises should reference real techniques from the content, not generic activities
-- Reflection prompts should ask about specific concepts or examples from the content
-- Key takeaways should reflect actual insights from the content`;
+- Use the specific concepts, skills, and examples from each content source to design exercises and reflection prompts`;
 }
 
 async function callAnthropic(input: GenerateInput): Promise<string> {
