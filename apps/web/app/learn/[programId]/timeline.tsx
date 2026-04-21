@@ -895,16 +895,18 @@ export function LearnerTimeline({
 
                               {/* Action info */}
                               <div className="flex-1 min-w-0">
-                                <p
-                                  className={`text-sm font-medium truncate ${done ? "line-through" : ""}`}
-                                  style={{
-                                    color: done
-                                      ? "var(--token-color-text-secondary)"
-                                      : "var(--token-color-text-primary)",
-                                  }}
-                                >
-                                  {action.title.replace(/^(Watch|Practice|Reflect|Read):\s*/i, "")}
-                                </p>
+                                {action.type !== "WATCH" && (
+                                  <p
+                                    className={`text-sm font-medium truncate ${done ? "line-through" : ""}`}
+                                    style={{
+                                      color: done
+                                        ? "var(--token-color-text-secondary)"
+                                        : "var(--token-color-text-primary)",
+                                    }}
+                                  >
+                                    {action.title.replace(/^(Watch|Practice|Reflect|Read):\s*/i, "")}
+                                  </p>
+                                )}
                                 <span
                                   className="text-[10px] uppercase tracking-wider font-semibold"
                                   style={getActionTypeColor(action.type)}

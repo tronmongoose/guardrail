@@ -126,12 +126,14 @@ export function ActionsPanel({ actions, userId, onActionComplete }: ActionsPanel
                     >
                       {ACTION_TYPE_LABELS[action.type] || action.type}
                     </span>
-                    <span
-                      className="text-sm font-medium truncate"
-                      style={{ color: "var(--token-color-text-primary)" }}
-                    >
-                      {action.title}
-                    </span>
+                    {action.type !== "WATCH" && (
+                      <span
+                        className="text-sm font-medium truncate"
+                        style={{ color: "var(--token-color-text-primary)" }}
+                      >
+                        {action.title}
+                      </span>
+                    )}
                   </div>
                 </div>
 

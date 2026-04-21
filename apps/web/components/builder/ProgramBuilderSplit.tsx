@@ -33,14 +33,21 @@ export function ProgramBuilderSplit({
   });
 
   // Find the selected session and its parent week
-  const { selectedSession, selectedWeek } = useMemo(() => {
-    for (const week of weeks) {
-      const session = week.sessions.find((s) => s.id === selectedSessionId);
-      if (session) {
-        return { selectedSession: session as SessionData & { keyTakeaways?: string[] }, selectedWeek: week };
+  const { selectedSession, selectedWeek, lessonNumber, sessionNumber, sessionCount } = useMemo(() => {
+    for (let wi = 0; wi < weeks.length; wi++) {
+      const week = weeks[wi];
+      const si = week.sessions.findIndex((s) => s.id === selectedSessionId);
+      if (si !== -1) {
+        return {
+          selectedSession: week.sessions[si] as SessionData & { keyTakeaways?: string[] },
+          selectedWeek: week,
+          lessonNumber: wi + 1,
+          sessionNumber: si + 1,
+          sessionCount: week.sessions.length,
+        };
       }
     }
-    return { selectedSession: null, selectedWeek: null };
+    return { selectedSession: null, selectedWeek: null, lessonNumber: 0, sessionNumber: 0, sessionCount: 0 };
   }, [weeks, selectedSessionId]);
 
   // If selected session was deleted, select next available
@@ -67,18 +74,42 @@ export function ProgramBuilderSplit({
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)] rounded-xl overflow-hidden border border-gray-800">
-      {/* Mobile: Program Structure button bar */}
-      <div className="md:hidden flex-shrink-0 flex items-center gap-2 px-3 py-2 border-b border-gray-800" style={{ background: "#111118" }}>
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="flex items-center gap-2 text-sm font-medium text-gray-400 hover:text-teal-400 transition"
-        >
+      {/* Mobile: Program Structure breadcrumb bar */}
+      <button
+        type="button"
+        onClick={() => setSidebarOpen(true)}
+        aria-label={
+          selectedSession && selectedWeek
+            ? `Open program structure, currently on Lesson ${lessonNumber} Session ${sessionNumber} of ${sessionCount}`
+            : "Open program structure to pick a lesson"
+        }
+        className="md:hidden flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3.5 border-b border-teal-500/30 bg-teal-500/5 active:bg-teal-500/10 transition text-left w-full"
+        style={{ background: "linear-gradient(to right, rgba(20, 184, 166, 0.08), rgba(20, 184, 166, 0.03))" }}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-teal-500/15 border border-teal-500/30 flex-shrink-0">
+            <svg className="w-5 h-5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </span>
+          <div className="min-w-0">
+            <div className="text-[10px] uppercase tracking-wider text-teal-400 font-semibold">
+              Program Structure
+            </div>
+            <div className="text-sm font-medium text-white truncate">
+              {selectedSession && selectedWeek
+                ? `Lesson ${lessonNumber} · Session ${sessionNumber} of ${sessionCount}`
+                : "Tap to pick a lesson"}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 text-teal-400 flex-shrink-0">
+          <span className="text-xs font-medium">Browse</span>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
-          Program Structure
-        </button>
-      </div>
+        </div>
+      </button>
 
       {/* Mobile drawer overlay */}
       {sidebarOpen && (
@@ -145,7 +176,7 @@ export function ProgramBuilderSplit({
                 <p className="text-gray-600 text-xs">
                   {weeks.length === 0
                     ? "Add a week to get started"
-                    : "Tap Program Structure to pick a session"}
+                    : "Tap the bar above to pick a lesson"}
                 </p>
               </div>
             </div>
