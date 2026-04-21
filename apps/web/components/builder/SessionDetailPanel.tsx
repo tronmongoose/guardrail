@@ -473,7 +473,17 @@ export function SessionDetailPanel({
   const watchAction = session.actions.find((a) => a.type === "WATCH" && a.youtubeVideoId);
   const video = watchAction ? videos.find((v) => v.id === watchAction.youtubeVideoId) : null;
 
-  const clips = session.compositeSession?.clips ?? [];
+  // Hide zero-duration "marker" clips (e.g. 2:10–2:10) from the curriculum
+  // editor. These came from older generations where the distributor split a
+  // source video into a real clip plus a collapsed second range; the row is
+  // unplayable and shows up as a duplicate pointing at the same video.
+  // Fixed upstream for new generations — this filter keeps existing programs
+  // looking clean without needing a backfill.
+  const rawClips = session.compositeSession?.clips ?? [];
+  const clips = rawClips.filter((c) => {
+    if (c.startSeconds == null || c.endSeconds == null) return true;
+    return c.endSeconds > c.startSeconds;
+  });
   const overlays = session.compositeSession?.overlays ?? [];
   const hasClips = clips.length > 0;
 

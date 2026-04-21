@@ -552,7 +552,7 @@ export function StepContent({
 
     // Initialize extraction states — first batch of videos start as "extracting",
     // later-batch videos and other files start as "pending" until their turn
-    const CONCURRENCY = 3;
+    const CONCURRENCY = 5;
     const newStates: FileExtractionState[] = files.map((f, _idx) => {
       const videoIdx = videoFiles.indexOf(f);
       const isFirstBatch = videoIdx >= 0 && videoIdx < CONCURRENCY;
@@ -570,7 +570,7 @@ export function StepContent({
 
     // Upload video files with a concurrency limit to avoid saturating browser connections
     if (videoFiles.length > 0) {
-      const CONCURRENCY = 3;
+      const CONCURRENCY = 5;
       const videoResults: PromiseSettledResult<Video | null>[] = [];
       for (let i = 0; i < videoFiles.length; i += CONCURRENCY) {
         const batch = videoFiles.slice(i, i + CONCURRENCY);

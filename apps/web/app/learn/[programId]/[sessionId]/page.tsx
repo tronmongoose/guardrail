@@ -241,7 +241,10 @@ export default async function SessionPage({
         }))}
         actions={session.actions.map((a) => ({
           id: a.id,
-          title: a.title,
+          title:
+            a.type === "WATCH" && a.youtubeVideo?.title
+              ? a.youtubeVideo.title
+              : a.title,
           type: a.type,
           instructions: a.instructions,
           reflectionPrompt: a.reflectionPrompt,

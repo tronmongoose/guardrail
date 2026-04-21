@@ -499,11 +499,39 @@ supported by the transcripts below. Do not infer program details, add steps the
 creator didn't mention, or invent outcomes. If the transcripts don't cover
 something, do not include it.
 
-LESSON ORDER RULE:
-- Follow the source order given in AVAILABLE CONTENT SOURCES (and the VIDEO
-  ASSIGNMENT PLAN when one is provided). The creator's upload order IS the
-  intended lesson sequence. Do not reorder lessons based on title keywords
-  like "intro", "welcome", "overview", or "framework".
+LESSON ORDER RULE — workflow sequencing (non-negotiable):
+Sequence lessons in the order a learner would encounter these skills in
+their actual workflow. Foundational skills and creation steps come before
+refinement and finishing steps. Mixing, mastering, polishing, and any
+"finalize/export/publish" step always come LAST. Tool-specific lessons
+come AFTER the skill those tools support (e.g. a lesson on "using Serum"
+comes after the lesson on sound design; a lesson on "using Pro-Q" comes
+after the lesson on EQ fundamentals).
+
+How to combine this with upload order:
+1. Start with the creator's upload order in AVAILABLE CONTENT SOURCES as
+   your default hypothesis — creators often upload in the right order.
+2. Then validate that order against the workflow principle above. If the
+   upload order already flows create → shape → refine → finish, keep it.
+3. If the upload order violates the workflow principle (e.g. a mixing
+   lesson appears before a beat-making lesson, or a tool lesson appears
+   before the underlying skill), reorder to follow the workflow. The
+   workflow principle always wins over upload order on conflict.
+4. When a VIDEO ASSIGNMENT PLAN is provided, its clip-to-lesson mapping
+   is still mandatory — you are only ordering the lessons, not
+   reassigning clips.
+
+Do NOT reorder based on superficial title keywords like "intro",
+"welcome", "overview", or "framework" — a lesson titled "Intro to mixing"
+is still a mixing lesson and belongs at the end of a production workflow,
+not the beginning.
+
+Worked example (beat production, upload order was wrong):
+  UPLOAD ORDER: Mix → Arrange → Beats → Bass → Sample
+  CORRECTED:    Beats → Sample → Bass → Arrange → Mix
+  (Drums/beats are the foundation; sampling and bass build on them;
+  arrangement shapes the full track; mixing finalizes. This pattern
+  generalizes: creation before shaping before finishing.)
 
 LESSON TOPIC COHERENCE RULE:
 - Each lesson must have a single governing concept. When distributing clips

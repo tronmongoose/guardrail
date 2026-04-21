@@ -225,6 +225,39 @@ describe("distributeClipsToLessons", () => {
     expect(usedVideoIds).toContain("v1");
   });
 
+  it("drops zero-duration Gemini topics instead of emitting phantom clips", () => {
+    // Simulates a Gemini analysis where one topic collapsed to a single
+    // timestamp (e.g. 130s..130s). Previously the learner viewer rendered
+    // this as a duplicate WATCH item pointing at the same source video.
+    const enriched = [
+      makeEnrichedDigest(
+        "v1",
+        "Topic A + Marker + Topic B",
+        [
+          { label: "Intro", startSeconds: 0, endSeconds: 120 },
+          { label: "Marker (zero duration)", startSeconds: 130, endSeconds: 130 },
+          { label: "Body", startSeconds: 200, endSeconds: 400 },
+          { label: "Wrap", startSeconds: 400, endSeconds: 560 },
+        ],
+        560,
+      ),
+    ];
+
+    const plan = distributeClipsToLessons(enriched, [], 3);
+
+    for (const lesson of plan.lessons) {
+      for (const clip of lesson.clips) {
+        expect(clip.endSeconds).toBeGreaterThan(clip.startSeconds);
+        expect(clip.durationSeconds).toBeGreaterThan(0);
+      }
+    }
+
+    const hasMarkerClip = plan.lessons.some((l) =>
+      l.clips.some((c) => c.startSeconds === 130 && c.endSeconds === 130),
+    );
+    expect(hasMarkerClip).toBe(false);
+  });
+
   it("returns empty lessons with warning when no clips available", () => {
     const plan = distributeClipsToLessons([], [], 3);
 

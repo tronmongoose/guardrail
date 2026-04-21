@@ -125,6 +125,11 @@ function collectClips(
     if (shouldSplit) {
       for (const topic of topics) {
         const dur = topic.endSeconds - topic.startSeconds;
+        // Reject zero- and negative-duration topics. Gemini occasionally
+        // returns topics where endSeconds === startSeconds (a stamped "marker"
+        // rather than a range); persisting these creates phantom clips the
+        // learner sees as a duplicate WATCH item.
+        if (dur <= 0) continue;
         if (dur < MIN_CLIP_DURATION_SECONDS) continue;
         clips.push({
           videoId: digest.contentId,
@@ -142,15 +147,17 @@ function collectClips(
 
     // Default path: one full-video clip. Preserve topic labels as subtopics so
     // the LLM and downstream UI can still see the chapter structure.
-    clips.push({
-      videoId: digest.contentId,
-      videoTitle: digest.contentTitle,
-      topicLabel: topics[0]?.label ?? digest.contentTitle,
-      startSeconds: 0,
-      endSeconds: fullDuration,
-      durationSeconds: fullDuration,
-      subtopics: topics.length > 0 ? topics.map((t) => t.label) : undefined,
-    });
+    if (fullDuration > 0) {
+      clips.push({
+        videoId: digest.contentId,
+        videoTitle: digest.contentTitle,
+        topicLabel: topics[0]?.label ?? digest.contentTitle,
+        startSeconds: 0,
+        endSeconds: fullDuration,
+        durationSeconds: fullDuration,
+        subtopics: topics.length > 0 ? topics.map((t) => t.label) : undefined,
+      });
+    }
   }
 
   // Track videoIds already represented so basic digests don't duplicate
@@ -230,10 +237,21 @@ export function distributeClipsToLessons(
         break;
       }
       const mid = source.startSeconds + Math.floor(source.durationSeconds / 2);
+      const firstDur = mid - source.startSeconds;
+      const secondDur = source.endSeconds - mid;
+      // Refuse to emit a zero-duration part. If either half collapses, leave
+      // the source clip alone and stop filling rather than creating a phantom
+      // clip that the learner will see as a blank WATCH item.
+      if (firstDur <= 0 || secondDur <= 0) {
+        warnings.push(
+          `Cannot split "${source.topicLabel}" without producing a zero-duration part; stopping fill`,
+        );
+        break;
+      }
       const firstHalf: TopicClip = {
         ...source,
         endSeconds: mid,
-        durationSeconds: mid - source.startSeconds,
+        durationSeconds: firstDur,
       };
       const secondHalf: TopicClip = {
         ...source,
@@ -241,7 +259,7 @@ export function distributeClipsToLessons(
           ? source.topicLabel
           : `${source.topicLabel} (part 2)`,
         startSeconds: mid,
-        durationSeconds: source.endSeconds - mid,
+        durationSeconds: secondDur,
       };
       clips[0] = firstHalf;
       clips.push(secondHalf);
@@ -361,11 +379,18 @@ export function distributeClipsToLessons(
 
   // Final safety: no identical clip (same videoId + startSeconds + endSeconds)
   // may appear in more than one lesson. Parts of the same video are fine
-  // (different time ranges); exact duplicates are not.
+  // (different time ranges); exact duplicates are not. Also drop any clip
+  // whose range collapsed to zero duration anywhere upstream.
   const seenClipKeys = new Set<string>();
   for (const lesson of lessons) {
     const unique: TopicClip[] = [];
     for (const clip of lesson.clips) {
+      if (clip.endSeconds <= clip.startSeconds || clip.durationSeconds <= 0) {
+        warnings.push(
+          `Dropped zero-duration clip "${clip.videoTitle}" (${clip.startSeconds}s-${clip.endSeconds}s) from lesson ${lesson.lessonIndex + 1}`,
+        );
+        continue;
+      }
       const key = `${clip.videoId}:${clip.startSeconds}:${clip.endSeconds}`;
       if (seenClipKeys.has(key)) {
         warnings.push(
@@ -652,8 +677,14 @@ export function validateAndFixClipDistribution(
 
       const planLesson = plan.lessons[planLessonIdx];
 
-      // Build replacement clips from the plan
-      session.clips = planLesson.clips.map((planClip, idx) => {
+      // Build replacement clips from the plan. Skip any plan clip whose range
+      // collapsed to zero duration — the distributor's final pass should have
+      // already removed these, but this is a belt-and-suspenders guard so the
+      // learner viewer never sees a phantom WATCH item.
+      const usablePlanClips = planLesson.clips.filter(
+        (c) => c.endSeconds > c.startSeconds,
+      );
+      session.clips = usablePlanClips.map((planClip, idx) => {
         // Try to preserve chapterTitle/chapterDescription from existing LLM output
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const existingClip = (session.clips ?? []).find(

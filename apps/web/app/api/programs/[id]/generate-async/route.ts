@@ -721,7 +721,17 @@ async function processGenerationJob(jobId: string, programId: string) {
           });
         }
 
-        if (session.clips && session.clips.length > 0) {
+        // Drop any clip whose bounds collapsed to zero (or negative) duration
+        // before we persist. Gemini occasionally emits a "marker" topic where
+        // startSeconds === endSeconds, and if one slips past the distributor's
+        // guards it would render as a duplicate WATCH item in the learner
+        // viewer pointing at the same source video as the real clip.
+        const usableClips = (session.clips ?? []).filter((clip) => {
+          if (clip.startSeconds == null || clip.endSeconds == null) return true;
+          return clip.endSeconds > clip.startSeconds;
+        });
+
+        if (usableClips.length > 0) {
           compositeCount++;
           const compositeSession = await prisma.compositeSession.create({
             data: {
@@ -732,13 +742,14 @@ async function processGenerationJob(jobId: string, programId: string) {
             },
           });
 
+          // Re-index clips after filtering so orderIndex stays contiguous (0..n-1).
           await prisma.sessionClip.createMany({
-            data: session.clips.map((clip) => ({
+            data: usableClips.map((clip, idx) => ({
               compositeSessionId: compositeSession.id,
               youtubeVideoId: clip.youtubeVideoId,
               startSeconds: clip.startSeconds ?? null,
               endSeconds: clip.endSeconds ?? null,
-              orderIndex: clip.orderIndex,
+              orderIndex: idx,
               transitionType: (clip.transitionType ?? "NONE") as "NONE" | "FADE" | "CROSSFADE" | "SLIDE_LEFT",
               transitionDurationMs: clip.transitionDurationMs ?? 500,
               chapterTitle: clip.chapterTitle ?? null,
