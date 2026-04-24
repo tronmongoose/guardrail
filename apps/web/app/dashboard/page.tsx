@@ -113,15 +113,27 @@ function DashboardContent() {
       fetch("/api/admin/check").then((r) => r.json()).catch(() => ({ isAdmin: false })),
       fetch("/api/metrics/check").then((r) => r.json()).catch(() => ({ hasAccess: false })),
     ])
-      .then(([programsData, userData, metricsData, adminData, metricsAccessData]) => {
+      .then(async ([programsData, userData, metricsData, adminData, metricsAccessData]) => {
         if (adminData?.isAdmin) setIsAdmin(true);
         if (metricsAccessData?.hasAccess) setHasMetricsAccess(true);
         if (
           (!Array.isArray(programsData) || programsData.length === 0) &&
           !(userData as { onboardingComplete?: boolean }).onboardingComplete
         ) {
-          router.push("/new");
-          return;
+          // First-time user — mirror the "+ New Program" button flow so they
+          // land in the current lesson-based wizard instead of the old /new
+          // page. Fall through to the empty-state dashboard if creation fails
+          // so a transient error doesn't strand them on a spinner.
+          try {
+            const res = await fetch("/api/programs/create", { method: "POST" });
+            if (res.ok) {
+              const program = await res.json();
+              router.push(`/programs/${program.id}/edit?wizard=true`);
+              return;
+            }
+          } catch {
+            // fall through
+          }
         }
         setPrograms(Array.isArray(programsData) ? programsData : []);
         if (metricsData) setMetrics(metricsData);
