@@ -144,3 +144,15 @@ export function useCustomSkins() {
 
   return { customSkins, reloadCustomSkins: reload };
 }
+
+/** Delete a custom skin via the DELETE endpoint. Caller should reload afterwards. */
+export async function deleteCustomSkin(id: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/skins/custom?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

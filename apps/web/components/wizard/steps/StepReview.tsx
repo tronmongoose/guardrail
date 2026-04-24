@@ -8,10 +8,9 @@ interface StepReviewProps {
   programId: string;
   skinId: string;
   onSkinChange: (skinId: string) => void;
-  onGenerateSkin: () => Promise<string | null>;
 }
 
-export function StepReview({ state, programId, skinId, onSkinChange, onGenerateSkin }: StepReviewProps) {
+export function StepReview({ state, programId, skinId, onSkinChange }: StepReviewProps) {
   const firstThumbnail = state.content.videos[0]?.thumbnailUrl ?? null;
 
   return (
@@ -45,7 +44,7 @@ export function StepReview({ state, programId, skinId, onSkinChange, onGenerateS
       </div>
 
       {/* Skin picker — hero feature */}
-      <SkinPicker value={skinId} onChange={onSkinChange} thumbnailUrl={firstThumbnail} onGenerateSkin={onGenerateSkin} programTitle={state.basics.title} />
+      <SkinPicker value={skinId} onChange={onSkinChange} thumbnailUrl={firstThumbnail} programId={programId} programTitle={state.basics.title} />
     </div>
   );
 }

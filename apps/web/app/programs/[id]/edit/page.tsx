@@ -417,15 +417,6 @@ export default function ProgramEditPage() {
     }
   }
 
-  async function handleGenerateSkin(): Promise<string | null> {
-    const res = await fetch(`/api/programs/${id}/skin`, { method: "POST" });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data.customSkinId) return null;
-    await load();
-    return `custom:${data.customSkinId}`;
-  }
-
   async function handleSkinChange(rawSkinId: string) {
     const patchFields =
       rawSkinId === "auto-generate"
@@ -1568,7 +1559,22 @@ export default function ProgramEditPage() {
                 value={program.customSkinId ? `custom:${program.customSkinId}` : program.skinId}
                 onChange={handleSkinChange}
                 onHover={setHoveredSkinId}
-                onGenerateSkin={handleGenerateSkin}
+                programId={id}
+                programTitle={program.title}
+                onCustomSkinSaved={(skinId, tokens) => {
+                  // Optimistically swap in the fresh tokens so the editor preview
+                  // updates without waiting for the next load().
+                  const customId = skinId.replace("custom:", "");
+                  setProgram((prev) =>
+                    prev
+                      ? {
+                          ...prev,
+                          customSkinId: customId,
+                          customSkin: { id: customId, tokens },
+                        }
+                      : prev
+                  );
+                }}
                 isOpen={skinSidebarOpen}
                 onToggle={() => setSkinSidebarOpen(!skinSidebarOpen)}
               />

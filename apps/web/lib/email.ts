@@ -1,35 +1,58 @@
+import { render } from "@react-email/render";
+import * as React from "react";
 import { logger } from "./logger";
+import { WelcomeLearner } from "@/emails/WelcomeLearner";
+import { CreatorEnrollment } from "@/emails/CreatorEnrollment";
+import { MagicLinkResend } from "@/emails/MagicLinkResend";
+import {
+  getProgramPreview,
+  getCreatorLifetimeStats,
+  formatCents,
+  absoluteUrl,
+} from "./email-helpers";
+import { resolvePayoutInfo, formatPayoutDate } from "./stripe-payout";
 
 interface SendEmailOptions {
   to: string;
   subject: string;
   text: string;
   html?: string;
+  from?: string;
+  replyTo?: string;
 }
 
 /**
- * Send an email. Currently logs to console for development.
- * Replace with actual email service (Resend, SendGrid, etc.) for production.
+ * Send an email via Resend, or log to console in dev when no key is set.
  */
-export async function sendEmail({ to, subject, text, html }: SendEmailOptions): Promise<boolean> {
-  // Check if we have an email service configured
+export async function sendEmail({
+  to,
+  subject,
+  text,
+  html,
+  from,
+  replyTo,
+}: SendEmailOptions): Promise<boolean> {
   const resendApiKey = process.env.RESEND_API_KEY;
+  const defaultFrom = process.env.EMAIL_FROM || "JourneyLine <noreply@journeyline.ai>";
 
   if (resendApiKey) {
     try {
+      const payload: Record<string, unknown> = {
+        from: from || defaultFrom,
+        to,
+        subject,
+        text,
+        html: html || text,
+      };
+      if (replyTo) payload.reply_to = replyTo;
+
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${resendApiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          from: process.env.EMAIL_FROM || "Journeyline <noreply@journeyline.ai>",
-          to,
-          subject,
-          text,
-          html: html || text,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -46,14 +69,12 @@ export async function sendEmail({ to, subject, text, html }: SendEmailOptions): 
     }
   }
 
-  // No RESEND_API_KEY — log email contents instead of sending.
-  // In production this means emails are silently dropped; warn loudly.
   if (process.env.NODE_ENV === "production") {
     logger.warn({
       operation: "email.skipped_no_key",
       to,
       subject,
-      message: "RESEND_API_KEY is not set — email was NOT sent. Add it to your Vercel environment variables.",
+      message: "RESEND_API_KEY is not set — email was NOT sent.",
     });
     return false;
   }
@@ -62,79 +83,219 @@ export async function sendEmail({ to, subject, text, html }: SendEmailOptions): 
     operation: "email.dev_preview",
     to,
     subject,
+    from: from || defaultFrom,
+    replyTo,
     body: text,
   });
   return true;
 }
 
-/**
- * Send magic link email to learner.
- */
-export async function sendMagicLinkEmail(
-  email: string,
-  magicLinkUrl: string,
-  programTitle?: string
-): Promise<boolean> {
-  const subject = programTitle
-    ? `Access your program: ${programTitle}`
-    : "Your Journeyline access link";
+// ---------------------------------------------------------------------------
+// Branded learner welcome (post-purchase)
+// ---------------------------------------------------------------------------
 
-  const text = `
-Hi there!
-
-${programTitle ? `You've enrolled in "${programTitle}".` : "Welcome to Journeyline!"}
-
-Click the link below to access your learning experience:
-
-${magicLinkUrl}
-
-This link is valid for 24 hours and can only be used once.
-
-Happy learning!
-The Journeyline Team
-`.trim();
-
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #333; }
-    .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-    .button { display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 8px; font-weight: 500; }
-    .footer { margin-top: 40px; font-size: 14px; color: #666; }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <h2>Hi there!</h2>
-    <p>${programTitle ? `You've enrolled in <strong>${programTitle}</strong>.` : "Welcome to Journeyline!"}</p>
-    <p>Click the button below to access your learning experience:</p>
-    <p style="margin: 30px 0;">
-      <a href="${magicLinkUrl}" class="button">Access Your Program</a>
-    </p>
-    <p style="font-size: 14px; color: #666;">
-      Or copy this link: <a href="${magicLinkUrl}">${magicLinkUrl}</a>
-    </p>
-    <p class="footer">
-      This link is valid for 24 hours and can only be used once.<br>
-      Happy learning!<br>
-      The Journeyline Team
-    </p>
-  </div>
-</body>
-</html>
-`.trim();
-
-  return sendEmail({ to: email, subject, text, html });
+interface SendLearnerWelcomeArgs {
+  learnerEmail: string;
+  programId: string;
+  magicLinkUrl: string;
+  creator: { name: string | null; email: string };
 }
 
 /**
- * Send "your program is ready" notification to the creator when generation completes.
+ * Branded post-purchase email. Looks like it's from the creator (From: "Coach
+ * Name via JourneyLine"; Reply-To: creator email). Embeds the magic link as
+ * the primary CTA so this single email handles both "welcome" and "log in".
  */
-/**
- * Notify admin when a new creator signs up.
- */
+export async function sendLearnerWelcomeEmail({
+  learnerEmail,
+  programId,
+  magicLinkUrl,
+  creator,
+}: SendLearnerWelcomeArgs): Promise<boolean> {
+  const preview = await getProgramPreview(programId);
+  if (!preview) {
+    logger.warn({ operation: "email.welcome.program_missing", programId });
+    return false;
+  }
+
+  const creatorName = creator.name?.trim() || "Your coach";
+  const fallbackUrl = absoluteUrl(`/learn/${programId}`);
+
+  const html = await render(
+    React.createElement(WelcomeLearner, {
+      creatorName,
+      creatorAvatarUrl: preview.creatorAvatarUrl,
+      programTitle: preview.title,
+      targetTransformation: preview.targetTransformation,
+      lessonCount: preview.lessonCount,
+      totalMinutes: preview.totalMinutes,
+      firstLessonTitles: preview.firstLessonTitles,
+      heroImageUrl: preview.heroImageUrl,
+      magicLinkUrl,
+      fallbackUrl,
+      brand: preview.brand,
+      appUrl: absoluteUrl("/"),
+    }),
+  );
+
+  const text = [
+    `${creatorName} just sent you ${preview.title}.`,
+    preview.targetTransformation || "",
+    "",
+    `Open your program: ${magicLinkUrl}`,
+    "",
+    "This link works for 24 hours. After that, request a fresh one anytime at:",
+    fallbackUrl,
+    "",
+    `Reply to this email to chat with ${creatorName} directly.`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const fromDomain = (process.env.EMAIL_FROM_ADDRESS || "noreply@journeyline.ai").trim();
+  const safeName = creatorName.replace(/[\r\n"]/g, "").slice(0, 60);
+  const from = `${safeName} via JourneyLine <${fromDomain}>`;
+
+  return sendEmail({
+    to: learnerEmail,
+    subject: `Welcome to ${preview.title}`,
+    text,
+    html,
+    from,
+    replyTo: creator.email,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Creator enrollment notification ("you just got paid" / "new student")
+// ---------------------------------------------------------------------------
+
+interface SendCreatorEnrollmentArgs {
+  creator: { id: string; email: string; name: string | null };
+  programTitle: string;
+  learnerEmail: string;
+  /** When set, fetches payout timing + amount from Stripe. */
+  stripeSessionId?: string | null;
+  /** Fallback amount in cents when Stripe lookup is unavailable (e.g. free). */
+  fallbackAmountCents?: number;
+  fallbackCurrency?: string;
+}
+
+export async function sendCreatorEnrollmentEmail({
+  creator,
+  programTitle,
+  learnerEmail,
+  stripeSessionId,
+  fallbackAmountCents,
+  fallbackCurrency = "usd",
+}: SendCreatorEnrollmentArgs): Promise<boolean> {
+  const stats = await getCreatorLifetimeStats(creator.id);
+
+  let variant: "paid" | "free" = "free";
+  let amountFormatted: string | undefined;
+  let payoutAvailableOn: string | null = null;
+
+  if (stripeSessionId) {
+    const payout = await resolvePayoutInfo(stripeSessionId);
+    const amountCents = payout.netAmountCents ?? payout.grossAmountCents ?? fallbackAmountCents ?? 0;
+    if (amountCents > 0) {
+      variant = "paid";
+      amountFormatted = formatCents(amountCents, payout.currency || fallbackCurrency);
+      payoutAvailableOn = payout.availableOn ? formatPayoutDate(payout.availableOn) : null;
+    }
+  } else if (fallbackAmountCents && fallbackAmountCents > 0) {
+    variant = "paid";
+    amountFormatted = formatCents(fallbackAmountCents, fallbackCurrency);
+  }
+
+  const dashboardUrl = absoluteUrl("/dashboard");
+  const lifetimeGrossFormatted = formatCents(stats.grossEarnedCents, fallbackCurrency);
+
+  const html = await render(
+    React.createElement(CreatorEnrollment, {
+      variant,
+      creatorName: creator.name || "",
+      programTitle,
+      learnerEmail,
+      amountFormatted,
+      payoutAvailableOn,
+      lifetimeEnrollmentCount: stats.enrollmentCount,
+      lifetimeGrossFormatted,
+      dashboardUrl,
+      appUrl: absoluteUrl("/"),
+    }),
+  );
+
+  const headline = variant === "paid" ? "You just got paid" : "You got a new student";
+  const subject =
+    variant === "paid"
+      ? `${headline} — ${programTitle}`
+      : `${headline} — ${programTitle}`;
+
+  const text = [
+    `${headline}.`,
+    "",
+    variant === "paid" && amountFormatted ? `${amountFormatted}` : "",
+    `${learnerEmail} ${variant === "paid" ? "signed up for" : "just enrolled in"} ${programTitle}.`,
+    "",
+    variant === "paid"
+      ? payoutAvailableOn
+        ? `Payout: funds arrive around ${payoutAvailableOn} on your normal Stripe schedule.`
+        : "Payout: funds typically arrive in 2–7 days on your normal Stripe schedule."
+      : "",
+    "",
+    `Lifetime: ${stats.enrollmentCount} enrollments · ${lifetimeGrossFormatted} earned`,
+    "",
+    `Dashboard: ${dashboardUrl}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return sendEmail({
+    to: creator.email,
+    subject,
+    text,
+    html,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Magic link resend (used by /api/auth/resend-magic-link)
+// ---------------------------------------------------------------------------
+
+export async function sendMagicLinkEmail(
+  email: string,
+  magicLinkUrl: string,
+  programTitle?: string,
+): Promise<boolean> {
+  const html = await render(
+    React.createElement(MagicLinkResend, {
+      programTitle,
+      magicLinkUrl,
+      appUrl: absoluteUrl("/"),
+    }),
+  );
+
+  const text = [
+    programTitle ? `Open ${programTitle}.` : "Your JourneyLine access link.",
+    "",
+    `Sign in: ${magicLinkUrl}`,
+    "",
+    "This link works for 24 hours and can only be used once.",
+  ].join("\n");
+
+  return sendEmail({
+    to: email,
+    subject: programTitle ? `Open ${programTitle}` : "Your JourneyLine access link",
+    text,
+    html,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Admin notifications (unchanged plain-text; internal use only)
+// ---------------------------------------------------------------------------
+
 export async function notifyAdminNewCreator(user: {
   email: string;
   name?: string | null;
@@ -151,9 +312,6 @@ export async function notifyAdminNewCreator(user: {
   });
 }
 
-/**
- * Notify admin when a creator publishes a program.
- */
 export async function notifyAdminProgramPublished(
   program: { id: string; title: string; slug: string; priceInCents: number; currency: string },
   creator: { email: string; name?: string | null },
@@ -174,9 +332,6 @@ export async function notifyAdminProgramPublished(
   });
 }
 
-/**
- * Notify admin when a learner enrolls in a program.
- */
 export async function notifyAdminEnrollment(
   learner: { email: string; name?: string | null },
   program: { title: string; id: string },
@@ -192,17 +347,13 @@ export async function notifyAdminEnrollment(
   });
 }
 
-/**
- * Send "your program is ready" notification to the creator when generation completes.
- */
 export async function sendProgramReadyEmail(
   to: string,
   firstName: string,
   programTitle: string,
   programId: string,
 ): Promise<boolean> {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.journeyline.ai";
-  const editUrl = `${appUrl}/programs/${programId}/edit`;
+  const editUrl = absoluteUrl(`/programs/${programId}/edit`);
 
   const text = `
 Hi ${firstName}!

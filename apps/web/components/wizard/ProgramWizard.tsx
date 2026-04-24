@@ -373,15 +373,6 @@ export function ProgramWizard({
             programId={programId}
             skinId={state.theme.skinId}
             onSkinChange={(skinId) => updateState("theme", { skinId })}
-            onGenerateSkin={async () => {
-              const res = await fetch(`/api/programs/${programId}/skin`, { method: "POST" });
-              if (!res.ok) return null;
-              const data = await res.json();
-              if (!data.customSkinId) return null;
-              const newId = `custom:${data.customSkinId}`;
-              updateState("theme", { skinId: newId });
-              return newId;
-            }}
           />
         );
       case 4: {

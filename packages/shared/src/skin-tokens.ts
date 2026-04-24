@@ -333,6 +333,15 @@ export interface ComponentTokens {
  * Complete design token bundle for a skin.
  * This is the shape that Figma MCP + Claude must produce per skin.
  */
+/** Opt-in side-channel data carried alongside the design tokens.
+ *  Not part of the strict design-token contract — lives in the same JSON blob
+ *  to avoid a schema migration. Absent on every preset catalog skin. */
+export interface SkinTokensMeta {
+  /** Emojis the creator selected in Skin Studio. When present, they replace
+   *  the default floating-decoration emojis by cycling through the list. */
+  emojis?: string[];
+}
+
 export interface SkinTokens {
   /** Must match a SkinId value */
   id: SkinId;
@@ -347,6 +356,9 @@ export interface SkinTokens {
   shadow: ShadowTokens;
   motion: MotionTokens;
   component: ComponentTokens;
+
+  /** Optional custom-skin metadata. Preset catalog skins omit this. */
+  meta?: SkinTokensMeta;
 }
 
 // ---------------------------------------------------------------------------
@@ -488,4 +500,8 @@ export const SkinTokensSchema = z.object({
       controlsTint: z.string(),
     }),
   }),
+
+  meta: z.object({
+    emojis: z.array(z.string()).optional(),
+  }).optional(),
 });

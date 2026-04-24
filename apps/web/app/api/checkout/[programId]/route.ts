@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { createMagicLink, getMagicLinkUrl } from "@/lib/magic-link";
 import { logger } from "@/lib/logger";
-import { notifyAdminEnrollment } from "@/lib/email";
+import {
+  notifyAdminEnrollment,
+  sendLearnerWelcomeEmail,
+  sendCreatorEnrollmentEmail,
+} from "@/lib/email";
 import Stripe from "stripe";
 
 interface CheckoutRequestBody {
@@ -37,6 +41,8 @@ export async function POST(
       creator: {
         select: {
           id: true,
+          email: true,
+          name: true,
           stripeAccountId: true,
           stripeOnboardingComplete: true,
         },
@@ -140,6 +146,14 @@ export async function POST(
       "promo",
     ).catch(() => {});
 
+    // Branded welcome email + creator notification (fire-and-forget)
+    sendBrandedEnrollmentEmails({
+      learnerEmail: user.email,
+      programId,
+      creator: program.creator,
+      programTitle: program.title,
+    }).catch(() => {});
+
     if (clerkUser) {
       return NextResponse.json({ enrolled: true, redirectUrl: `/learn/${programId}` });
     }
@@ -166,6 +180,14 @@ export async function POST(
       { title: program.title, id: programId },
       "free",
     ).catch(() => {});
+
+    // Branded welcome email + "you got a new student" notification
+    sendBrandedEnrollmentEmails({
+      learnerEmail: user.email,
+      programId,
+      creator: program.creator,
+      programTitle: program.title,
+    }).catch(() => {});
 
     // Clerk users go straight to learn page, others get magic link
     if (clerkUser) {
@@ -248,4 +270,40 @@ export async function POST(
   });
 
   return NextResponse.json({ checkoutUrl: session.url });
+}
+
+/**
+ * Send the branded learner welcome + creator "new student" emails for free or
+ * promo enrollments. Generates a fresh magic link for the welcome email so the
+ * learner can re-enter from their inbox even after the immediate redirect.
+ *
+ * Stripe-paid enrollments handle this in the webhook so payout timing can be
+ * resolved from the charge.
+ */
+async function sendBrandedEnrollmentEmails(args: {
+  learnerEmail: string;
+  programId: string;
+  programTitle: string;
+  creator: { id: string; email: string; name: string | null };
+}): Promise<void> {
+  const { token } = await createMagicLink({
+    email: args.learnerEmail,
+    programId: args.programId,
+  });
+  const magicLinkUrl = getMagicLinkUrl(token, args.programId, true);
+
+  await Promise.allSettled([
+    sendLearnerWelcomeEmail({
+      learnerEmail: args.learnerEmail,
+      programId: args.programId,
+      magicLinkUrl,
+      creator: { name: args.creator.name, email: args.creator.email },
+    }),
+    sendCreatorEnrollmentEmail({
+      creator: args.creator,
+      programTitle: args.programTitle,
+      learnerEmail: args.learnerEmail,
+      // No Stripe session for free/promo — variant becomes "free"
+    }),
+  ]);
 }

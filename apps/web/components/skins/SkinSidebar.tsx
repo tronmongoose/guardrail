@@ -1,16 +1,20 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { SKIN_CATEGORIES, getSkinCatalogEntry, SKIN_CATALOG } from "@/lib/skin-bundles/catalog";
-import { getSkinTokens } from "@/lib/skin-bundles/registry";
-import { SkinIcon, CategoryIcon, useCustomSkins } from "./skin-picker-shared";
 import type { SkinTokens } from "@guide-rail/shared";
+import { SKIN_CATEGORIES, getSkinCatalogEntry, SKIN_CATALOG } from "@/lib/skin-bundles/catalog";
+import { SkinIcon, CategoryIcon, useCustomSkins, deleteCustomSkin } from "./skin-picker-shared";
+import { SkinStudioModal } from "./SkinStudioModal";
 
 interface SkinSidebarProps {
   value: string;
   onChange: (skinId: string) => void;
   onHover?: (skinId: string | null) => void;
-  onGenerateSkin?: () => Promise<string | null>;
+  /** Program id — required for the Skin Studio modal. */
+  programId: string;
+  programTitle?: string;
+  /** Called after a custom skin is created or refined via the studio. */
+  onCustomSkinSaved?: (skinId: string, tokens: SkinTokens) => void | Promise<void>;
   isOpen: boolean;
   onToggle: () => void;
 }
@@ -19,13 +23,39 @@ export function SkinSidebar({
   value,
   onChange,
   onHover,
-  onGenerateSkin,
+  programId,
+  programTitle,
+  onCustomSkinSaved,
   isOpen,
   onToggle,
 }: SkinSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const { customSkins, reloadCustomSkins } = useCustomSkins();
-  const [generating, setGenerating] = useState(false);
+
+  const [studioOpen, setStudioOpen] = useState(false);
+  const [studioInitialSkinId, setStudioInitialSkinId] = useState<string | null>(null);
+  const studioInitialSkin = studioInitialSkinId
+    ? customSkins.find((s) => s.id === studioInitialSkinId) ?? null
+    : null;
+
+  function openStudio(skinId: string | null) {
+    setStudioInitialSkinId(skinId);
+    setStudioOpen(true);
+  }
+
+  async function handleSkinSaved(newSkinId: string, tokens: SkinTokens) {
+    await reloadCustomSkins();
+    onChange(newSkinId);
+    if (onCustomSkinSaved) await onCustomSkinSaved(newSkinId, tokens);
+  }
+
+  async function handleDeleteCustom(customId: string, name: string) {
+    if (!confirm(`Delete "${name}"? This can't be undone.`)) return;
+    const ok = await deleteCustomSkin(customId);
+    if (!ok) return;
+    await reloadCustomSkins();
+    if (value === `custom:${customId}`) onChange("classic-minimal");
+  }
 
   const [openCategories, setOpenCategories] = useState<Set<string>>(() => {
     if (value === "auto-generate" || value.startsWith("custom:")) return new Set(["my-brand"]);
@@ -78,62 +108,77 @@ export function SkinSidebar({
     });
   }
 
-  async function handleGenerateSkin() {
-    if (!onGenerateSkin) return;
-    setGenerating(true);
-    try {
-      const newSkinId = await onGenerateSkin();
-      await reloadCustomSkins();
-      if (newSkinId) onChange(newSkinId);
-    } finally {
-      setGenerating(false);
-    }
-  }
-
   // ── Skin row (dark theme) ──────────────────────────────────────────────────
   function SkinRow({ skinId, name }: { skinId: string; name: string }) {
     const isSelected = value === skinId;
     const isCustom = skinId.startsWith("custom:");
-    const customTokens = isCustom
-      ? customSkins.find((s) => s.id === skinId.replace("custom:", ""))?.tokens
+    const customId = isCustom ? skinId.replace("custom:", "") : null;
+    const customTokens = customId
+      ? customSkins.find((s) => s.id === customId)?.tokens
       : undefined;
 
     return (
-      <button
-        onClick={() => onChange(skinId)}
+      <div
         onMouseEnter={() => onHover?.(skinId)}
-        className={`w-full flex items-center gap-2.5 px-3 py-1.5 transition-colors text-left rounded-md ${
-          isSelected
-            ? "bg-gray-800"
-            : "hover:bg-gray-800/60"
+        className={`w-full flex items-center gap-2.5 px-3 py-1.5 transition-colors text-left rounded-md group ${
+          isSelected ? "bg-gray-800" : "hover:bg-gray-800/60"
         }`}
       >
-        {isCustom && customTokens ? (
-          <div
-            className="flex-shrink-0 w-7 h-7 rounded-md flex items-center justify-center overflow-hidden"
-            style={{
-              backgroundColor: customTokens.color.background.default,
-              border: `1.5px solid ${customTokens.color.accent.primary}55`,
-            }}
-          >
-            <div className="w-3.5 h-3.5 rounded-sm" style={{ backgroundColor: customTokens.color.accent.primary }} />
-          </div>
-        ) : (
-          <SkinIcon skinId={skinId} />
-        )}
-        <span
-          className={`flex-1 text-xs font-medium truncate ${
-            isSelected ? "text-white" : "text-gray-300"
-          }`}
+        <button
+          onClick={() => onChange(skinId)}
+          className="flex-1 flex items-center gap-2.5 text-left min-w-0"
         >
-          {name}
-        </span>
-        {isSelected && (
+          {isCustom && customTokens ? (
+            <div
+              className="flex-shrink-0 w-7 h-7 rounded-md flex items-center justify-center overflow-hidden"
+              style={{
+                backgroundColor: customTokens.color.background.default,
+                border: `1.5px solid ${customTokens.color.accent.primary}55`,
+              }}
+            >
+              <div className="w-3.5 h-3.5 rounded-sm" style={{ backgroundColor: customTokens.color.accent.primary }} />
+            </div>
+          ) : (
+            <SkinIcon skinId={skinId} />
+          )}
+          <span
+            className={`flex-1 text-xs font-medium truncate ${
+              isSelected ? "text-white" : "text-gray-300"
+            }`}
+          >
+            {name}
+          </span>
+        </button>
+        {customId && (
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); openStudio(customId); }}
+              className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-teal-400 p-0.5"
+              aria-label="Edit skin"
+              title="Edit in Skin Studio"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828 9 16l.172-2.828z" />
+              </svg>
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDeleteCustom(customId, name); }}
+              className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-red-400 p-0.5"
+              aria-label="Delete skin"
+              title="Delete skin"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M8 7V4a1 1 0 011-1h6a1 1 0 011 1v3" />
+              </svg>
+            </button>
+          </>
+        )}
+        {isSelected && !customId && (
           <svg className="flex-shrink-0 w-3.5 h-3.5 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
           </svg>
         )}
-      </button>
+      </div>
     );
   }
 
@@ -240,33 +285,21 @@ export function SkinSidebar({
 
                 {openCategories.has("my-brand") && (
                   <div className="pb-1 px-1">
-                    {/* Build My Own */}
+                    {/* Build My Own — opens Skin Studio */}
                     <button
-                      onClick={handleGenerateSkin}
-                      disabled={generating}
+                      onClick={() => openStudio(null)}
                       onMouseEnter={() => onHover?.("auto-generate")}
-                      className={`w-full flex items-center gap-2.5 px-3 py-1.5 transition-colors text-left rounded-md ${
-                        value === "auto-generate" ? "bg-gray-800" : "hover:bg-gray-800/60"
-                      }`}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 transition-colors text-left rounded-md hover:bg-gray-800/60"
                     >
                       <div
                         className="flex-shrink-0 w-7 h-7 rounded-md flex items-center justify-center"
                         style={{ background: "linear-gradient(135deg, #818cf8, #c084fc)", border: "1.5px solid #a78bfa55" }}
                       >
-                        {generating ? (
-                          <svg className="animate-spin" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}>
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" />
-                            <path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                          </svg>
-                        ) : (
-                          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 2l1.5 4.5H18l-3.75 2.7 1.5 4.5L12 11.2l-3.75 2.5 1.5-4.5L6 6.5h4.5z" />
-                          </svg>
-                        )}
+                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 2l1.5 4.5H18l-3.75 2.7 1.5 4.5L12 11.2l-3.75 2.5 1.5-4.5L6 6.5h4.5z" />
+                        </svg>
                       </div>
-                      <span className={`flex-1 text-xs font-medium truncate ${generating ? "text-purple-300" : "text-gray-300"}`}>
-                        {generating ? "Generating..." : "Build My Own"}
-                      </span>
+                      <span className="flex-1 text-xs font-medium truncate text-gray-300">Build My Own…</span>
                     </button>
 
                     {/* Existing custom skins */}
@@ -346,26 +379,18 @@ export function SkinSidebar({
               </div>
               <div className="grid grid-cols-2 gap-1 px-1">
                 <button
-                  onClick={handleGenerateSkin}
-                  disabled={generating}
+                  onClick={() => openStudio(null)}
                   className="flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover:bg-gray-800/60 transition"
                 >
                   <div
                     className="flex-shrink-0 w-7 h-7 rounded-md flex items-center justify-center"
                     style={{ background: "linear-gradient(135deg, #818cf8, #c084fc)" }}
                   >
-                    {generating ? (
-                      <svg className="animate-spin" width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}>
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" />
-                        <path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                    ) : (
-                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M12 2l1.5 4.5H18l-3.75 2.7 1.5 4.5L12 11.2l-3.75 2.5 1.5-4.5L6 6.5h4.5z" />
-                      </svg>
-                    )}
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 2l1.5 4.5H18l-3.75 2.7 1.5 4.5L12 11.2l-3.75 2.5 1.5-4.5L6 6.5h4.5z" />
+                    </svg>
                   </div>
-                  <span className="text-xs text-gray-400">{generating ? "Generating..." : "Build My Own"}</span>
+                  <span className="text-xs text-gray-400">Build My Own…</span>
                 </button>
                 {customSkins.map((skin) => {
                   const isSelected = value === `custom:${skin.id}`;
@@ -397,6 +422,15 @@ export function SkinSidebar({
           </div>
         </div>
       )}
+
+      <SkinStudioModal
+        open={studioOpen}
+        onClose={() => setStudioOpen(false)}
+        programId={programId}
+        programTitle={programTitle}
+        initialSkin={studioInitialSkin}
+        onSkinSaved={handleSkinSaved}
+      />
     </>
   );
 }

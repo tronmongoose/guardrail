@@ -3,7 +3,7 @@ import { validateMagicLink } from "@/lib/magic-link";
 import { logger } from "@/lib/logger";
 
 const LEARNER_SESSION_COOKIE = "guiderail_learner_session";
-const SESSION_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+const SESSION_MAX_AGE = 60 * 60 * 24 * 90; // 90 days — keep returning learners signed in
 
 /**
  * GET /auth/magic?token=xxx

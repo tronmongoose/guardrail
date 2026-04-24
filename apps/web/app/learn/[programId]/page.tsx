@@ -5,12 +5,33 @@ import { LearnerTimeline } from "./timeline";
 import { resolveTokens } from "@/lib/resolve-tokens";
 import { getTokenCSSVars } from "@/lib/skin-bridge";
 import { SkinThemeProvider } from "@/components/skins/SkinThemeProvider";
+import { RequestAccessLink } from "@/components/learn/RequestAccessLink";
 
 export default async function LearnPage({ params }: { params: Promise<{ programId: string }> }) {
   const { programId } = await params;
 
   const user = await getCurrentUser();
-  if (!user) redirect("/");
+
+  // No session → render the "send me a sign-in link" fallback inline instead of
+  // redirecting away. Lets returning learners re-enter from any /learn URL.
+  if (!user) {
+    const program = await prisma.program.findUnique({
+      where: { id: programId },
+      select: {
+        title: true,
+        published: true,
+        creator: { select: { name: true } },
+      },
+    });
+    if (!program || !program.published) notFound();
+    return (
+      <RequestAccessLink
+        programId={programId}
+        programTitle={program.title}
+        creatorName={program.creator.name}
+      />
+    );
+  }
 
   const program = await prisma.program.findUnique({
     where: { id: programId },

@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { createMagicLink, getMagicLinkUrl } from "@/lib/magic-link";
-import { sendMagicLinkEmail, notifyAdminEnrollment } from "@/lib/email";
+import {
+  sendLearnerWelcomeEmail,
+  sendCreatorEnrollmentEmail,
+  notifyAdminEnrollment,
+} from "@/lib/email";
 import { logger } from "@/lib/logger";
 import Stripe from "stripe";
 
@@ -99,9 +103,14 @@ export async function POST(req: NextRequest) {
         sessionId: session.id,
       });
 
-      // Fetch user and program for magic link
+      // Fetch user, program, and creator for branded emails
       const user = await prisma.user.findUnique({ where: { id: userId } });
-      const program = await prisma.program.findUnique({ where: { id: programId } });
+      const program = await prisma.program.findUnique({
+        where: { id: programId },
+        include: {
+          creator: { select: { id: true, email: true, name: true } },
+        },
+      });
 
       if (user && program) {
         notifyAdminEnrollment(
@@ -110,17 +119,38 @@ export async function POST(req: NextRequest) {
           "paid",
         ).catch(() => {});
 
-        // Generate and send magic link
+        // Generate magic link, embed in branded welcome email
         const { token } = await createMagicLink({
           email: user.email,
           programId,
         });
         const magicLinkUrl = getMagicLinkUrl(token, programId, true);
 
-        await sendMagicLinkEmail(user.email, magicLinkUrl, program.title);
+        await sendLearnerWelcomeEmail({
+          learnerEmail: user.email,
+          programId,
+          magicLinkUrl,
+          creator: { name: program.creator.name, email: program.creator.email },
+        });
+
+        // "You just got paid" — fire-and-forget, payout lookup walks Stripe
+        sendCreatorEnrollmentEmail({
+          creator: program.creator,
+          programTitle: program.title,
+          learnerEmail: user.email,
+          stripeSessionId: session.id,
+          fallbackAmountCents: session.amount_total ?? program.priceInCents,
+          fallbackCurrency: session.currency || program.currency,
+        }).catch((err) => {
+          logger.warn({
+            operation: "stripe.webhook.creator_email_failed",
+            programId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
 
         logger.info({
-          operation: "stripe.webhook.magic_link_sent",
+          operation: "stripe.webhook.welcome_emails_sent",
           userId,
           programId,
         });

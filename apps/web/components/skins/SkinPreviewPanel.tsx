@@ -108,6 +108,9 @@ interface SkinPreviewPanelProps {
   tokens?: SkinTokens;
   /** Program title to display in preview — falls back to a placeholder if empty. */
   programTitle?: string;
+  /** Override the floating-decoration emojis. When more than one is passed,
+   *  elements cycle through the array by index. Used by Skin Studio. */
+  customEmojis?: readonly string[] | null;
 }
 
 // ── Section header (sticky) ───────────────────────────────────────────────────
@@ -1386,12 +1389,26 @@ function DesignTokensSection({ tokens }: { tokens: SkinTokens }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, tokens: tokenOverride, programTitle }: SkinPreviewPanelProps) {
+export function SkinPreviewPanel({ skinId, viewMode = "mobile", thumbnailUrl, tokens: tokenOverride, programTitle, customEmojis }: SkinPreviewPanelProps) {
   const displayTitle = stripWrappingQuotes(programTitle ?? "").trim() || "8-Week Strength Foundation";
   const tokens = useMemo(() => tokenOverride ?? getSkinTokens(skinId), [skinId, tokenOverride]);
   const cssVars = useMemo(() => getTokenCSSVars(tokens), [tokens]);
   const entry = getSkinCatalogEntry(skinId);
-  const decorations = useMemo(() => getSkinDecorations(skinId, tokens), [skinId, tokens]);
+  const decorations = useMemo(() => {
+    const base = getSkinDecorations(skinId, tokens);
+    if (!customEmojis || customEmojis.length === 0) return base;
+    // Cycle through the selected emojis — one glyph per floating slot.
+    let i = 0;
+    return {
+      ...base,
+      floatingElements: base.floatingElements.map((el) => {
+        if (el.shape !== "emoji") return el;
+        const emoji = customEmojis[i % customEmojis.length];
+        i += 1;
+        return { ...el, emoji };
+      }),
+    };
+  }, [skinId, tokens, customEmojis]);
 
   return (
     <div

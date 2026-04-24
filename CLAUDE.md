@@ -87,7 +87,10 @@ MUX_TOKEN_SECRET=...                 # Mux API access token secret
 MUX_WEBHOOK_SECRET=...               # Mux webhook signing secret
 
 # Email
-RESEND_API_KEY=...                   # Optional — logs to console if absent
+RESEND_API_KEY=...                   # Required in prod — branded learner welcome + creator payout emails are silently dropped without it
+EMAIL_FROM=...                       # Optional — full From string, defaults to "JourneyLine <noreply@journeyline.ai>"
+EMAIL_FROM_ADDRESS=...               # Optional — bare address for branded "{creator} via JourneyLine <addr>" From line, defaults to noreply@journeyline.ai
+ADMIN_NOTIFICATION_EMAIL=...         # Optional — receives admin enrollment + signup notifications
 ```
 
 ---
@@ -122,8 +125,10 @@ JourneyLine's revenue model is a **flat $99 one-time fee per published program**
 - **Free programs** (`priceInCents = 0`) bypass Stripe entirely — immediate access granted
 
 **Creator → JourneyLine (platform fee)**
-- **Amount:** $99 one-time fee per program the creator publishes
-- **Status:** Stripe API key is configured but the $99 checkout flow is not yet wired up — there is no dedicated "platform fee paid" field on `Program` yet. Admin metrics currently use `Program.published = true` as a proxy for fees owed.
+- **Amount:** $99 one-time fee per creator account before publishing paid programs
+- **Checkout:** [apps/web/app/api/checkout/platform/route.ts](apps/web/app/api/checkout/platform/route.ts) creates the Stripe Checkout Session
+- **Webhook:** Same Stripe webhook (`type: "platform_access"` metadata) flips `User.platformPaymentComplete = true`
+- **Publish gate:** `apps/web/app/api/programs/[id]/publish/route.ts` blocks publishing unless `User.platformPromoGranted || User.platformPaymentComplete`
 
 Edge case: if a creator somehow lacks a Stripe Connect account at checkout time, funds go 100% to the platform (logged as a warning, not blocked).
 

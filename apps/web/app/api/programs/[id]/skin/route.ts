@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { SkinTokens } from "@guide-rail/shared";
 import { getOrCreateUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { generateSkinFromVibe } from "@/lib/generate-skin";
 
-/** POST /api/programs/[id]/skin — generate + save a custom skin for this program. */
+/** POST /api/programs/[id]/skin — generate or refine a custom skin for this program.
+ *
+ *  Body (optional): { refinementPrompt?: string }
+ *  - Absent: seed mode. Creates a new CustomSkin row (existing behavior).
+ *  - Present: refine mode. Regenerates against the program's current customSkin
+ *    tokens and updates that row in place. If no customSkin exists yet, falls
+ *    back to seed behavior.
+ */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: programId } = await params;
@@ -15,21 +23,55 @@ export async function POST(
 
   const program = await prisma.program.findUnique({
     where: { id: programId },
-    select: { id: true, creatorId: true, title: true, targetTransformation: true, vibePrompt: true },
+    select: {
+      id: true,
+      creatorId: true,
+      title: true,
+      targetTransformation: true,
+      vibePrompt: true,
+      customSkinId: true,
+    },
   });
   if (!program || program.creatorId !== user.id) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  // Body is optional — tolerate empty POSTs from the existing editor button.
+  let refinementPrompt: string | null = null;
+  try {
+    const body = await req.json().catch(() => null);
+    if (body && typeof body.refinementPrompt === "string" && body.refinementPrompt.trim()) {
+      refinementPrompt = body.refinementPrompt.trim();
+    }
+  } catch {
+    // no body, fine
+  }
+
+  const existing = program.customSkinId
+    ? await prisma.customSkin.findUnique({ where: { id: program.customSkinId } })
+    : null;
+
+  const isRefine = !!(refinementPrompt && existing);
+
   const tokens = await generateSkinFromVibe({
     title: program.title,
     targetTransformation: program.targetTransformation,
     vibePrompt: program.vibePrompt,
+    currentTokens: isRefine ? (existing!.tokens as unknown as SkinTokens) : undefined,
+    refinementPrompt: isRefine ? refinementPrompt : undefined,
   });
 
   if (!tokens) {
     // LLM_PROVIDER=stub or parse failure
     return NextResponse.json({ customSkinId: null, tokens: null });
+  }
+
+  if (isRefine) {
+    const updated = await prisma.customSkin.update({
+      where: { id: existing!.id },
+      data: { tokens: tokens as object },
+    });
+    return NextResponse.json({ customSkinId: updated.id, tokens });
   }
 
   const customSkin = await prisma.customSkin.create({

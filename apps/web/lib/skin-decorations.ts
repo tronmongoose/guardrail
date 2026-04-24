@@ -561,12 +561,25 @@ export function getSkinDecorations(
     skipAdaptation: override.skipAdaptation,
   };
 
-  // Swap emoji character if there's a per-skin override
-  const emojiOverride = SKIN_EMOJI_OVERRIDES[skinId];
-  if (emojiOverride) {
-    config.floatingElements = config.floatingElements.map((el) =>
-      el.shape === "emoji" ? { ...el, emoji: emojiOverride } : el
-    );
+  // Creator-chosen emojis from Skin Studio — cycles through the list across
+  // the decoration slots. Takes precedence over the per-skin override.
+  const customEmojis = tokens.meta?.emojis;
+  if (customEmojis && customEmojis.length > 0) {
+    let i = 0;
+    config.floatingElements = config.floatingElements.map((el) => {
+      if (el.shape !== "emoji") return el;
+      const emoji = customEmojis[i % customEmojis.length];
+      i += 1;
+      return { ...el, emoji };
+    });
+  } else {
+    // Fall back to per-skin emoji override
+    const emojiOverride = SKIN_EMOJI_OVERRIDES[skinId];
+    if (emojiOverride) {
+      config.floatingElements = config.floatingElements.map((el) =>
+        el.shape === "emoji" ? { ...el, emoji: emojiOverride } : el
+      );
+    }
   }
 
   // Hand-tuned overrides skip automatic adaptation

@@ -2,23 +2,25 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { SKIN_CATEGORIES, getSkinCatalogEntry, SKIN_CATALOG } from "@/lib/skin-bundles/catalog";
-import { getSkinTokens } from "@/lib/skin-bundles/registry";
 import { SkinPreviewPanel } from "./SkinPreviewPanel";
-import { SkinIcon, CategoryIcon, useCustomSkins } from "./skin-picker-shared";
-import type { CustomSkinEntry } from "./skin-picker-shared";
+import { SkinIcon, CategoryIcon, useCustomSkins, deleteCustomSkin } from "./skin-picker-shared";
+import { SkinStudioModal } from "./SkinStudioModal";
 import type { SkinTokens } from "@guide-rail/shared";
 
 interface SkinPickerProps {
   value: string;
   onChange: (skinId: string) => void;
   thumbnailUrl?: string | null;
-  /** Called when user hits "Generate My Skin". Should return "custom:{id}" on success, null on failure. */
-  onGenerateSkin?: () => Promise<string | null>;
-  /** Program title shown in the preview panel. */
+  /** Program id — required for the Skin Studio modal to generate/save. */
+  programId: string;
+  /** Program title shown in the preview panel + studio modal. */
   programTitle?: string;
+  /** Called after a custom skin is created or refined via the studio. The
+   *  parent can use the tokens to update its preview state optimistically. */
+  onCustomSkinSaved?: (skinId: string, tokens: SkinTokens) => void | Promise<void>;
 }
 
-export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, programTitle }: SkinPickerProps) {
+export function SkinPicker({ value, onChange, thumbnailUrl, programId, programTitle, onCustomSkinSaved }: SkinPickerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [openCategories, setOpenCategories] = useState<Set<string>>(() => {
     if (value === "auto-generate" || value.startsWith("custom:")) return new Set(["my-brand"]);
@@ -36,20 +38,35 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, prog
 
   // Custom skins fetched from server
   const { customSkins, reloadCustomSkins } = useCustomSkins();
-  const [generating, setGenerating] = useState(false);
 
-  async function handleGenerateSkin() {
-    if (!onGenerateSkin) return;
-    setGenerating(true);
-    try {
-      const newSkinId = await onGenerateSkin();
-      await reloadCustomSkins();
-      if (newSkinId) {
-        setLastSelectedId(newSkinId);
-        onChange(newSkinId);
-      }
-    } finally {
-      setGenerating(false);
+  // Skin Studio modal state
+  const [studioOpen, setStudioOpen] = useState(false);
+  const [studioInitialSkinId, setStudioInitialSkinId] = useState<string | null>(null);
+  const studioInitialSkin = studioInitialSkinId
+    ? customSkins.find((s) => s.id === studioInitialSkinId) ?? null
+    : null;
+
+  function openStudio(skinId: string | null) {
+    setStudioInitialSkinId(skinId);
+    setStudioOpen(true);
+  }
+
+  async function handleSkinSaved(newSkinId: string, tokens: SkinTokens) {
+    await reloadCustomSkins();
+    setLastSelectedId(newSkinId);
+    onChange(newSkinId);
+    if (onCustomSkinSaved) await onCustomSkinSaved(newSkinId, tokens);
+  }
+
+  async function handleDeleteCustom(customId: string, name: string) {
+    if (!confirm(`Delete "${name}"? This can't be undone.`)) return;
+    const ok = await deleteCustomSkin(customId);
+    if (!ok) return;
+    await reloadCustomSkins();
+    // If the deleted skin was currently selected, revert to the classic fallback
+    if (value === `custom:${customId}`) {
+      setLastSelectedId("classic-minimal");
+      onChange("classic-minimal");
     }
   }
 
@@ -122,16 +139,15 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, prog
     const isSelected = value === skinId;
     const isHovered = hoveredSkinId === skinId;
     const isCustom = skinId.startsWith("custom:");
+    const customId = isCustom ? skinId.replace("custom:", "") : null;
     // For custom skins, derive a color from the stored tokens for the icon
-    const customTokens = isCustom
-      ? customSkins.find((s) => s.id === skinId.replace("custom:", ""))?.tokens
+    const customTokens = customId
+      ? customSkins.find((s) => s.id === customId)?.tokens
       : undefined;
     return (
-      <button
+      <div
         key={skinId}
-        onClick={() => { setLastSelectedId(skinId); onChange(skinId); onSelect?.(); }}
-        onMouseEnter={() => setHoveredSkinId(skinId)}
-        className="w-full flex items-center gap-2.5 px-3 py-1.5 transition-colors text-left"
+        className="w-full flex items-center gap-2.5 px-3 py-1.5 transition-colors text-left group"
         style={{
           backgroundColor: isHovered
             ? "#f3f4f6"
@@ -139,30 +155,60 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, prog
             ? "#f9fafb"
             : undefined,
         }}
+        onMouseEnter={() => setHoveredSkinId(skinId)}
       >
-        {isCustom && customTokens ? (
-          <div className="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center overflow-hidden"
-            style={{
-              backgroundColor: customTokens.color.background.default,
-              border: `1.5px solid ${customTokens.color.accent.primary}55`,
-            }}>
-            <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: customTokens.color.accent.primary }} />
-          </div>
-        ) : (
-          <SkinIcon skinId={skinId} />
-        )}
-        <p
-          className="flex-1 text-xs font-medium truncate"
-          style={{ color: isSelected ? "#111827" : "#374151" }}
+        <button
+          onClick={() => { setLastSelectedId(skinId); onChange(skinId); onSelect?.(); }}
+          className="flex-1 flex items-center gap-2.5 text-left min-w-0"
         >
-          {name}
-        </p>
-        {isSelected && (
+          {isCustom && customTokens ? (
+            <div className="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center overflow-hidden"
+              style={{
+                backgroundColor: customTokens.color.background.default,
+                border: `1.5px solid ${customTokens.color.accent.primary}55`,
+              }}>
+              <div className="w-4 h-4 rounded-sm" style={{ backgroundColor: customTokens.color.accent.primary }} />
+            </div>
+          ) : (
+            <SkinIcon skinId={skinId} />
+          )}
+          <p
+            className="flex-1 text-xs font-medium truncate"
+            style={{ color: isSelected ? "#111827" : "#374151" }}
+          >
+            {name}
+          </p>
+        </button>
+        {customId && (
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); openStudio(customId); }}
+              className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-indigo-600 p-0.5"
+              aria-label="Edit skin"
+              title="Edit in Skin Studio"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828 9 16l.172-2.828z" />
+              </svg>
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleDeleteCustom(customId, name); }}
+              className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-600 p-0.5"
+              aria-label="Delete skin"
+              title="Delete skin"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M8 7V4a1 1 0 011-1h6a1 1 0 011 1v3" />
+              </svg>
+            </button>
+          </>
+        )}
+        {isSelected && !customId && (
           <svg className="flex-shrink-0 w-3.5 h-3.5" style={{ color: "#6366f1" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
           </svg>
         )}
-      </button>
+      </div>
     );
   }
 
@@ -273,9 +319,9 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, prog
 
                 {openCategories.has("my-brand") && (
                   <div className="pb-1">
-                    {/* Build My Own tile */}
+                    {/* Build My Own tile — opens Skin Studio modal */}
                     <button
-                      onClick={() => { setLastSelectedId("auto-generate"); onChange("auto-generate"); }}
+                      onClick={() => openStudio(null)}
                       onMouseEnter={() => setHoveredSkinId("auto-generate")}
                       className="w-full flex items-center gap-2.5 px-3 py-1.5 transition-colors text-left"
                       style={{
@@ -292,14 +338,9 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, prog
                           <path d="M12 2l1.5 4.5H18l-3.75 2.7 1.5 4.5L12 11.2l-3.75 2.5 1.5-4.5L6 6.5h4.5zM3 18l2 2M19 4l2 2M3 4l2-2" />
                         </svg>
                       </div>
-                      <p className="flex-1 text-xs font-medium truncate" style={{ color: value === "auto-generate" ? "#111827" : "#374151" }}>
-                        Build My Own
+                      <p className="flex-1 text-xs font-medium truncate" style={{ color: "#374151" }}>
+                        Build My Own…
                       </p>
-                      {value === "auto-generate" && (
-                        <svg className="flex-shrink-0 w-3.5 h-3.5" style={{ color: "#6366f1" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                        </svg>
-                      )}
                     </button>
 
                     {/* Existing custom skins */}
@@ -325,47 +366,31 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, prog
               style={{ background: "linear-gradient(135deg, #f5f3ff 0%, #faf5ff 100%)" }}>
               <div className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg"
                 style={{ background: "linear-gradient(135deg, #818cf8, #c084fc)" }}>
-                {generating ? (
-                  <svg className="animate-spin" width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}>
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" />
-                    <path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2l1.5 4.5H18l-3.75 2.7 1.5 4.5L12 11.2l-3.75 2.5 1.5-4.5L6 6.5h4.5zM3 18l2 2M19 4l2 2M3 4l2-2" />
-                  </svg>
-                )}
+                <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2l1.5 4.5H18l-3.75 2.7 1.5 4.5L12 11.2l-3.75 2.5 1.5-4.5L6 6.5h4.5zM3 18l2 2M19 4l2 2M3 4l2-2" />
+                </svg>
               </div>
               <div>
-                <p className="text-lg font-semibold text-gray-900 mb-1">
-                  {generating ? "Generating your skin…" : "Generate a custom skin"}
-                </p>
+                <p className="text-lg font-semibold text-gray-900 mb-1">Design your brand skin</p>
                 <p className="text-sm text-gray-500 leading-relaxed max-w-xs">
-                  {generating
-                    ? "AI is creating a color palette and typography tuned to your program's vibe."
-                    : "AI will create a color palette and typography tuned to your program's vibe."}
+                  Open the Skin Studio to generate a palette + typography, then fine-tune colors, radius, and shadows.
                 </p>
               </div>
-              {onGenerateSkin && (
-                <button
-                  onClick={handleGenerateSkin}
-                  disabled={generating}
-                  className="w-full max-w-xs py-3.5 px-6 rounded-xl font-semibold text-white text-sm shadow-md transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                  style={{
-                    background: generating
-                      ? "linear-gradient(135deg, #a5b4fc, #d8b4fe)"
-                      : "linear-gradient(135deg, #6366f1, #a855f7)",
-                    boxShadow: generating ? "none" : "0 4px 20px rgba(99, 102, 241, 0.4)",
-                  }}
-                >
-                  {generating ? "Generating…" : "✦ Generate My Skin"}
-                </button>
-              )}
+              <button
+                onClick={() => openStudio(null)}
+                className="w-full max-w-xs py-3.5 px-6 rounded-xl font-semibold text-white text-sm shadow-md transition-all"
+                style={{
+                  background: "linear-gradient(135deg, #6366f1, #a855f7)",
+                  boxShadow: "0 4px 20px rgba(99, 102, 241, 0.4)",
+                }}
+              >
+                ✦ Open Skin Studio
+              </button>
             </div>
           ) : (
             <SkinPreviewPanel
               skinId={previewSkinId === "auto-generate" ? "custom" : previewSkinId}
-              tokens={previewSkinId === "auto-generate" ? customSkins[0].tokens : previewCustomTokens}
+              tokens={previewSkinId === "auto-generate" ? customSkins[0]?.tokens : previewCustomTokens}
               viewMode="desktop"
               thumbnailUrl={thumbnailUrl}
               programTitle={programTitle}
@@ -429,9 +454,8 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, prog
             {activeTab === "my-brand" ? (
               <>
                 <button
-                  onClick={() => { setLastSelectedId("auto-generate"); onChange("auto-generate"); setMobileListCollapsed(true); }}
+                  onClick={() => { openStudio(null); setMobileListCollapsed(true); }}
                   className="w-full flex items-center gap-2.5 px-3 py-1.5 transition-colors text-left"
-                  style={{ backgroundColor: value === "auto-generate" ? "#f9fafb" : undefined }}
                 >
                   <div className="flex-shrink-0 w-8 h-8 rounded-md flex items-center justify-center"
                     style={{ background: "linear-gradient(135deg, #818cf8, #c084fc)" }}>
@@ -439,12 +463,7 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, prog
                       <path d="M12 2l1.5 4.5H18l-3.75 2.7 1.5 4.5L12 11.2l-3.75 2.5 1.5-4.5L6 6.5h4.5z" />
                     </svg>
                   </div>
-                  <p className="flex-1 text-xs font-medium text-gray-700">Build My Own</p>
-                  {value === "auto-generate" && (
-                    <svg className="w-3.5 h-3.5" style={{ color: "#6366f1" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
+                  <p className="flex-1 text-xs font-medium text-gray-700">Build My Own…</p>
                 </button>
                 {customSkins.map((skin) => (
                   <SkinRow key={`custom:${skin.id}`} skinId={`custom:${skin.id}`} name={skin.name} onSelect={() => setMobileListCollapsed(true)} />
@@ -465,46 +484,28 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, prog
               style={{ background: "linear-gradient(135deg, #f5f3ff 0%, #faf5ff 100%)" }}>
               <div className="w-12 h-12 rounded-xl flex items-center justify-center"
                 style={{ background: "linear-gradient(135deg, #818cf8, #c084fc)" }}>
-                {generating ? (
-                  <svg className="animate-spin" width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}>
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="white" strokeWidth="4" />
-                    <path className="opacity-75" fill="white" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : (
-                  <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 2l1.5 4.5H18l-3.75 2.7 1.5 4.5L12 11.2l-3.75 2.5 1.5-4.5L6 6.5h4.5z" />
-                  </svg>
-                )}
+                <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2l1.5 4.5H18l-3.75 2.7 1.5 4.5L12 11.2l-3.75 2.5 1.5-4.5L6 6.5h4.5z" />
+                </svg>
               </div>
               <div>
-                <p className="font-semibold text-gray-800 mb-1">
-                  {generating ? "Generating your skin…" : "Generate a custom skin"}
-                </p>
+                <p className="font-semibold text-gray-800 mb-1">Design your brand skin</p>
                 <p className="text-sm text-gray-500 leading-relaxed">
-                  {generating
-                    ? "Creating a palette tuned to your vibe."
-                    : "AI will create a custom palette tuned to your vibe."}
+                  Open the Skin Studio to generate + fine-tune a palette tuned to your vibe.
                 </p>
               </div>
-              {onGenerateSkin && (
-                <button
-                  onClick={handleGenerateSkin}
-                  disabled={generating}
-                  className="w-full py-3 px-5 rounded-xl font-semibold text-white text-sm shadow-md transition-all disabled:opacity-60"
-                  style={{
-                    background: generating
-                      ? "linear-gradient(135deg, #a5b4fc, #d8b4fe)"
-                      : "linear-gradient(135deg, #6366f1, #a855f7)",
-                  }}
-                >
-                  {generating ? "Generating…" : "✦ Generate My Skin"}
-                </button>
-              )}
+              <button
+                onClick={() => openStudio(null)}
+                className="w-full py-3 px-5 rounded-xl font-semibold text-white text-sm shadow-md transition-all"
+                style={{ background: "linear-gradient(135deg, #6366f1, #a855f7)" }}
+              >
+                ✦ Open Skin Studio
+              </button>
             </div>
           ) : (
             <SkinPreviewPanel
               skinId={previewSkinId === "auto-generate" ? "custom" : previewSkinId}
-              tokens={previewSkinId === "auto-generate" ? customSkins[0].tokens : previewCustomTokens}
+              tokens={previewSkinId === "auto-generate" ? customSkins[0]?.tokens : previewCustomTokens}
               viewMode="mobile"
               thumbnailUrl={thumbnailUrl}
               programTitle={programTitle}
@@ -512,6 +513,16 @@ export function SkinPicker({ value, onChange, thumbnailUrl, onGenerateSkin, prog
           )}
         </div>
       </div>
+
+      <SkinStudioModal
+        open={studioOpen}
+        onClose={() => setStudioOpen(false)}
+        programId={programId}
+        programTitle={programTitle}
+        thumbnailUrl={thumbnailUrl}
+        initialSkin={studioInitialSkin}
+        onSkinSaved={handleSkinSaved}
+      />
     </>
   );
 }
