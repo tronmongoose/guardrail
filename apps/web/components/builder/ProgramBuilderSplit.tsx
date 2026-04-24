@@ -80,7 +80,7 @@ export function ProgramBuilderSplit({
         onClick={() => setSidebarOpen(true)}
         aria-label={
           selectedSession && selectedWeek
-            ? `Open program structure, currently on Lesson ${lessonNumber} Session ${sessionNumber} of ${sessionCount}`
+            ? `Open program structure, currently on Lesson ${lessonNumber} of ${weeks.length}, Session ${sessionNumber} of ${sessionCount}`
             : "Open program structure to pick a lesson"
         }
         className="md:hidden flex-shrink-0 flex items-center justify-between gap-3 px-4 py-3.5 border-b border-teal-500/30 bg-teal-500/5 active:bg-teal-500/10 transition text-left w-full"
@@ -98,7 +98,7 @@ export function ProgramBuilderSplit({
             </div>
             <div className="text-sm font-medium text-white truncate">
               {selectedSession && selectedWeek
-                ? `Lesson ${lessonNumber} · Session ${sessionNumber} of ${sessionCount}`
+                ? `LESSON ${lessonNumber} of ${weeks.length} · Session ${sessionNumber} of ${sessionCount}`
                 : "Tap to pick a lesson"}
             </div>
           </div>
