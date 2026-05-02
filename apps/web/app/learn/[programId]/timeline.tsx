@@ -1174,6 +1174,7 @@ export function LearnerTimeline({
       {/* Program complete full-screen overlay */}
       {showProgramComplete && (
         <ProgramCompleteOverlay
+          programId={program.id}
           programTitle={program.title}
           weekCount={program.weeks.length}
           actionCount={totalActions}
@@ -1215,6 +1216,7 @@ export function LearnerTimeline({
 /* ------------------------------------------------------------------ */
 
 interface ProgramCompleteOverlayProps {
+  programId: string;
   programTitle: string;
   weekCount: number;
   actionCount: number;
@@ -1222,6 +1224,7 @@ interface ProgramCompleteOverlayProps {
 }
 
 function ProgramCompleteOverlay({
+  programId,
   programTitle,
   weekCount,
   actionCount,
@@ -1320,7 +1323,7 @@ function ProgramCompleteOverlay({
         </p>
 
         <Link
-          href="/"
+          href={`/learn/${programId}`}
           onClick={onClose}
           className="block w-full text-center py-2.5 text-sm font-semibold transition hover:opacity-90"
           style={{
@@ -1329,7 +1332,7 @@ function ProgramCompleteOverlay({
             color: "var(--token-color-text-on-accent, #fff)",
           }}
         >
-          Back to Dashboard
+          Back to your program
         </Link>
         <button
           onClick={onClose}
