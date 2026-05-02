@@ -94,9 +94,12 @@ function formatDuration(seconds: number): string {
   return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
-// Extract a thumbnail frame from a video File object (runs entirely client-side).
+// Extract a thumbnail frame and duration from a video File object (runs entirely client-side).
 // Seeks to `seekTo` seconds (or 10% of duration if shorter) to skip black frames.
-function extractVideoThumbnail(file: File, seekTo = 2): Promise<string | null> {
+function extractVideoMetadata(
+  file: File,
+  seekTo = 2,
+): Promise<{ thumbnailUrl: string | null; durationSeconds: number | null }> {
   return new Promise((resolve) => {
     const objectUrl = URL.createObjectURL(file);
     const video = document.createElement("video");
@@ -104,11 +107,13 @@ function extractVideoThumbnail(file: File, seekTo = 2): Promise<string | null> {
     video.muted = true;
     video.playsInline = true;
 
+    let durationSeconds: number | null = null;
     const cleanup = () => URL.revokeObjectURL(objectUrl);
 
-    video.onerror = () => { cleanup(); resolve(null); };
+    video.onerror = () => { cleanup(); resolve({ thumbnailUrl: null, durationSeconds }); };
 
     video.onloadedmetadata = () => {
+      durationSeconds = Number.isFinite(video.duration) ? Math.round(video.duration) : null;
       video.currentTime = Math.min(seekTo, video.duration * 0.1);
     };
 
@@ -119,13 +124,13 @@ function extractVideoThumbnail(file: File, seekTo = 2): Promise<string | null> {
         canvas.width = 640;
         canvas.height = Math.round(640 * aspect) || 360;
         const ctx = canvas.getContext("2d");
-        if (!ctx) { cleanup(); resolve(null); return; }
+        if (!ctx) { cleanup(); resolve({ thumbnailUrl: null, durationSeconds }); return; }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         cleanup();
-        resolve(canvas.toDataURL("image/jpeg", 0.7));
+        resolve({ thumbnailUrl: canvas.toDataURL("image/jpeg", 0.7), durationSeconds });
       } catch {
         cleanup();
-        resolve(null);
+        resolve({ thumbnailUrl: null, durationSeconds });
       }
     };
 
@@ -386,9 +391,14 @@ export function StepContent({
 
     const video: Video = await res.json();
 
-    // Extract a thumbnail from the local File (while we still have it).
-    const thumbnailUrl = await extractVideoThumbnail(file);
-    return { ...video, thumbnailUrl: thumbnailUrl ?? video.thumbnailUrl };
+    // Extract thumbnail + duration from the local File (while we still have it).
+    // Duration lets the wizard show an accurate "~N lessons" estimate before Gemini analyzes.
+    const { thumbnailUrl, durationSeconds } = await extractVideoMetadata(file);
+    return {
+      ...video,
+      thumbnailUrl: thumbnailUrl ?? video.thumbnailUrl,
+      durationSeconds: durationSeconds ?? video.durationSeconds,
+    };
   };
 
   const extractSingleFile = async (file: File): Promise<Artifact | null> => {

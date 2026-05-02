@@ -601,13 +601,13 @@ REFLECT RULE:
     const durationInstruction = hasPlan
       ? `- Duration: EXACTLY ${planWeekCount} lessons with 1 session each, matching the pre-computed video assignment plan below.`
       : input.aiStructured
-        ? `- Duration: Determine the ideal number of lessons based on the content below. Use approximately ${input.durationWeeks} as a starting point, but adjust up or down to whatever count best fits the natural topic structure. Each lesson should have 5-15 minutes of meaningful content.`
+        ? `- Duration: Build lessons of 3-8 minutes of clip content each, structured around the natural topic breaks in the source videos. Use ${input.durationWeeks} as a rough starting point but adjust freely up or down to whatever count best fits the content. NEVER produce fewer lessons than the number of source videos — each source video earns its own lesson at minimum.`
         : `- Duration: EXACTLY ${input.durationWeeks} lessons (you MUST create ${input.durationWeeks} lessons)`;
 
     const weekCountRule = hasPlan
       ? `1. Generate EXACTLY ${planWeekCount} lessons (weekNumber 1 through ${planWeekCount}) with EXACTLY 1 session per lesson — this matches the VIDEO ASSIGNMENT PLAN. Do NOT merge lessons or create multiple sessions per lesson.`
       : input.aiStructured
-        ? `1. Choose the ideal number of lessons based on the content — each lesson should have 5-15 minutes of clip content. Target 4-6 lessons. Do NOT exceed 6 lessons under any circumstance, and never pad lesson count to hit a number.`
+        ? `1. Generate the ideal number of lessons based on natural topic structure. Each lesson must have 3-8 minutes of clip content (the sweet spot for completion). Never pad with empty lessons, never merge separate source videos into a single lesson.`
         : `1. Generate EXACTLY ${input.durationWeeks} lessons (weekNumber 1 through ${input.durationWeeks})`;
 
     const taskInstruction = hasPlan
@@ -816,13 +816,13 @@ QUALITY GUIDELINES:
   const classicDurationInstruction = hasPlanClassic
     ? `- Duration: EXACTLY ${classicPlanWeekCount} lessons with 1 session each, matching the pre-computed video assignment plan below.`
     : input.aiStructured
-      ? `- Duration: Determine the ideal number of lessons based on the content below. Use approximately ${input.durationWeeks} as a starting point, but adjust up or down to whatever count best fits the natural topic structure. Each lesson should have 5-15 minutes of meaningful content.`
+      ? `- Duration: Build lessons of 3-8 minutes of meaningful content each, structured around the natural topic breaks in the source videos. Use ${input.durationWeeks} as a rough starting point but adjust freely up or down to whatever count best fits the content. NEVER produce fewer lessons than the number of source videos — each source video earns its own lesson at minimum.`
       : `- Duration: EXACTLY ${input.durationWeeks} lessons (you MUST create ${input.durationWeeks} lessons)`;
 
   const classicWeekCountRule = hasPlanClassic
     ? `1. Generate EXACTLY ${classicPlanWeekCount} lessons (weekNumber 1 through ${classicPlanWeekCount}) with EXACTLY 1 session per lesson — this matches the VIDEO ASSIGNMENT PLAN. Do NOT merge lessons or create multiple sessions per lesson.`
     : input.aiStructured
-      ? `1. Choose the ideal number of lessons based on the content — each lesson should have 5-15 minutes of content. Target 4-6 lessons. Do NOT exceed 6 lessons under any circumstance, and never pad lesson count to hit a number.`
+      ? `1. Generate the ideal number of lessons based on natural topic structure. Each lesson must have 3-8 minutes of content. Never pad with empty lessons, never merge separate source videos into a single lesson.`
       : `1. Generate EXACTLY ${input.durationWeeks} lessons (weekNumber 1 through ${input.durationWeeks})`;
 
   const classicTaskInstruction = hasPlanClassic
