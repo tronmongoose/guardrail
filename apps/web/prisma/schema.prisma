@@ -397,6 +397,11 @@ model Entitlement {
   currentWeek         Int      @default(1)  // Which week the learner has access to
   createdAt           DateTime @default(now())
 
+  // Set when count(weekCompletions) first reaches program.durationWeeks
+  programCompletedAt    DateTime?
+  // Idempotency stamp for the recap email pipeline; null = not yet sent
+  completionEmailSentAt DateTime?
+
   weekCompletions     WeekCompletion[]
 
   @@unique([userId, programId])
@@ -559,3 +564,4 @@ enum GenerationStatus {
   COMPLETED
   FAILED
 }
+

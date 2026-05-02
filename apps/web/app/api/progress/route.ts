@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logger } from "@/lib/logger";
+import { sendProgramCompletionEmail } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   const user = await getCurrentUser();
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest) {
   let weekCompleted = false;
   let nextWeekUnlocked = false;
   let newCurrentWeek: number | null = null;
+  let programCompleted = false;
 
   if (programId && weekNumber) {
     // Get the entitlement
@@ -93,7 +95,7 @@ export async function POST(req: NextRequest) {
             // Get program details including pacing mode
             const program = await prisma.program.findUnique({
               where: { id: programId },
-              select: { durationWeeks: true, pacingMode: true },
+              select: { durationWeeks: true, pacingMode: true, creatorId: true, title: true },
             });
 
             // Only unlock next week for UNLOCK_ON_COMPLETE mode
@@ -120,6 +122,70 @@ export async function POST(req: NextRequest) {
                 });
               }
             }
+
+            // Program-completion check: did this week-completion bring the
+            // learner to the final week? Stamp programCompletedAt + send the
+            // branded completion email idempotently.
+            if (program) {
+              const completionsCount = await prisma.weekCompletion.count({
+                where: { entitlementId: entitlement.id },
+              });
+
+              if (
+                completionsCount >= program.durationWeeks &&
+                entitlement.programCompletedAt === null
+              ) {
+                programCompleted = true;
+
+                await prisma.entitlement.update({
+                  where: { id: entitlement.id },
+                  data: { programCompletedAt: new Date() },
+                });
+
+                logger.info({
+                  operation: "progress.program_completed",
+                  userId: user.id,
+                  programId,
+                  completionsCount,
+                });
+
+                if (entitlement.completionEmailSentAt === null) {
+                  const creator = await prisma.user.findUnique({
+                    where: { id: program.creatorId },
+                    select: { name: true, email: true },
+                  });
+
+                  if (creator) {
+                    try {
+                      const sent = await sendProgramCompletionEmail({
+                        learnerEmail: user.email,
+                        programId,
+                        enrolledAt: entitlement.createdAt,
+                        creator: { name: creator.name, email: creator.email },
+                      });
+                      if (sent) {
+                        await prisma.entitlement.update({
+                          where: { id: entitlement.id },
+                          data: { completionEmailSentAt: new Date() },
+                        });
+                        logger.info({
+                          operation: "progress.completion_email_sent",
+                          userId: user.id,
+                          programId,
+                        });
+                      }
+                    } catch (err) {
+                      logger.warn({
+                        operation: "progress.completion_email_failed",
+                        userId: user.id,
+                        programId,
+                        error: err instanceof Error ? err.message : String(err),
+                      });
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -131,5 +197,6 @@ export async function POST(req: NextRequest) {
     weekCompleted,
     nextWeekUnlocked,
     newCurrentWeek,
+    programCompleted,
   });
 }

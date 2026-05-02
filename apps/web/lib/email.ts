@@ -4,6 +4,7 @@ import { logger } from "./logger";
 import { WelcomeLearner } from "@/emails/WelcomeLearner";
 import { CreatorEnrollment } from "@/emails/CreatorEnrollment";
 import { MagicLinkResend } from "@/emails/MagicLinkResend";
+import { ProgramCompletion } from "@/emails/ProgramCompletion";
 import {
   getProgramPreview,
   getCreatorLifetimeStats,
@@ -256,6 +257,81 @@ export async function sendCreatorEnrollmentEmail({
     subject,
     text,
     html,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Branded program completion ("you finished it") — fires once per entitlement
+// ---------------------------------------------------------------------------
+
+interface SendProgramCompletionArgs {
+  learnerEmail: string;
+  programId: string;
+  enrolledAt: Date;
+  creator: { name: string | null; email: string };
+}
+
+/**
+ * Sent when a learner completes every action in every lesson of a program.
+ * Mirrors the welcome email's branded "creator via JourneyLine" From line so
+ * the celebration feels like it's coming from the coach. Idempotency is the
+ * caller's responsibility (gate on Entitlement.completionEmailSentAt).
+ */
+export async function sendProgramCompletionEmail({
+  learnerEmail,
+  programId,
+  enrolledAt,
+  creator,
+}: SendProgramCompletionArgs): Promise<boolean> {
+  const preview = await getProgramPreview(programId);
+  if (!preview) {
+    logger.warn({ operation: "email.completion.program_missing", programId });
+    return false;
+  }
+
+  const creatorName = creator.name?.trim() || "Your coach";
+  const revisitUrl = absoluteUrl(`/learn/${programId}`);
+  const daysEnrolled = Math.max(
+    1,
+    Math.round((Date.now() - enrolledAt.getTime()) / (1000 * 60 * 60 * 24)),
+  );
+
+  const html = await render(
+    React.createElement(ProgramCompletion, {
+      creatorName,
+      creatorAvatarUrl: preview.creatorAvatarUrl,
+      programTitle: preview.title,
+      lessonCount: preview.lessonCount,
+      totalMinutes: preview.totalMinutes,
+      daysEnrolled,
+      heroImageUrl: preview.heroImageUrl,
+      revisitUrl,
+      brand: preview.brand,
+      appUrl: absoluteUrl("/"),
+    }),
+  );
+
+  const text = [
+    `You finished ${preview.title}.`,
+    "",
+    "That's the whole program — every lesson, every action. Real follow-through.",
+    "",
+    `Revisit anytime: ${revisitUrl}`,
+    "",
+    `Reply to tell ${creatorName} how it went — they'll see it directly.`,
+  ].join("\n");
+
+  const fromDomain = (process.env.EMAIL_FROM_ADDRESS || "noreply@journeyline.ai").trim();
+  const safeName = creatorName.replace(/[\r\n"]/g, "").slice(0, 60);
+  const from = `${safeName} via JourneyLine <${fromDomain}>`;
+
+  return sendEmail({
+    to: learnerEmail,
+    subject: `You finished ${preview.title}`,
+    text,
+    html,
+    from,
+    replyTo: creator.email,
   });
 }
 

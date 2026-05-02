@@ -12,6 +12,8 @@ const isPublicRoute = createRouteMatcher([
   "/api/promo-codes/validate",
   "/api/health",
   "/api/programs/(.*)/videos/upload", // Vercel Blob completion webhook is unauthenticated
+  "/api/checkout/(.*)", // Anonymous learners enroll by email; route handles its own auth
+  "/api/progress", // Magic-link learners save progress; route handles its own auth
   "/sign-in(.*)",
   "/sign-up(.*)",
 ]);
