@@ -280,7 +280,7 @@ export function SkinStudioModal({
       aria-modal="true"
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full overflow-hidden flex flex-col max-w-[960px] md:max-w-[1200px] max-h-[90vh]"
+        className="bg-white rounded-2xl shadow-2xl w-full overflow-hidden flex flex-col max-w-[960px] md:max-w-[1040px] max-h-[92vh]"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 flex-shrink-0">
@@ -320,7 +320,7 @@ export function SkinStudioModal({
               <SkinPreviewPanel
                 skinId="custom"
                 tokens={workingTokens}
-                viewMode="desktop"
+                viewMode="mobile"
                 thumbnailUrl={thumbnailUrl}
                 programTitle={programTitle}
                 customEmojis={selectedEmojis.length > 0 ? selectedEmojis : null}
@@ -356,18 +356,21 @@ export function SkinStudioModal({
                   className="flex-1 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500"
                   disabled={generating}
                 />
-                <button
-                  onClick={handleGenerate}
-                  disabled={generating || !prompt.trim()}
-                  className="px-4 py-2 rounded-lg text-sm font-semibold text-white whitespace-nowrap transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                  style={{
-                    background: generating
-                      ? "linear-gradient(135deg, #a5b4fc, #d8b4fe)"
-                      : "linear-gradient(135deg, #6366f1, #a855f7)",
-                  }}
-                >
-                  {generating ? "Generating…" : isSeedMode ? "✦ Generate" : "✦ Regenerate"}
-                </button>
+                {/* Inline button only in refine mode — seed mode uses the footer CTA */}
+                {!isSeedMode && (
+                  <button
+                    onClick={handleGenerate}
+                    disabled={generating || !prompt.trim()}
+                    className="px-4 py-2 rounded-lg text-sm font-semibold text-white whitespace-nowrap transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    style={{
+                      background: generating
+                        ? "linear-gradient(135deg, #a5b4fc, #d8b4fe)"
+                        : "linear-gradient(135deg, #6366f1, #a855f7)",
+                    }}
+                  >
+                    {generating ? "Generating…" : "✦ Regenerate"}
+                  </button>
+                )}
               </div>
               {detectedColor && workingTokens && (
                 <button
@@ -602,14 +605,29 @@ export function SkinStudioModal({
           >
             Cancel
           </button>
-          <button
-            onClick={handleSave}
-            disabled={!workingTokens || !workingSkinId || saving}
-            className="px-4 py-2 text-sm font-semibold text-white rounded-lg transition disabled:opacity-60 disabled:cursor-not-allowed"
-            style={{ backgroundColor: "#4f46e5" }}
-          >
-            {saving ? "Saving…" : "Save"}
-          </button>
+          {isSeedMode ? (
+            <button
+              onClick={handleGenerate}
+              disabled={generating || !prompt.trim()}
+              className="px-4 py-2 text-sm font-semibold text-white rounded-lg transition disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{
+                background: generating
+                  ? "linear-gradient(135deg, #a5b4fc, #d8b4fe)"
+                  : "linear-gradient(135deg, #6366f1, #a855f7)",
+              }}
+            >
+              {generating ? "Generating…" : "✦ Generate My Skin"}
+            </button>
+          ) : (
+            <button
+              onClick={handleSave}
+              disabled={!workingTokens || !workingSkinId || saving}
+              className="px-4 py-2 text-sm font-semibold text-white rounded-lg transition disabled:opacity-60 disabled:cursor-not-allowed"
+              style={{ backgroundColor: "#4f46e5" }}
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          )}
         </div>
       </div>
     </div>
