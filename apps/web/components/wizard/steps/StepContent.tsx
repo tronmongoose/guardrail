@@ -177,9 +177,6 @@ export function StepContent({
   const [isBatchProcessing, setIsBatchProcessing] = useState(false);
   const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0, errors: [] as string[] });
 
-  // Tracks which uploaded videos have been analyzed by Gemini (videoId → boolean)
-  const [analysisReady, setAnalysisReady] = useState<Record<string, boolean>>({});
-
   // Segment counts — refreshed after videos change (Gemini analysis is async/fire-and-forget)
   const [segmentCounts, setSegmentCounts] = useState<Record<string, number>>({});
 
@@ -197,14 +194,11 @@ export function StepContent({
             ready[v.id] = !!v.hasAnalysis;
           }
           setSegmentCounts(counts);
-          setAnalysisReady(ready);
           return ready;
         })
         .catch(() => ({} as Record<string, boolean>));
 
-    // Initial fetch
     poll().then((ready) => {
-      // If any uploaded video lacks analysis, re-poll every 5s until they're all done
       const uploadedIds = videos.filter(isUploadedVideo).map((v) => v.id);
       if (uploadedIds.length === 0) return;
       if (uploadedIds.every((id) => ready[id])) return;
@@ -221,11 +215,6 @@ export function StepContent({
 
   const totalSegmentCount = Object.values(segmentCounts).reduce((a, b) => a + b, 0);
   const segmentedVideoCount = Object.keys(segmentCounts).length;
-
-  // Analysis status for uploaded videos (not YouTube — those use transcript-based analysis)
-  const uploadedVideos = videos.filter(isUploadedVideo);
-  const unanalyzedCount = uploadedVideos.filter((v) => !analysisReady[v.id]).length;
-  const isAnalysisPending = uploadedVideos.length > 0 && unanalyzedCount > 0 && !isExtracting;
 
   const handleAddVideo = async () => {
     const videoId = parseYouTubeVideoId(videoUrl);
@@ -706,20 +695,6 @@ export function StepContent({
             <span className="text-neon-cyan font-medium">Long videos detected</span> —{" "}
             {segmentedVideoCount === 1 ? "1 video" : `${segmentedVideoCount} videos`} will be auto-split into{" "}
             <span className="text-neon-cyan font-medium">{totalSegmentCount} focused segments</span> before generation.
-          </p>
-        </div>
-      )}
-
-      {/* Gemini analysis soft gate — shown while uploaded videos are being analyzed */}
-      {isAnalysisPending && (
-        <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-          <svg className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-          <p className="text-xs text-gray-300">
-            <span className="text-amber-400 font-medium">AI analyzing {unanalyzedCount === 1 ? "your video" : `${unanalyzedCount} videos`}…</span>{" "}
-            Waiting a minute before generating will give you faster, higher-quality results.
-            You can continue now, but generation may take longer.
           </p>
         </div>
       )}

@@ -188,31 +188,25 @@ export function StepDuration({
           </div>
         </div>
       ) : (
-        /* ─── AI Decide Path: Waiting ─── */
-        <div className="p-6 rounded-xl border border-surface-border bg-surface-dark">
+        /* ─── AI Decide Path: Pending (analysis still running in background) ─── */
+        <div className="p-6 rounded-xl border border-neon-pink/30 bg-neon-pink/5">
           <div className="flex items-center gap-2 mb-4">
-            <svg className="w-4 h-4 text-amber-400 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            <svg className="w-4 h-4 text-neon-pink" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
             </svg>
-            <span className="text-sm font-medium text-amber-400">Analyzing your videos...</span>
+            <span className="text-sm font-medium text-neon-pink">AI will tailor your structure</span>
           </div>
 
-          <p className="text-gray-400 text-sm mb-4">
-            {analyzedCount} of {videoCount} video{videoCount === 1 ? "" : "s"} complete
+          <p className="text-gray-400 text-sm mb-5">
+            We&apos;ll analyze your <span className="text-white font-medium">{videoCount} video{videoCount === 1 ? "" : "s"}</span> when you generate and find the ideal lesson count.
           </p>
 
-          {/* Progress bar */}
-          <div className="w-full h-2 rounded-full bg-surface-card overflow-hidden mb-3">
-            <div
-              className="h-full rounded-full bg-amber-400 transition-all duration-500"
-              style={{ width: `${videoCount > 0 ? Math.round((analyzedCount / videoCount) * 100) : 0}%` }}
-            />
+          <div className="flex items-center justify-center">
+            <div className="text-center px-8 py-4 rounded-xl bg-surface-dark border border-neon-pink/20">
+              <div className="text-3xl font-bold text-white">~{weeks}</div>
+              <div className="text-sm text-gray-400 mt-1">lessons (estimated)</div>
+            </div>
           </div>
-
-          <p className="text-xs text-gray-500">
-            This usually takes 1-2 minutes
-          </p>
         </div>
       )}
     </div>

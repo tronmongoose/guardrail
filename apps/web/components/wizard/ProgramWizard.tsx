@@ -119,8 +119,6 @@ export function ProgramWizard({
   });
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Track analysis status for uploaded videos — used for the footer badge
-  const [analysisStatus, setAnalysisStatus] = useState<Record<string, boolean>>({});
   const analysisPollerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Poll for video analysis completion — runs on Content (1) and Lessons flow (2) steps
@@ -135,7 +133,6 @@ export function ProgramWizard({
         .then((data: Array<{ id: string; hasAnalysis?: boolean; durationSeconds?: number | null; topicCount?: number }>) => {
           const next: Record<string, boolean> = {};
           for (const v of data) next[v.id] = !!v.hasAnalysis;
-          setAnalysisStatus(next);
 
           // Enrich wizard state videos with duration/topic data from analysis
           setState((prev) => {
@@ -501,25 +498,6 @@ export function ProgramWizard({
         <div className="bg-surface-card border border-surface-border rounded-xl p-6 mb-6">
           {renderStep()}
         </div>
-
-        {/* Analysis progress badge — visible on steps 1-3 while any video lacks analysis */}
-        {currentStep >= 1 && state.content.videos.length > 0 && (() => {
-          const ids = state.content.videos.map((v) => v.id);
-          const doneCount = ids.filter((id) => analysisStatus[id]).length;
-          const allDone = doneCount === ids.length;
-          if (allDone) return null; // Hide once all done
-          return (
-            <div className="flex items-center gap-2 mb-4 px-1">
-              <svg className="w-3.5 h-3.5 text-amber-400 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              <span className="text-xs text-amber-400">
-                AI analyzing your videos… {doneCount} of {ids.length} done.{" "}
-                <span className="text-gray-500">Waiting a moment before generating gives faster results.</span>
-              </span>
-            </div>
-          );
-        })()}
 
         {/* Navigation */}
         <div className="flex items-center justify-between">
