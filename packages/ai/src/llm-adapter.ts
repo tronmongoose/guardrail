@@ -926,7 +926,7 @@ async function callAnthropic(input: GenerateInput): Promise<string> {
     },
     body: JSON.stringify({
       model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
-      max_tokens: 8192,
+      max_tokens: 32768,
       messages: [{ role: "user", content: buildPrompt(input) }],
     }),
   }, GENERATION_TIMEOUT_MS);
@@ -953,7 +953,7 @@ async function callOpenAI(input: GenerateInput): Promise<string> {
     body: JSON.stringify({
       model,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 8192,
+      max_tokens: 32768,
     }),
   }, GENERATION_TIMEOUT_MS);
 
@@ -1005,7 +1005,54 @@ async function repairJSON(
   provider: LLMProvider,
   _input: GenerateInput
 ): Promise<string> {
-  const repairPrompt = `The following JSON output was invalid:\n\n${badOutput}\n\nError: ${error}\n\nPlease fix the JSON to match the required schema and return ONLY valid JSON.`;
+  // Spell out the exact required field names. The original prompt uses "lesson"
+  // terminology heavily, which leads the LLM to invent fields like "lessonTitle"
+  // or "lessons". The repair pass needs the canonical schema or it loops.
+  const repairPrompt = `The previous JSON output failed schema validation.
+
+Validation error:
+${error}
+
+Bad output:
+${badOutput}
+
+REQUIRED SCHEMA — use these EXACT field names:
+{
+  "programId": string,
+  "title": string,
+  "description": string (optional),
+  "pacingMode": "drip_by_week" | "unlock_on_complete",
+  "durationWeeks": number,
+  "weeks": [
+    {
+      "title": string,                       // REQUIRED — the lesson title
+      "summary": string (optional),
+      "weekNumber": number,                  // 1, 2, 3, ...
+      "sessions": [                          // REQUIRED — array, never call this "lessons"
+        {
+          "title": string,                   // REQUIRED
+          "summary": string (optional),
+          "keyTakeaways": string[] (optional),
+          "orderIndex": number,
+          "actions": [                       // REQUIRED — at least one item
+            {
+              "title": string,
+              "type": "watch" | "read" | "do" | "reflect",
+              "instructions": string (optional),
+              "reflectionPrompt": string (optional, required for "reflect"),
+              "youtubeVideoId": string (optional),
+              "orderIndex": number
+            }
+          ],
+          "clips": [...] (optional),
+          "overlays": [...] (optional)
+        }
+      ]
+    }
+  ]
+}
+
+Rewrite the JSON above so every \`weeks[]\` entry has \`title\`, \`weekNumber\`, and a non-empty \`sessions\` array. Keep all the substantive content from the bad output — only fix field names and structure. Return ONLY the corrected JSON, no markdown.`;
 
   if (provider === "anthropic") {
     const key = process.env.ANTHROPIC_API_KEY!;
@@ -1018,7 +1065,7 @@ async function repairJSON(
       },
       body: JSON.stringify({
         model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-20250514",
-        max_tokens: 8192,
+        max_tokens: 32768,
         messages: [{ role: "user", content: repairPrompt }],
       }),
     }, LLM_TIMEOUT_MS);
@@ -1058,7 +1105,7 @@ async function repairJSON(
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL || "gpt-4o",
       messages: [{ role: "user", content: repairPrompt }],
-      max_tokens: 8192,
+      max_tokens: 32768,
     }),
   }, LLM_TIMEOUT_MS);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

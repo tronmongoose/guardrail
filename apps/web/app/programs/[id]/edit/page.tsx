@@ -339,13 +339,17 @@ export default function ProgramEditPage() {
     return () => clearInterval(interval);
   }, [asyncGenerating, id, load, showToast]);
 
-  // Auto-show wizard for programs that haven't completed generation
+  // Auto-show wizard for programs that haven't completed generation.
+  // Skip when there's a known generation failure — the in-page "Generation failed"
+  // panel surfaces the error + retry button instead, so the user doesn't get silently
+  // re-thrown into the wizard with no idea the previous attempt failed.
   useEffect(() => {
     if (!program || !genStatusChecked || wizardDismissedRef.current) return;
+    if (lastGenError) return;
     if (program.weeks.length === 0 && !asyncGenerating) {
       setShowWizard(true);
     }
-  }, [program, genStatusChecked, asyncGenerating]);
+  }, [program, genStatusChecked, asyncGenerating, lastGenError]);
 
   async function cancelGeneration() {
     try {
