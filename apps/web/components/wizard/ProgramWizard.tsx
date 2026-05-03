@@ -356,6 +356,7 @@ export function ProgramWizard({
       case 2:
         return (
           <StepDuration
+            weeks={state.duration.weeks}
             videos={state.content.videos}
             aiStructured={state.duration.aiStructured}
             onWeeksChange={(weeks) => updateState("duration", { weeks })}

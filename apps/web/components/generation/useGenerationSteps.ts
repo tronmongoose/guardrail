@@ -35,15 +35,20 @@ interface UseGenerationStepsResult {
 // Per-stage ceiling for the simulated progress value. The simulation is clamped
 // to the ceiling of the CURRENT stage so it never overruns reality. Real backend
 // progress always wins if it's higher than the simulated value.
+//
+// Ranges are sized roughly proportional to wall-clock time spent in each stage.
+// fetching_transcripts (Gemini) is by far the longest in practice, so it owns
+// the largest slice — otherwise the bar parks at the ceiling for a minute+
+// while Gemini runs, then races forward when the stage finally flips.
 const STAGE_CEILING: Record<string, number> = {
   queued: 3,
-  preparing: 6,
-  fetching_transcripts: 24,
-  analyzing: 44,
-  generating: 84,
-  validating: 89,
-  persisting: 95,
-  generating_skin: 97,
+  preparing: 8,
+  fetching_transcripts: 50,
+  analyzing: 68,
+  generating: 92,
+  validating: 94,
+  persisting: 97,
+  generating_skin: 99,
   complete: 100,
 };
 
@@ -164,44 +169,44 @@ function computeStepStatus(
   const isPast = (s: string) => currentStageIdx > stageOrder.indexOf(s);
 
   switch (index) {
-    case 0: // Watching your videos — preparing + fetching_transcripts < 15%
-      if (stage === "preparing" || (stage === "fetching_transcripts" && displayProgress < 15)) return "active";
-      if (isPast("preparing") && displayProgress >= 15) return "completed";
+    case 0: // Watching your videos — preparing + early fetching_transcripts
+      if (stage === "preparing" || (stage === "fetching_transcripts" && displayProgress < 22)) return "active";
+      if (isPast("preparing") && displayProgress >= 22) return "completed";
       return isPast("fetching_transcripts") ? "completed" : "pending";
 
-    case 1: // Understanding your expertise — fetching_transcripts >= 15%
-      if (stage === "fetching_transcripts" && displayProgress >= 15) return "active";
+    case 1: // Understanding your expertise — bulk of fetching_transcripts (Gemini)
+      if (stage === "fetching_transcripts" && displayProgress >= 22) return "active";
       if (isPast("fetching_transcripts")) return "completed";
       return "pending";
 
-    case 2: // Finding the natural structure — analyzing < 35%
-      if (stage === "analyzing" && displayProgress < 35) return "active";
-      if ((stage === "analyzing" && displayProgress >= 35) || isPast("analyzing")) return "completed";
+    case 2: // Finding the natural structure — analyzing first half
+      if (stage === "analyzing" && displayProgress < 60) return "active";
+      if ((stage === "analyzing" && displayProgress >= 60) || isPast("analyzing")) return "completed";
       return "pending";
 
-    case 3: // Extracting key insights — analyzing >= 35%
-      if (stage === "analyzing" && displayProgress >= 35) return "active";
+    case 3: // Extracting key insights — analyzing second half
+      if (stage === "analyzing" && displayProgress >= 60) return "active";
       if (isPast("analyzing")) return "completed";
       return "pending";
 
-    case 4: // Mapping the learning journey — generating < 60%
-      if (stage === "generating" && displayProgress < 60) return "active";
-      if ((stage === "generating" && displayProgress >= 60) || isPast("generating")) return "completed";
+    case 4: // Mapping the learning journey — generating < 75%
+      if (stage === "generating" && displayProgress < 75) return "active";
+      if ((stage === "generating" && displayProgress >= 75) || isPast("generating")) return "completed";
       return "pending";
 
-    case 5: // Building scene-based lessons — generating 60-72%
-      if (stage === "generating" && displayProgress >= 60 && displayProgress < 72) return "active";
-      if ((stage === "generating" && displayProgress >= 72) || isPast("generating")) return "completed";
-      return "pending";
-
-    case 6: // Writing each lesson with care — generating 72-82%
-      if (stage === "generating" && displayProgress >= 72 && displayProgress < 82) return "active";
+    case 5: // Building scene-based lessons — generating 75-82%
+      if (stage === "generating" && displayProgress >= 75 && displayProgress < 82) return "active";
       if ((stage === "generating" && displayProgress >= 82) || isPast("generating")) return "completed";
       return "pending";
 
-    case 7: // Adding the finishing touches — generating >= 82% or validating/persisting
-      if (stage === "generating" && displayProgress >= 82) return "active";
-      if (stage === "validating" || stage === "persisting") return "active";
+    case 6: // Writing each lesson with care — generating 82-88%
+      if (stage === "generating" && displayProgress >= 82 && displayProgress < 88) return "active";
+      if ((stage === "generating" && displayProgress >= 88) || isPast("generating")) return "completed";
+      return "pending";
+
+    case 7: // Adding the finishing touches — generating >= 88% or validating/persisting/skin
+      if (stage === "generating" && displayProgress >= 88) return "active";
+      if (stage === "validating" || stage === "persisting" || stage === "generating_skin") return "active";
       return "pending";
 
     default:
