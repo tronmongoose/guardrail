@@ -84,6 +84,49 @@ export async function getCurrentUser() {
 }
 
 /**
+ * Like `getCurrentUser` but program-aware. When the request carries BOTH a
+ * Clerk session (creator) AND a learner cookie (purchased as a learner), and
+ * only one of those identities holds an entitlement for the given program,
+ * returns that one. Resolves the "creator-testing-as-learner" case where the
+ * Clerk identity would otherwise win and fail the entitlement check.
+ *
+ * Used on the program viewer (/learn/*) and sales page (/p/*) where the
+ * relevant identity is whichever one actually paid for this program.
+ */
+export async function getCurrentUserForProgram(programId: string) {
+  const [clerkUser, learnerUser] = await Promise.all([
+    getOrCreateUser(),
+    getLearnerSession(),
+  ]);
+
+  // Common case: only one identity present.
+  if (!clerkUser) return learnerUser;
+  if (!learnerUser) return clerkUser;
+  if (clerkUser.id === learnerUser.id) return clerkUser;
+
+  // Both present and distinct — pick the one that owns the entitlement.
+  // Creators viewing their own program don't need an entitlement; that
+  // case is handled by the page-level isCreator check.
+  const [clerkEnt, learnerEnt] = await Promise.all([
+    prisma.entitlement.findUnique({
+      where: { userId_programId: { userId: clerkUser.id, programId } },
+    }),
+    prisma.entitlement.findUnique({
+      where: { userId_programId: { userId: learnerUser.id, programId } },
+    }),
+  ]);
+
+  const clerkActive = clerkEnt?.status === "ACTIVE";
+  const learnerActive = learnerEnt?.status === "ACTIVE";
+
+  if (learnerActive && !clerkActive) return learnerUser;
+  if (clerkActive && !learnerActive) return clerkUser;
+
+  // Both or neither active — fall back to existing precedence (Clerk wins).
+  return clerkUser;
+}
+
+/**
  * Check if user has entitlement to a program.
  */
 export async function hasEntitlement(userId: string, programId: string) {

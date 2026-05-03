@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, getEntitlement } from "@/lib/auth";
+import { getCurrentUserForProgram, getEntitlement } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { LearnerTimeline } from "./timeline";
 import { resolveTokens } from "@/lib/resolve-tokens";
@@ -10,7 +10,7 @@ import { RequestAccessLink } from "@/components/learn/RequestAccessLink";
 export default async function LearnPage({ params }: { params: Promise<{ programId: string }> }) {
   const { programId } = await params;
 
-  const user = await getCurrentUser();
+  const user = await getCurrentUserForProgram(programId);
 
   // No session → render the "send me a sign-in link" fallback inline instead of
   // redirecting away. Lets returning learners re-enter from any /learn URL.

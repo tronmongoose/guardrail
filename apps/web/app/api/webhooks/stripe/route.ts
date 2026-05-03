@@ -72,6 +72,18 @@ export async function POST(req: NextRequest) {
         break;
       }
 
+      // Idempotency guard for Stripe webhook retries. Only the webhook writes
+      // stripeSessionId on the entitlement, so seeing a matching sessionId
+      // here means we've sent the welcome email on a prior delivery. The
+      // /checkout/success auto-grant intentionally omits stripeSessionId so
+      // it doesn't trip this guard.
+      const priorEntitlement = await prisma.entitlement.findUnique({
+        where: { userId_programId: { userId, programId } },
+      });
+      const alreadyProcessed =
+        priorEntitlement?.status === "ACTIVE" &&
+        priorEntitlement.stripeSessionId === session.id;
+
       // Create or update entitlement
       await prisma.entitlement.upsert({
         where: { userId_programId: { userId, programId } },
@@ -101,7 +113,14 @@ export async function POST(req: NextRequest) {
         userId,
         programId,
         sessionId: session.id,
+        alreadyProcessed,
       });
+
+      if (alreadyProcessed) {
+        // Skip the email block — Stripe is retrying a delivery we've already
+        // handled. Entitlement upsert above is still useful as a self-heal.
+        break;
+      }
 
       // Fetch user, program, and creator for branded emails
       const user = await prisma.user.findUnique({ where: { id: userId } });

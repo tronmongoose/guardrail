@@ -225,14 +225,17 @@ export async function POST(
         quantity: 1,
       },
     ],
-    success_url: `${appUrl}/checkout/success?programId=${programId}`,
+    success_url: `${appUrl}/checkout/success?programId=${programId}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${appUrl}/p/${program.slug}?checkout=cancelled`,
     metadata: {
       userId: user.id,
       programId: program.id,
       creatorId: program.creatorId,
     },
-    customer_email: user.email,
+    // customer_email intentionally omitted — passing it triggers Stripe Link
+    // to email the learner "save your card with Link" before our welcome
+    // email arrives. Stripe collects the email at the hosted page; the
+    // webhook still receives it via session.customer_details.email.
   };
 
   // Route 100% of the learner payment to the creator via Stripe Connect.

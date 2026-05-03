@@ -24,8 +24,8 @@ export function MagicLinkResend({ programTitle, magicLinkUrl, brand, appUrl }: M
       </Heading>
 
       <Text style={{ fontSize: 15, color: "#475569", margin: "0 0 24px" }}>
-        Tap the button below to jump back into your program. This link is good for 24 hours
-        and can only be used once.
+        Tap the button below to open your program. The link works for 24 hours and can only
+        be used once.
       </Text>
 
       <Section style={{ textAlign: "center", margin: "8px 0 16px" }}>

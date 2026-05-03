@@ -8,7 +8,7 @@ import { getPatternCSS } from "@/lib/decoration-patterns";
 import { getActionTypeBg, ACTION_TYPE_LABELS } from "@/lib/action-type-styles";
 import type { Metadata } from "next";
 import { logger } from "@/lib/logger";
-import { getCurrentUser, hasEntitlement } from "@/lib/auth";
+import { getCurrentUserForProgram, hasEntitlement } from "@/lib/auth";
 import { stripWrappingQuotes } from "@/lib/strip-quotes";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
@@ -102,7 +102,7 @@ export default async function SalesPage({ params }: { params: Promise<{ slug: st
   // Check if current user is already enrolled
   let isEnrolled = false;
   try {
-    const user = await getCurrentUser();
+    const user = await getCurrentUserForProgram(program.id);
     if (user) {
       isEnrolled = await hasEntitlement(user.id, program.id);
     }

@@ -1,4 +1,4 @@
-import { Heading, Img, Section, Text, Link, Hr } from "@react-email/components";
+import { Heading, Img, Section, Text, Hr } from "@react-email/components";
 import * as React from "react";
 import { EmailLayout, PrimaryButton, type EmailBrand } from "./EmailLayout";
 
@@ -9,10 +9,12 @@ export interface WelcomeLearnerProps {
   targetTransformation: string | null;
   lessonCount: number;
   totalMinutes: number | null;
-  firstLessonTitles: string[];
+  /** No longer rendered in the redesigned email; kept optional for caller compatibility. */
+  firstLessonTitles?: string[];
   heroImageUrl: string | null;
   magicLinkUrl: string;
-  fallbackUrl: string;
+  /** No longer rendered in the redesigned email; kept optional for caller compatibility. */
+  fallbackUrl?: string;
   brand: EmailBrand;
   appUrl?: string;
 }
@@ -25,21 +27,22 @@ export function WelcomeLearner(props: WelcomeLearnerProps) {
     targetTransformation,
     lessonCount,
     totalMinutes,
-    firstLessonTitles,
     heroImageUrl,
     magicLinkUrl,
-    fallbackUrl,
     brand,
     appUrl,
   } = props;
 
   const initial = (creatorName || "·").trim().charAt(0).toUpperCase();
-  const totals = [
+  const accent = brand.accent;
+  const accentText = brand.accentText || "#ffffff";
+
+  const meta = [
     `${lessonCount} ${lessonCount === 1 ? "lesson" : "lessons"}`,
     totalMinutes ? `${totalMinutes} min total` : null,
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join("  ·  ");
 
   return (
     <EmailLayout
@@ -47,55 +50,86 @@ export function WelcomeLearner(props: WelcomeLearnerProps) {
       brand={brand}
       appUrl={appUrl}
     >
-      <Section style={{ display: "table", width: "100%", marginBottom: 16 }}>
-        <div style={{ display: "table-cell", verticalAlign: "middle", width: 56 }}>
-          {creatorAvatarUrl ? (
-            <Img
-              src={creatorAvatarUrl}
-              width="48"
-              height="48"
-              alt={creatorName}
-              style={{ borderRadius: 24, display: "block" }}
-            />
-          ) : (
-            <div
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 24,
-                backgroundColor: brand.accent,
-                color: brand.accentText || "#ffffff",
-                fontSize: 20,
-                fontWeight: 700,
-                lineHeight: "48px",
-                textAlign: "center",
-              }}
-            >
-              {initial}
-            </div>
-          )}
-        </div>
-        <div style={{ display: "table-cell", verticalAlign: "middle", paddingLeft: 12 }}>
-          <Text style={{ margin: 0, fontSize: 14, color: "#64748b" }}>
-            <strong style={{ color: "#0f172a" }}>{creatorName}</strong> sent you something
-          </Text>
-        </div>
+      {/* Accent band — anchors the design and pulls the brand color forward */}
+      <div
+        style={{
+          height: 4,
+          backgroundColor: accent,
+          borderRadius: 2,
+          margin: "-32px -28px 28px",
+        }}
+      />
+
+      {/* Hero — centered avatar + "sent you" attribution */}
+      <Section style={{ textAlign: "center", margin: "0 0 20px" }}>
+        {creatorAvatarUrl ? (
+          <Img
+            src={creatorAvatarUrl}
+            width="64"
+            height="64"
+            alt={creatorName}
+            style={{
+              borderRadius: 32,
+              display: "inline-block",
+              border: `2px solid ${accent}`,
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 32,
+              backgroundColor: accent,
+              color: accentText,
+              fontSize: 26,
+              fontWeight: 700,
+              lineHeight: "64px",
+              textAlign: "center",
+              display: "inline-block",
+            }}
+          >
+            {initial}
+          </div>
+        )}
+        <Text
+          style={{
+            margin: "12px 0 0",
+            fontSize: 13,
+            color: "#64748b",
+            textTransform: "uppercase",
+            letterSpacing: 0.8,
+          }}
+        >
+          {creatorName} sent you
+        </Text>
       </Section>
 
+      {/* Program title — large and confident */}
       <Heading
         as="h1"
         style={{
-          fontSize: 26,
-          lineHeight: 1.2,
-          margin: "8px 0 8px",
+          fontSize: 30,
+          lineHeight: 1.15,
+          fontWeight: 700,
+          margin: "0 0 12px",
           color: "#0f172a",
+          textAlign: "center",
         }}
       >
         {programTitle}
       </Heading>
 
       {targetTransformation ? (
-        <Text style={{ fontSize: 16, color: "#475569", margin: "0 0 20px" }}>
+        <Text
+          style={{
+            fontSize: 16,
+            lineHeight: 1.55,
+            color: "#475569",
+            margin: "0 0 24px",
+            textAlign: "center",
+          }}
+        >
           {targetTransformation}
         </Text>
       ) : null}
@@ -108,55 +142,56 @@ export function WelcomeLearner(props: WelcomeLearnerProps) {
           style={{
             width: "100%",
             maxWidth: 504,
-            borderRadius: 10,
+            borderRadius: 12,
             display: "block",
-            margin: "0 0 20px",
+            margin: "8px 0 24px",
           }}
         />
       ) : null}
 
-      {totals ? (
+      {meta ? (
         <Text
           style={{
             fontSize: 13,
             color: "#64748b",
-            textTransform: "uppercase",
-            letterSpacing: 0.6,
-            margin: "0 0 8px",
+            margin: "0 0 24px",
+            textAlign: "center",
           }}
         >
-          {totals}
+          {meta}
         </Text>
       ) : null}
 
-      {firstLessonTitles.length > 0 ? (
-        <ul style={{ margin: "0 0 24px", padding: "0 0 0 18px", color: "#0f172a" }}>
-          {firstLessonTitles.map((t, i) => (
-            <li key={i} style={{ fontSize: 15, lineHeight: 1.6 }}>
-              {t}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      <Section style={{ textAlign: "center", margin: "8px 0 16px" }}>
+      {/* Single, confident CTA */}
+      <Section style={{ textAlign: "center", margin: "8px 0 12px" }}>
         <PrimaryButton href={magicLinkUrl} brand={brand}>
-          Start your program
+          Start your program  →
         </PrimaryButton>
       </Section>
 
-      <Text style={{ fontSize: 12, color: "#94a3b8", textAlign: "center", margin: "0 0 16px" }}>
-        This link works for 24 hours. Need a new one later? Just visit{" "}
-        <Link href={fallbackUrl} style={{ color: "#94a3b8" }}>
-          your program page
-        </Link>{" "}
-        and we'll send a fresh link.
+      <Text
+        style={{
+          fontSize: 12,
+          color: "#94a3b8",
+          textAlign: "center",
+          margin: "0 0 8px",
+        }}
+      >
+        Your access link works for 24 hours.
       </Text>
 
-      <Hr style={{ borderColor: "#eef0f4", margin: "20px 0" }} />
+      <Hr style={{ borderColor: "#eef0f4", margin: "24px 0 16px" }} />
 
-      <Text style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>
-        Reply to this email to chat with {creatorName} directly.
+      <Text
+        style={{
+          fontSize: 13,
+          color: "#64748b",
+          margin: 0,
+          textAlign: "center",
+          fontStyle: "italic",
+        }}
+      >
+        Questions? Just reply to this email — it goes straight to {creatorName}.
       </Text>
     </EmailLayout>
   );

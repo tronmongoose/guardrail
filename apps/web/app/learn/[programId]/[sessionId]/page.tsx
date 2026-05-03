@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, getEntitlement } from "@/lib/auth";
+import { getCurrentUserForProgram, getEntitlement } from "@/lib/auth";
 import { notFound, redirect } from "next/navigation";
 import { resolveTokens } from "@/lib/resolve-tokens";
 import { isMuxSigningConfigured, signMuxPlaybackId, getMux, isMuxConfigured } from "@/lib/mux";
@@ -13,7 +13,7 @@ export default async function SessionPage({
 }) {
   const { programId, sessionId } = await params;
 
-  const user = await getCurrentUser();
+  const user = await getCurrentUserForProgram(programId);
   if (!user) redirect("/");
 
   // Fetch session + program in one query to check creator ownership

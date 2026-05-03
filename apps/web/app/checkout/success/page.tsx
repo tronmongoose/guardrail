@@ -1,34 +1,52 @@
-"use client";
-
-import { useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
 import Link from "next/link";
+import { cookies } from "next/headers";
+import { claimAccessFromStripeSession } from "@/lib/claim-access";
+import { logger } from "@/lib/logger";
+import { ResendMagicLink } from "./ResendMagicLink";
 
-function SuccessContent() {
-  const searchParams = useSearchParams();
-  const programId = searchParams.get("programId");
-  const [resendEmail, setResendEmail] = useState("");
-  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [resendError, setResendError] = useState<string | null>(null);
+const LEARNER_SESSION_COOKIE = "guiderail_learner_session";
+const SESSION_MAX_AGE = 60 * 60 * 24 * 90; // 90 days — match /auth/magic
 
-  async function handleResend() {
-    if (!resendEmail) return;
-    setResendStatus("sending");
-    setResendError(null);
-    try {
-      const res = await fetch("/api/auth/resend-magic-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: resendEmail, programId }),
+export const dynamic = "force-dynamic";
+
+export default async function CheckoutSuccessPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ programId?: string; session_id?: string }>;
+}) {
+  const params = await searchParams;
+  const programId = params.programId;
+  const sessionId = params.session_id;
+
+  // Try to auto-grant access. Falls back gracefully — the worst case is the
+  // user has to click the magic link in their email, which is the prior
+  // behavior anyway.
+  let granted = false;
+  if (programId && sessionId) {
+    const result = await claimAccessFromStripeSession(sessionId, programId);
+    if (result.ok) {
+      const cookieStore = await cookies();
+      cookieStore.set(LEARNER_SESSION_COOKIE, result.userId, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: SESSION_MAX_AGE,
+        path: "/",
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to resend");
-      }
-      setResendStatus("sent");
-    } catch (err) {
-      setResendError(err instanceof Error ? err.message : "Failed to resend");
-      setResendStatus("error");
+      granted = true;
+      logger.info({
+        operation: "checkout.success.access_granted",
+        programId,
+        sessionId,
+        entitlementCreated: result.entitlementCreated,
+      });
+    } else {
+      logger.warn({
+        operation: "checkout.success.claim_failed",
+        programId,
+        sessionId,
+        reason: result.reason,
+      });
     }
   }
 
@@ -37,100 +55,50 @@ function SuccessContent() {
       <div className="max-w-md w-full mx-auto">
         <div className="bg-surface-card border border-surface-border rounded-2xl p-8 text-center">
           <div className="w-16 h-16 mx-auto mb-6 rounded-full bg-neon-cyan/10 border border-neon-cyan/30 flex items-center justify-center">
-            <svg
-              className="w-8 h-8 text-neon-cyan"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M5 13l4 4L19 7"
-              />
+            <svg className="w-8 h-8 text-neon-cyan" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
 
           <h1 className="text-2xl font-bold text-white mb-2">
-            Payment Successful!
+            {granted ? "You're in" : "Payment successful"}
           </h1>
 
           <p className="text-gray-400 mb-6">
-            Thank you for your purchase. We&apos;ve sent an access link to your
-            email address. Check your inbox to start learning!
+            {granted
+              ? "Your access is ready. Continue to your program below."
+              : "Thank you for your purchase. We've sent an access link to your email — check your inbox to start."}
           </p>
 
-          <div className="bg-neon-cyan/5 border border-neon-cyan/20 rounded-lg p-4 mb-6">
-            <p className="text-sm text-gray-300">
-              <strong className="text-neon-cyan">Next step:</strong> Check your
-              email for an access link to your program. The link is valid for 24
-              hours.
-            </p>
-          </div>
+          {!granted && (
+            <div className="bg-neon-cyan/5 border border-neon-cyan/20 rounded-lg p-4 mb-6">
+              <p className="text-sm text-gray-300">
+                <strong className="text-neon-cyan">Next step:</strong> Check your email for an
+                access link. The link is valid for 24 hours.
+              </p>
+            </div>
+          )}
 
-          {/* Resend magic link */}
-          <div className="bg-surface-dark rounded-lg p-4 mb-6 text-left">
-            <p className="text-xs text-gray-400 mb-2">
-              Didn&apos;t get the email? Enter your address to resend:
-            </p>
-            {resendStatus === "sent" ? (
-              <p className="text-sm text-neon-cyan">Link sent! Check your inbox.</p>
-            ) : (
-              <div className="flex gap-2">
-                <input
-                  type="email"
-                  value={resendEmail}
-                  onChange={(e) => setResendEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="flex-1 px-3 py-2 bg-surface-card border border-surface-border rounded-lg text-white text-sm focus:outline-none focus:border-neon-cyan"
-                />
-                <button
-                  onClick={handleResend}
-                  disabled={!resendEmail || resendStatus === "sending"}
-                  className="px-4 py-2 bg-neon-cyan/10 border border-neon-cyan/30 text-neon-cyan rounded-lg text-sm font-medium hover:bg-neon-cyan/20 transition disabled:opacity-50"
-                >
-                  {resendStatus === "sending" ? "Sending..." : "Resend"}
-                </button>
-              </div>
-            )}
-            {resendError && (
-              <p className="text-xs text-neon-pink mt-2">{resendError}</p>
-            )}
-          </div>
+          {!granted && programId && <ResendMagicLink programId={programId} />}
 
           <div className="flex gap-3 justify-center">
-            {programId && (
+            {programId && granted && (
               <Link
                 href={`/learn/${programId}`}
                 className="px-6 py-3 bg-gradient-to-r from-neon-cyan to-neon-pink text-surface-dark rounded-lg font-medium hover:opacity-90 transition"
               >
-                Go to Program
+                Continue to your program →
               </Link>
             )}
             <Link
               href="/"
               className="px-6 py-3 bg-surface-dark border border-surface-border text-gray-300 rounded-lg font-medium hover:border-neon-cyan hover:text-neon-cyan transition"
             >
-              Return Home
+              Return home
             </Link>
           </div>
         </div>
       </div>
     </div>
-  );
-}
-
-export default function CheckoutSuccessPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen gradient-bg-radial grid-bg flex items-center justify-center">
-          <div className="animate-pulse text-gray-400">Loading...</div>
-        </div>
-      }
-    >
-      <SuccessContent />
-    </Suspense>
   );
 }
