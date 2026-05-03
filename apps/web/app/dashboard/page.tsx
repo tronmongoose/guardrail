@@ -101,6 +101,32 @@ function DashboardContent() {
   const [connectingStripe, setConnectingStripe] = useState(false);
   const [openingStripeDashboard, setOpeningStripeDashboard] = useState(false);
 
+  // Handle return from Stripe Connect onboarding when launched from the
+  // dashboard nav (i.e. without a programId). Editor-anchored returns are
+  // handled in apps/web/app/programs/[id]/edit/page.tsx.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const stripeFlag = params.get("stripe");
+    if (stripeFlag !== "success" && stripeFlag !== "refresh") return;
+
+    if (stripeFlag === "success") {
+      showToast("Bank connected — you're ready to start earning.", "success");
+      // Webhook may have just flipped onboardingComplete — re-fetch live status.
+      fetch("/api/stripe/connect")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => { if (data) setStripeStatus(data); })
+        .catch(() => {});
+    } else {
+      showToast("Your progress is saved. Jump back in when you're ready.", "warning");
+    }
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("stripe");
+    window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+    // Run once on mount with the initial query string.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!isLoaded) return;
     if (!clerkUser) {
