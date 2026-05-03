@@ -953,7 +953,7 @@ async function callOpenAI(input: GenerateInput): Promise<string> {
     body: JSON.stringify({
       model,
       messages: [{ role: "user", content: prompt }],
-      max_tokens: 32768,
+      max_tokens: 16384, // GPT-4o cap
     }),
   }, GENERATION_TIMEOUT_MS);
 
@@ -1105,7 +1105,7 @@ Rewrite the JSON above so every \`weeks[]\` entry has \`title\`, \`weekNumber\`,
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL || "gpt-4o",
       messages: [{ role: "user", content: repairPrompt }],
-      max_tokens: 32768,
+      max_tokens: 16384, // GPT-4o cap
     }),
   }, LLM_TIMEOUT_MS);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
