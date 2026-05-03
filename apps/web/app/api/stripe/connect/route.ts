@@ -7,8 +7,12 @@ import { logger } from "@/lib/logger";
 /**
  * POST /api/stripe/connect
  * Creates or retrieves a Stripe Connect onboarding link for the creator.
+ *
+ * Optional body: { programId?: string }
+ * When provided, the return/refresh URLs route the creator back into the
+ * program editor's Payments tab instead of the generic dashboard.
  */
-export async function POST(_req: NextRequest) {
+export async function POST(req: NextRequest) {
   if (!isStripeConfigured()) {
     return NextResponse.json(
       { error: "Stripe not configured" },
@@ -19,6 +23,16 @@ export async function POST(_req: NextRequest) {
   const user = await getOrCreateUser();
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  let programId: string | undefined;
+  try {
+    const body = await req.json().catch(() => ({}));
+    if (body && typeof body.programId === "string" && /^[a-zA-Z0-9_-]+$/.test(body.programId)) {
+      programId = body.programId;
+    }
+  } catch {
+    // No body / not JSON — fine, fall back to dashboard return.
   }
 
   const stripe = getStripe();
@@ -59,11 +73,18 @@ export async function POST(_req: NextRequest) {
       });
     }
 
-    // Create account link for onboarding/dashboard
+    // Create account link for onboarding. When the creator initiated this
+    // from a specific program editor, return them there with the Payments
+    // tab focused so they don't lose context.
+    const buildReturnUrl = (status: "success" | "refresh") =>
+      programId
+        ? `${appUrl}/programs/${programId}/edit?tab=payments&stripe=${status}`
+        : `${appUrl}/dashboard?stripe=${status}`;
+
     const accountLink = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${appUrl}/dashboard?stripe=refresh`,
-      return_url: `${appUrl}/dashboard?stripe=success`,
+      refresh_url: buildReturnUrl("refresh"),
+      return_url: buildReturnUrl("success"),
       type: "account_onboarding",
     });
 

@@ -25,11 +25,14 @@ import { CreatorAvatarUpload } from "@/components/builder/CreatorAvatarUpload";
 import { useGenerationSteps } from "@/components/generation/useGenerationSteps";
 import { GenerationSteps } from "@/components/generation/GenerationSteps";
 import { useGeneration } from "@/components/generation/GenerationProvider";
+import { createStripeLoginLink } from "@/app/actions/stripe";
 
 interface StripeConnectStatus {
   connected: boolean;
   status: string | null;
   onboardingComplete: boolean;
+  chargesEnabled?: boolean;
+  payoutsEnabled?: boolean;
 }
 
 interface PromoCodeItem {
@@ -162,6 +165,8 @@ export default function ProgramEditPage() {
   const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus | null>(null);
   const [showStripePrompt, setShowStripePrompt] = useState(false);
   const [connectingStripe, setConnectingStripe] = useState(false);
+  const [openingStripeDashboard, setOpeningStripeDashboard] = useState(false);
+  const payoutCardRef = useRef<HTMLDivElement | null>(null);
 
   // Promo codes for this program
   const [promoCodes, setPromoCodes] = useState<PromoCodeItem[]>([]);
@@ -264,6 +269,42 @@ export default function ProgramEditPage() {
       })
       .finally(() => setGenStatusChecked(true));
   }, [load, id]);
+
+  // Handle return from Stripe Connect onboarding (and direct ?tab=payments deep links).
+  // Stripe sends the creator back here via the URLs configured in /api/stripe/connect.
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    const stripeFlag = searchParams.get("stripe");
+
+    if (tab === "payments") {
+      setActiveTab("payments");
+    }
+
+    if (stripeFlag === "success") {
+      showToast("Bank connected — you're ready to start earning.", "success");
+      // Webhook may have just flipped onboardingComplete — re-fetch live status.
+      fetch("/api/stripe/connect")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => { if (data) setStripeStatus(data); })
+        .catch(() => {});
+    } else if (stripeFlag === "refresh") {
+      showToast("Your progress is saved. Jump back in when you're ready.", "warning");
+      // Defer scroll until after the Payments tab has rendered.
+      setTimeout(() => {
+        payoutCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 200);
+    }
+
+    if (stripeFlag === "success" || stripeFlag === "refresh" || tab === "payments") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("stripe");
+      url.searchParams.delete("tab");
+      window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+    }
+    // Run once on mount with the initial query string. We intentionally don't
+    // depend on searchParams — re-firing on every URL change would re-toast.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Listen for generation-complete event dispatched by GenerationNotification when on this page.
   // This fires load() even when asyncGenerating is false (e.g. status was already COMPLETED on mount).
@@ -466,16 +507,34 @@ export default function ProgramEditPage() {
   async function handleConnectStripe() {
     setConnectingStripe(true);
     try {
-      const res = await fetch("/api/stripe/connect", { method: "POST" });
+      const res = await fetch("/api/stripe/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ programId: id }),
+      });
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to start Stripe onboarding");
+        throw new Error(data.error || "Failed to start payout setup");
       }
       // Redirect to Stripe onboarding
       window.location.href = data.url;
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to connect Stripe", "error");
+      showToast(err instanceof Error ? err.message : "Couldn't start payout setup", "error");
       setConnectingStripe(false);
+    }
+  }
+
+  async function handleManagePayoutAccount() {
+    setOpeningStripeDashboard(true);
+    try {
+      const result = await createStripeLoginLink();
+      if (!result.ok) {
+        showToast(result.error, "error");
+        return;
+      }
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } finally {
+      setOpeningStripeDashboard(false);
     }
   }
 
@@ -1004,6 +1063,48 @@ export default function ProgramEditPage() {
         </div>
       </nav>
 
+      {/* Payout setup nudge — shown when this is a paid program but the
+          creator's payout account isn't fully active yet. */}
+      {program.priceInCents > 0 &&
+        stripeStatus &&
+        (!stripeStatus.onboardingComplete || stripeStatus.chargesEnabled === false) && (
+          <div
+            className="border-b border-amber-500/30 bg-amber-500/10"
+            style={{ background: "rgba(245, 158, 11, 0.08)" }}
+          >
+            <div className="flex items-center justify-between gap-3 px-6 py-2.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <svg
+                  className="w-4 h-4 text-amber-400 flex-shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                  aria-hidden="true"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <p className="text-xs sm:text-sm text-amber-200 truncate">
+                  Add your bank account so learners can pay you.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setActiveTab("payments");
+                  setTimeout(() => {
+                    payoutCardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }, 100);
+                }}
+                className="text-xs sm:text-sm font-medium text-amber-300 hover:text-amber-200 transition whitespace-nowrap"
+              >
+                Finish setup →
+              </button>
+            </div>
+          </div>
+        )}
+
       {/* Tab Bar */}
       <div className="border-b border-gray-800" style={{ background: "#0a0a0f" }}>
         <div className="flex overflow-x-auto px-6">
@@ -1283,7 +1384,7 @@ export default function ProgramEditPage() {
             <div className="space-y-4">
               <div>
                 <h2 className="text-base font-semibold text-white mb-1">Price</h2>
-                <p className="text-sm text-gray-400">Choose how much to charge for your program</p>
+                <p className="text-sm text-gray-400">What learners pay to access this program. Free works too.</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 {[0, 2500, 5000, 10000, 50000].map((price) => (
@@ -1324,45 +1425,106 @@ export default function ProgramEditPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <h2 className="text-base font-semibold text-white">Payments</h2>
-              <p className="text-sm text-gray-400">Connect Stripe to receive payments for paid programs</p>
-              {stripeStatus?.onboardingComplete ? (
-                <div className="flex items-center gap-3 px-4 py-3 bg-teal-900/30 border border-teal-700 rounded-xl">
-                  <svg className="w-5 h-5 text-teal-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm text-teal-400 font-medium">Stripe connected</span>
-                </div>
-              ) : (
-                <div className="bg-[#635BFF]/5 border border-[#635BFF]/20 rounded-xl p-6">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-full bg-[#635BFF]/10 border border-[#635BFF]/30 flex items-center justify-center flex-shrink-0">
-                      <svg className="w-5 h-5 text-[#635BFF]" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.992 3.757 7.218c0 4.039 2.467 5.76 6.476 7.219 2.585.92 3.445 1.574 3.445 2.583 0 .98-.84 1.545-2.354 1.545-1.875 0-4.965-.921-6.99-2.109l-.9 5.555C5.175 22.99 8.385 24 11.714 24c2.641 0 4.843-.624 6.328-1.813 1.664-1.305 2.525-3.236 2.525-5.732 0-4.128-2.524-5.851-6.591-7.305z" />
-                      </svg>
+            <div ref={payoutCardRef} className="space-y-3 scroll-mt-24">
+              <h2 className="text-base font-semibold text-white">Payouts</h2>
+              <p className="text-sm text-gray-400">Where your earnings land.</p>
+
+              {(() => {
+                // State C — fully connected and ready to charge.
+                if (
+                  stripeStatus?.onboardingComplete &&
+                  stripeStatus?.chargesEnabled !== false
+                ) {
+                  return (
+                    <div className="bg-gray-900/40 border border-l-4 border-l-teal-500 border-gray-800 rounded-xl p-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-teal-900/40 text-teal-300 border border-teal-700/50">
+                          <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+                          Ready to earn
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-300">
+                        Your bank&apos;s connected. Earnings land directly in your account.
+                      </p>
+                      <button
+                        onClick={handleManagePayoutAccount}
+                        disabled={openingStripeDashboard}
+                        className="mt-3 text-xs text-teal-400 hover:text-teal-300 transition font-medium disabled:opacity-50 flex items-center gap-1.5"
+                      >
+                        {openingStripeDashboard ? (
+                          <><Spinner size="sm" /> Opening…</>
+                        ) : (
+                          <>Open payout dashboard →</>
+                        )}
+                      </button>
                     </div>
-                    <div>
-                      <p className="text-sm font-medium text-white">Connect Stripe</p>
-                      <p className="text-xs text-gray-400">Required to sell paid programs</p>
+                  );
+                }
+
+                // State B — account exists but onboarding not finished, or charges disabled.
+                if (
+                  stripeStatus?.connected &&
+                  (!stripeStatus.onboardingComplete || stripeStatus.chargesEnabled === false)
+                ) {
+                  return (
+                    <div className="bg-gray-900/40 border border-l-4 border-l-amber-500 border-gray-800 rounded-xl p-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-300 border border-amber-700/50">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                          Almost there
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-300 mb-4">
+                        Your progress is saved. Pick up where you left off.
+                      </p>
+                      <button
+                        onClick={handleConnectStripe}
+                        disabled={connectingStripe}
+                        className="w-full sm:w-auto px-4 py-2.5 bg-amber-500 text-gray-950 font-medium rounded-lg hover:bg-amber-400 transition disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                      >
+                        {connectingStripe ? (
+                          <><Spinner size="sm" /> Resuming…</>
+                        ) : (
+                          "Finish setup →"
+                        )}
+                      </button>
+                      <p className="text-xs text-gray-500 mt-3">
+                        Free programs publish without this — only paid ones need it.
+                      </p>
                     </div>
+                  );
+                }
+
+                // State A — never started (no stripeAccountId yet) or status still loading.
+                // We render the same card during load to avoid layout shift; the button
+                // is disabled if we don't yet have status confirmation.
+                const stillLoading = stripeStatus === null;
+                return (
+                  <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-5">
+                    <h3 className="text-base font-semibold text-white mb-1.5">
+                      Time to get paid
+                    </h3>
+                    <p className="text-sm text-gray-400 mb-4">
+                      Add your bank in about two minutes. We&apos;ll only ask for ID before
+                      your first withdrawal.
+                    </p>
+                    <button
+                      onClick={handleConnectStripe}
+                      disabled={connectingStripe || stillLoading}
+                      className="w-full sm:w-auto px-4 py-2.5 bg-[#4D9FFF] text-gray-950 font-medium rounded-lg hover:bg-[#3d8ce6] transition disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+                    >
+                      {connectingStripe ? (
+                        <><Spinner size="sm" /> Opening Stripe…</>
+                      ) : (
+                        "Start earning →"
+                      )}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-3">
+                      Secured by Stripe · About 2 minutes
+                    </p>
                   </div>
-                  <button
-                    onClick={handleConnectStripe}
-                    disabled={connectingStripe}
-                    className="w-full px-4 py-2.5 bg-[#635BFF] text-white font-medium rounded-lg hover:bg-[#5851ea] transition disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
-                  >
-                    {connectingStripe ? (
-                      <>
-                        <Spinner size="sm" />
-                        Connecting...
-                      </>
-                    ) : (
-                      "Connect Stripe →"
-                    )}
-                  </button>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             {/* Promo Codes */}

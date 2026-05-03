@@ -1,11 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { UserButton, useUser } from "@clerk/nextjs";
 import { Suspense, useEffect, useState } from "react";
 import { useToast } from "@/components/ui/toast";
+import { createStripeLoginLink } from "@/app/actions/stripe";
 import type { ProgramListItem } from "@guide-rail/shared";
+
+interface StripeConnectStatus {
+  connected: boolean;
+  status: string | null;
+  onboardingComplete: boolean;
+  chargesEnabled?: boolean;
+  payoutsEnabled?: boolean;
+}
 
 interface GenerationJob {
   status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
@@ -76,7 +85,6 @@ export default function DashboardPage() {
 
 function DashboardContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { user: clerkUser, isLoaded } = useUser();
   const { showToast } = useToast();
   const [programs, setPrograms] = useState<ProgramWithGeneration[]>([]);
@@ -89,15 +97,9 @@ function DashboardContent() {
   const [deleting, setDeleting] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [hasMetricsAccess, setHasMetricsAccess] = useState(false);
-
-  useEffect(() => {
-    if (searchParams.get("stripe") === "success") {
-      showToast("Stripe connected! You can now set prices for your programs.", "success");
-      const url = new URL(window.location.href);
-      url.searchParams.delete("stripe");
-      window.history.replaceState({}, "", url.pathname);
-    }
-  }, [searchParams, showToast]);
+  const [stripeStatus, setStripeStatus] = useState<StripeConnectStatus | null>(null);
+  const [connectingStripe, setConnectingStripe] = useState(false);
+  const [openingStripeDashboard, setOpeningStripeDashboard] = useState(false);
 
   useEffect(() => {
     if (!isLoaded) return;
@@ -112,10 +114,14 @@ function DashboardContent() {
       fetch("/api/user/metrics").then((r) => (r.ok ? r.json() : null)),
       fetch("/api/admin/check").then((r) => r.json()).catch(() => ({ isAdmin: false })),
       fetch("/api/metrics/check").then((r) => r.json()).catch(() => ({ hasAccess: false })),
+      fetch("/api/stripe/connect").then((r) => (r.ok ? r.json() : null)).catch(() => null),
     ])
-      .then(async ([programsData, userData, metricsData, adminData, metricsAccessData]) => {
+      .then(async ([programsData, userData, metricsData, adminData, metricsAccessData, stripeData]) => {
         if (adminData?.isAdmin) setIsAdmin(true);
         if (metricsAccessData?.hasAccess) setHasMetricsAccess(true);
+        if (stripeData && typeof stripeData === "object" && "connected" in stripeData) {
+          setStripeStatus(stripeData as StripeConnectStatus);
+        }
         if (
           (!Array.isArray(programsData) || programsData.length === 0) &&
           !(userData as { onboardingComplete?: boolean }).onboardingComplete
@@ -156,6 +162,35 @@ function DashboardContent() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create program");
       setCreating(false);
+    }
+  };
+
+  const handleConnectStripe = async () => {
+    setConnectingStripe(true);
+    try {
+      const res = await fetch("/api/stripe/connect", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Couldn't start Stripe setup.");
+      }
+      const data = await res.json();
+      if (data?.url) window.location.href = data.url;
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Couldn't start Stripe setup.", "error");
+      setConnectingStripe(false);
+    }
+  };
+
+  const handleManagePayoutAccount = async () => {
+    setOpeningStripeDashboard(true);
+    try {
+      const result = await createStripeLoginLink();
+      if (!result.ok) throw new Error(result.error);
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Couldn't open your payout account.", "error");
+    } finally {
+      setOpeningStripeDashboard(false);
     }
   };
 
@@ -212,12 +247,23 @@ function DashboardContent() {
         </Link>
         <div className="flex items-center gap-4">
           {hasMetricsAccess && (
-            <Link
-              href="/dashboard/metrics"
-              className="text-xs px-2 py-1 rounded-full bg-purple-900/40 text-purple-400 font-medium hover:bg-purple-900/60 transition"
-            >
-              Metrics
-            </Link>
+            <>
+              <Link
+                href="/dashboard/ops"
+                className="text-xs px-2 py-1 rounded-full font-medium text-white transition hover:brightness-110"
+                style={{
+                  background: "linear-gradient(135deg, #AD46FF 0%, #F6339A 100%)",
+                }}
+              >
+                Marketing Hub
+              </Link>
+              <Link
+                href="/dashboard/metrics"
+                className="text-xs px-2 py-1 rounded-full bg-purple-900/40 text-purple-400 font-medium hover:bg-purple-900/60 transition"
+              >
+                Metrics
+              </Link>
+            </>
           )}
           {isAdmin && (
             <Link
@@ -227,6 +273,63 @@ function DashboardContent() {
               Admin
             </Link>
           )}
+          {stripeStatus && (() => {
+            const isFullyConnected =
+              stripeStatus.onboardingComplete && stripeStatus.chargesEnabled !== false;
+            const setupIncomplete =
+              stripeStatus.connected &&
+              (!stripeStatus.onboardingComplete || stripeStatus.chargesEnabled === false);
+
+            if (isFullyConnected) {
+              return (
+                <button
+                  onClick={handleManagePayoutAccount}
+                  disabled={openingStripeDashboard}
+                  title="Stripe connected — click to manage payouts"
+                  className="group inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium text-white transition hover:brightness-110 disabled:opacity-60"
+                  style={{
+                    background: "linear-gradient(135deg, #635BFF 0%, #00D4FF 100%)",
+                    boxShadow: "0 0 12px rgba(99,91,255,0.35)",
+                  }}
+                >
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-white opacity-75 animate-ping" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+                  </span>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                  <span>Stripe connected</span>
+                </button>
+              );
+            }
+
+            if (setupIncomplete) {
+              return (
+                <button
+                  onClick={handleConnectStripe}
+                  disabled={connectingStripe}
+                  title="Finish Stripe setup to accept payments"
+                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-amber-900/40 text-amber-300 font-medium border border-amber-700/50 hover:bg-amber-900/60 transition disabled:opacity-60"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  {connectingStripe ? "Resuming…" : "Finish Stripe setup"}
+                </button>
+              );
+            }
+
+            return (
+              <button
+                onClick={handleConnectStripe}
+                disabled={connectingStripe}
+                title="Connect Stripe to accept payments"
+                className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white/5 text-gray-300 font-medium border border-white/10 hover:bg-white/10 hover:text-white transition disabled:opacity-60"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+                {connectingStripe ? "Connecting…" : "Connect Stripe"}
+              </button>
+            );
+          })()}
           <Link
             href="/dashboard/settings"
             className="text-sm text-gray-400 hover:text-white transition"
